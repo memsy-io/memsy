@@ -1,0 +1,32 @@
+# Memsy Python SDK
+
+> Official Python SDK for Memsy — persistent memory for AI agents and applications.
+
+## Documentation
+
+- [Actors and Sessions](https://docs.memsy.io/docs/actors-and-sessions): How actor_id and session_id control grouping and retrieval.
+- [Async Client](https://docs.memsy.io/docs/async-client): AsyncMemsyClient mirrors the sync client method-for-method.
+- [AsyncMemsyClient](https://docs.memsy.io/docs/async-memsy-client): Async HTTP client — mirrors MemsyClient method-for-method.
+- [Async Processing](https://docs.memsy.io/docs/async-processing): Why ingest returns before processing completes — and how to poll.
+- [Console Memories](https://docs.memsy.io/docs/console-memories): Browse and inspect stored memories via client.memories.
+- [MemsyControlClient](https://docs.memsy.io/docs/control-client): Control-plane client for billing, API keys, usage, and account management.
+- [Error Handling](https://docs.memsy.io/docs/error-handling): The typed exception hierarchy and how to catch each case.
+- [Events and Memories](https://docs.memsy.io/docs/events-and-memories): The mental model — raw events in, extracted memories out.
+- [Exceptions](https://docs.memsy.io/docs/exceptions): Every error class the SDK can raise.
+- [FAQ](https://docs.memsy.io/docs/faq): Answers to questions we hear most often.
+- [Memsy Docs](https://docs.memsy.io/docs): Persistent memory for AI agents and applications. The official Python client.
+- [Ingesting Events](https://docs.memsy.io/docs/ingesting-events): Batch size, metadata, timestamps, scoping — everything beyond the quickstart.
+- [Installation](https://docs.memsy.io/docs/installation): Install the memsy Python package.
+- [MemsyClient](https://docs.memsy.io/docs/memsy-client): Synchronous HTTP client — constructor, methods, parameters, exceptions.
+- [Models](https://docs.memsy.io/docs/models): Request and response dataclasses exposed by the SDK.
+- [Onboarding Hierarchy](https://docs.memsy.io/docs/onboarding): Create orgs, roles, and teams to scope memory extraction and retrieval.
+- [Quickstart](https://docs.memsy.io/docs/quickstart): Sign up, install memsy, and run your first ingest + search in under five minutes.
+- [Retries and Timeouts](https://docs.memsy.io/docs/retries): Auto-retry on 429, how to tune it, and when to back off yourself.
+- [Searching Memory](https://docs.memsy.io/docs/searching-memory): Natural-language queries, thresholds, scoping, and score interpretation.
+- [Sign Up & Get an API Key](https://docs.memsy.io/docs/signup): Create an account, provision an organization, and generate your first API key.
+- [Usage and Rate Limits](https://docs.memsy.io/docs/usage-and-rate-limits): Track plan consumption from response headers automatically.
+
+## Links
+
+- [GitHub](https://github.com/memsy-io/memsy/sdks/python)
+- [Support](mailto:cloudops@memsy.io)
