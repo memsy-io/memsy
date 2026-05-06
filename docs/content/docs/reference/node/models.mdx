@@ -74,16 +74,17 @@ Every successful response carries `usage` and `rateLimit` parsed from response h
 
 ### `SearchResult`
 
-| Field      | Type                                  | Description                                     |
-|------------|---------------------------------------|-------------------------------------------------|
-| `id`       | `string`                              | Memory ID.                                      |
-| `content`  | `string`                              | Extracted memory text.                          |
-| `score`    | `number`                              | Similarity score `0.0` (none) – `1.0` (exact).  |
-| `metadata` | `Record<string, unknown> \| null`     | Any metadata captured during extraction.        |
+| Field           | Type                                  | Description                                                           |
+|-----------------|---------------------------------------|-----------------------------------------------------------------------|
+| `id`            | `string`                              | Memory ID.                                                            |
+| `content`       | `string`                              | Extracted memory text.                                                |
+| `score`         | `number`                              | Similarity score `0.0` (none) – `1.0` (exact).                        |
+| `metadata`      | `Record<string, unknown> \| null`     | Any metadata captured during extraction.                              |
+| `sourceEvents`  | `SourceEvent[] \| null`               | Originating events — populated when `includeSourceEvents: true`.      |
 
 ### `SourceEvent`
 
-Returned in `SearchResponse.results[].sourceEvents` only when you set `includeSourceEvents: true`.
+A typed view of the events a memory was extracted from. Surfaced on `SearchResult.sourceEvents` whenever `includeSourceEvents: true` is passed to `client.search()`. The wire format embeds these as snake-cased dicts inside `metadata.source_events`; the SDK parses them and converts to camelCase for you.
 
 | Field      | Type             | Description                                |
 |------------|------------------|--------------------------------------------|
@@ -91,6 +92,20 @@ Returned in `SearchResponse.results[].sourceEvents` only when you set `includeSo
 | `kind`     | `string`         | `EventKind` value of the originating event.|
 | `content`  | `string`         | Original event body.                       |
 | `ts`       | `string \| null` | ISO-8601 timestamp.                        |
+
+```ts
+const results = await client.search('preferences', {
+  actorId: 'user_42',
+  includeSourceEvents: true,
+});
+
+for (const r of results.results) {
+  console.log(r.content);
+  for (const src of r.sourceEvents ?? []) {
+    console.log(`  ↳ from ${src.kind} at ${src.ts}: ${src.content}`);
+  }
+}
+```
 
 ### `StatusResponse`
 
