@@ -25,7 +25,7 @@ The SDK retries rate-limited (HTTP 429) requests automatically. Everything else 
     from memsy import MemsyClient
 
     client = MemsyClient(
-        base_url="https://api.memsy.io",
+        base_url="https://api.memsy.io/v1",
         api_key="***",
         max_retries=5,       # try up to 5 times on 429 (default: 3)
         retry_backoff=2.0,   # base backoff, doubles per attempt (default: 1.0)
@@ -38,7 +38,7 @@ The SDK retries rate-limited (HTTP 429) requests automatically. Everything else 
     import { MemsyClient } from '@memsy-io/memsy';
 
     const client = new MemsyClient({
-      baseUrl: 'https://api.memsy.io',
+      baseUrl: 'https://api.memsy.io/v1',
       apiKey: '***',
       maxRetries: 5,        // try up to 5 times on 429 (default: 3)
       timeoutMs: 60_000,    // per-request timeout in ms (default: 30_000)

@@ -23,7 +23,7 @@ MemsyClient(
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `base_url` | `str` | — | Memsy API base URL, e.g. `"https://api.memsy.io"`. Trailing slashes are trimmed. |
+| `base_url` | `str` | — | Memsy API base URL, e.g. `"https://api.memsy.io/v1"`. Trailing slashes are trimmed. |
 | `api_key` | `str` | — | API key of the form `msy_...`. Sent as `Authorization: Bearer <key>`. |
 | `timeout` | `float` | `30.0` | Request timeout in seconds. Covers connect + read + write. |
 | `max_retries` | `int` | `3` | Max automatic retries on HTTP 429. |

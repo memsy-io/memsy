@@ -17,7 +17,7 @@ from memsy import AsyncMemsyClient, EventPayload
 
 async def main():
     async with AsyncMemsyClient(
-        base_url="https://api.memsy.io",
+        base_url="https://api.memsy.io/v1",
         api_key="***",
     ) as client:
         health = await client.health()
