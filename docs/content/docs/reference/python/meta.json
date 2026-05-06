@@ -1,0 +1,10 @@
+{
+  "title": "Python",
+  "pages": [
+    "memsy-client",
+    "async-memsy-client",
+    "control-client",
+    "models",
+    "exceptions"
+  ]
+}

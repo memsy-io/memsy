@@ -3,7 +3,7 @@ title: AsyncMemsyClient
 description: Async HTTP client — mirrors MemsyClient method-for-method.
 ---
 
-Asynchronous HTTP client for the Memsy hot-path API. Mirrors **[`MemsyClient`](/docs/memsy-client)** method-for-method.
+Asynchronous HTTP client for the Memsy hot-path API. Mirrors **[`MemsyClient`](/docs/reference/python/memsy-client)** method-for-method.
 
 ```python
 from memsy import AsyncMemsyClient
@@ -21,7 +21,7 @@ AsyncMemsyClient(
 )
 ```
 
-Parameters are identical to `MemsyClient`. See [that page](/docs/memsy-client) for the full table.
+Parameters are identical to `MemsyClient`. See [that page](/docs/reference/python/memsy-client) for the full table.
 
 ## Async context manager
 
@@ -58,7 +58,7 @@ All raise the same exceptions as the sync client.
 | `client.teams` | `await list(org_id)`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
 | `client.memories` | `await list(...)`, `await get(memory_id)`, `await stats()` |
 
-See **[`MemsyClient`](/docs/memsy-client)** for the full method signatures — async versions are identical except for `await`.
+See **[`MemsyClient`](/docs/reference/python/memsy-client)** for the full method signatures — async versions are identical except for `await`.
 
 ## Parallel calls
 
@@ -76,5 +76,5 @@ async def two_in_parallel(client: AsyncMemsyClient, user_id: str):
 ## See also
 
 - **[Async client guide](/docs/async-client)** — FastAPI/Starlette integration patterns.
-- **[`MemsyClient`](/docs/memsy-client)** — the synchronous twin.
-- **[`AsyncMemsyControlClient`](/docs/control-client)** — async control-plane client.
+- **[`MemsyClient`](/docs/reference/python/memsy-client)** — the synchronous twin.
+- **[`AsyncMemsyControlClient`](/docs/reference/python/control-client)** — async control-plane client.
