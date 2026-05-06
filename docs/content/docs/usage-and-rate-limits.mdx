@@ -3,47 +3,97 @@ title: Usage and Rate Limits
 description: Track plan consumption from response headers automatically.
 ---
 
-Every successful response from the Memsy API carries HTTP headers describing your current usage and rate-limit posture. The SDK parses them into two typed objects on every response:
+Every successful response from the Memsy API carries HTTP headers describing your current usage and rate-limit posture. The SDKs parse them into two typed objects on every response:
 
-- `response.usage` — a `UsageInfo`, from `X-Usage-*` and `X-Plan` headers.
-- `response.rate_limit` — a `RateLimitInfo`, from `X-RateLimit-*` headers.
+- `usage` — a `UsageInfo`, from `X-Usage-*` and `X-Plan` headers.
+- `rate_limit` (Python) / `rateLimit` (Node) — a `RateLimitInfo`, from `X-RateLimit-*` headers.
 
-Both may be `None` if the server didn't return the corresponding headers.
+Both may be `None` / `null` if the server didn't return the corresponding headers.
 
 ## Accessing usage
 
-```python
-result = client.search("query")
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    result = client.search("query")
 
-if result.usage:
-    print(f"Plan: {result.usage.plan}")
-    print(f"API calls: {result.usage.api_calls}/{result.usage.api_calls_limit}")
-    print(f"Search queries: {result.usage.search_queries}/{result.usage.search_queries_limit}")
-```
+    if result.usage:
+        print(f"Plan: {result.usage.plan}")
+        print(f"API calls: {result.usage.api_calls}/{result.usage.api_calls_limit}")
+        print(f"Search queries: {result.usage.search_queries}/{result.usage.search_queries_limit}")
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    const result = await client.search('query');
 
-Fields on `UsageInfo`:
+    if (result.usage) {
+      console.log(`Plan: ${result.usage.plan}`);
+      console.log(`API calls: ${result.usage.apiCalls}/${result.usage.apiCallsLimit}`);
+      console.log(
+        `Search queries: ${result.usage.searchQueries}/${result.usage.searchQueriesLimit}`,
+      );
+    }
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    curl -i -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "preferences"}' \
+      | grep -E "^X-(Usage|Plan|RateLimit)-"
+    # X-Plan: pro
+    # X-Usage-ApiCall: 1042
+    # X-Usage-ApiCall-Limit: 100000
+    # ...
+    ```
+  </Tab>
+</Tabs>
 
-| Field | Description |
-|---|---|
-| `api_calls` | Total API calls this billing period. |
-| `api_calls_limit` | API call limit for your plan. |
-| `events_ingested` | Events ingested this period. |
-| `events_ingested_limit` | Ingestion limit. |
-| `memory_stored` | Memories currently stored. |
-| `memory_stored_limit` | Storage limit. |
-| `llm_tokens` | LLM tokens consumed during extraction. |
-| `llm_tokens_limit` | Token limit. |
-| `search_queries` | Search queries issued this period. |
-| `search_queries_limit` | Query limit. |
-| `plan` | Your plan name (e.g. `"free"`, `"pro"`). |
+Fields on `UsageInfo` (Python `snake_case` / Node `camelCase`):
+
+| Python | Node | Description |
+|---|---|---|
+| `api_calls` | `apiCalls` | Total API calls this billing period. |
+| `api_calls_limit` | `apiCallsLimit` | API call limit for your plan. |
+| `events_ingested` | `eventsIngested` | Events ingested this period. |
+| `events_ingested_limit` | `eventsIngestedLimit` | Ingestion limit. |
+| `memory_stored` | `memoryStored` | Memories currently stored. |
+| `memory_stored_limit` | `memoryStoredLimit` | Storage limit. |
+| `llm_tokens` | `llmTokens` | LLM tokens consumed during extraction. |
+| `llm_tokens_limit` | `llmTokensLimit` | Token limit. |
+| `search_queries` | `searchQueries` | Search queries issued this period. |
+| `search_queries_limit` | `searchQueriesLimit` | Query limit. |
+| `plan` | `plan` | Your plan name (e.g. `"free"`, `"pro"`). |
 
 ## Accessing rate limits
 
-```python
-if result.rate_limit:
-    print(f"Remaining: {result.rate_limit.remaining}")
-    print(f"Resets at:  {result.rate_limit.reset}")  # Unix timestamp
-```
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    if result.rate_limit:
+        print(f"Remaining: {result.rate_limit.remaining}")
+        print(f"Resets at:  {result.rate_limit.reset}")  # Unix timestamp
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    if (result.rateLimit) {
+      console.log(`Remaining: ${result.rateLimit.remaining}`);
+      console.log(`Resets at:  ${result.rateLimit.reset}`); // Unix timestamp
+    }
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    curl -is "$MEMSY_BASE_URL/search" ... | grep -i "^X-RateLimit-"
+    # X-RateLimit-Limit: 60
+    # X-RateLimit-Remaining: 41
+    # X-RateLimit-Reset: 1730005200
+    ```
+  </Tab>
+</Tabs>
 
 Fields on `RateLimitInfo`:
 
@@ -76,33 +126,66 @@ Fields on `RateLimitInfo`:
 
 ### Log usage to your observability stack
 
-```python
-import logging
+<Tabs items={['Python', 'Node']}>
+  <Tab value="Python">
+    ```python
+    import logging
 
-log = logging.getLogger("memsy-usage")
+    log = logging.getLogger("memsy-usage")
 
-def log_usage(usage):
-    if usage is None:
-        return
-    log.info(
-        "plan=%s api=%s/%s tokens=%s/%s",
-        usage.plan, usage.api_calls, usage.api_calls_limit,
-        usage.llm_tokens, usage.llm_tokens_limit,
-    )
+    def log_usage(usage):
+        if usage is None:
+            return
+        log.info(
+            "plan=%s api=%s/%s tokens=%s/%s",
+            usage.plan, usage.api_calls, usage.api_calls_limit,
+            usage.llm_tokens, usage.llm_tokens_limit,
+        )
 
-result = client.search("query")
-log_usage(result.usage)
-```
+    result = client.search("query")
+    log_usage(result.usage)
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    function logUsage(usage: typeof result.usage) {
+      if (!usage) return;
+      console.log(
+        `plan=${usage.plan} api=${usage.apiCalls}/${usage.apiCallsLimit} ` +
+          `tokens=${usage.llmTokens}/${usage.llmTokensLimit}`,
+      );
+    }
+
+    const result = await client.search('query');
+    logUsage(result.usage);
+    ```
+  </Tab>
+</Tabs>
 
 ### Alert before you hit a cap
 
-```python
-def too_close(current, limit, ratio=0.9):
-    return current is not None and limit is not None and current >= ratio * limit
+<Tabs items={['Python', 'Node']}>
+  <Tab value="Python">
+    ```python
+    def too_close(current, limit, ratio=0.9):
+        return current is not None and limit is not None and current >= ratio * limit
 
-if too_close(result.usage.api_calls, result.usage.api_calls_limit):
-    emit_alert("Memsy API call usage above 90% of plan limit")
-```
+    if too_close(result.usage.api_calls, result.usage.api_calls_limit):
+        emit_alert("Memsy API call usage above 90% of plan limit")
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    function tooClose(current: number | null, limit: number | null, ratio = 0.9) {
+      return current !== null && limit !== null && current >= ratio * limit;
+    }
+
+    if (result.usage && tooClose(result.usage.apiCalls, result.usage.apiCallsLimit)) {
+      emitAlert('Memsy API call usage above 90% of plan limit');
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## When usage is missing
 

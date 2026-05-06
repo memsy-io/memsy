@@ -5,6 +5,10 @@ description: Browse and inspect stored memories via client.memories.
 
 `client.memories` exposes read-only access to the memories stored in your org. Use it to audit extraction quality, debug unexpected search results, or build admin dashboards.
 
+<Note>
+This page documents the **Python SDK** (`client.memories.*`). The Node SDK does not yet expose `memories` browsing — for Node, use [`client.search()`](/docs/searching-memory) for semantic retrieval, or call the control-plane HTTP endpoints directly. Memories browsing in the Node SDK is on the roadmap.
+</Note>
+
 ```python
 from memsy import MemsyClient
 

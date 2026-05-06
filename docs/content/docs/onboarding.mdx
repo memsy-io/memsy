@@ -3,7 +3,11 @@ title: Onboarding Hierarchy
 description: Create orgs, roles, and teams to scope memory extraction and retrieval.
 ---
 
-Memsy supports a three-level onboarding hierarchy — **org → role → team** — that controls how memories are scoped and how extraction prompts are customised. Setting this up is optional: the SDK works fine without it, but adding hierarchy lets you tune extraction for different parts of your user base.
+Memsy supports a three-level onboarding hierarchy — **org → role → team** — that controls how memories are scoped and how extraction prompts are customised. Setting this up is optional: the SDKs work fine without it, but adding hierarchy lets you tune extraction for different parts of your user base.
+
+<Note>
+The CRUD operations on this page (creating/listing/updating orgs, roles, and teams) are currently exposed only on the **Python SDK** via `client.orgs`, `client.roles`, `client.teams`. The Node SDK can still **tag events** with `roleId`/`teamId` once the hierarchy exists — see the [last section on this page](#tagging-events-with-roleteam). Org/role/team management from Node is on the roadmap; for now use the Python SDK or call the control-plane HTTP endpoints directly.
+</Note>
 
 ## Hierarchy overview
 
@@ -132,22 +136,59 @@ client.teams.delete(team.team_id, "my-org")
 
 ## Tagging events with role/team
 
-Once the hierarchy is set up, tag events at ingest time:
+Once the hierarchy is set up, tag events at ingest time. **This part works from any SDK or raw HTTP:**
 
-```python
-from memsy import EventPayload
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    from memsy import EventPayload
 
-client.ingest([
-    EventPayload(
-        actor_id="user_42",
-        session_id="session_1",
-        kind="user_message",
-        content="I prefer to use Rust for performance-critical paths.",
-        role_id="role_eng",
-        team_id="team_platform",
-    )
-])
-```
+    client.ingest([
+        EventPayload(
+            actor_id="user_42",
+            session_id="session_1",
+            kind="user_message",
+            content="I prefer to use Rust for performance-critical paths.",
+            role_id="role_eng",
+            team_id="team_platform",
+        )
+    ])
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    await client.ingest([
+      {
+        actorId: 'user_42',
+        sessionId: 'session_1',
+        kind: 'user_message',
+        content: 'I prefer to use Rust for performance-critical paths.',
+        roleId: 'role_eng',
+        teamId: 'team_platform',
+      },
+    ]);
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "events": [
+          {
+            "actor_id": "user_42",
+            "session_id": "session_1",
+            "kind": "user_message",
+            "content": "I prefer to use Rust for performance-critical paths.",
+            "role_id": "role_eng",
+            "team_id": "team_platform"
+          }
+        ]
+      }'
+    ```
+  </Tab>
+</Tabs>
 
 The memory extractor uses the role's/team's `promotion_prompt` to bias extraction toward relevant facts for that context.
 

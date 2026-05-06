@@ -7,31 +7,77 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
 
 ## Basic usage
 
-```python
-results = client.search("what does the user prefer?")
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    results = client.search("what does the user prefer?")
 
-for r in results.results:
-    print(r.score, r.content)
-```
+    for r in results.results:
+        print(r.score, r.content)
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    const results = await client.search('what does the user prefer?');
+
+    for (const r of results.results) {
+      console.log(r.score, r.content);
+    }
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    curl -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "what does the user prefer?"}'
+    ```
+  </Tab>
+</Tabs>
 
 ## Parameters
 
-```python
-client.search(
-    query,                              # required, natural language
-    *,
-    actor_id=None,                      # optional — filter to one actor
-    limit=10,                           # max results (default 10)
-    threshold=0.3,                      # minimum similarity (0.0–1.0)
-    include_source_events=False,        # attach source events to results
-)
-```
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    client.search(
+        query,                              # required, natural language
+        *,
+        actor_id=None,                      # optional — filter to one actor
+        limit=10,                           # max results (default 10)
+        threshold=0.3,                      # minimum similarity (0.0–1.0)
+        include_source_events=False,        # attach source events to results
+    )
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    client.search(query, {
+      actorId,                  // optional — filter to one actor
+      limit: 10,                // max results (default 10)
+      threshold: 0.3,           // minimum similarity (0.0–1.0)
+      includeSourceEvents: false,
+    });
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```json
+    {
+      "query": "natural language",
+      "actor_id": "user_42",
+      "limit": 10,
+      "threshold": 0.3,
+      "include_source_events": false
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ### `query`
 
 Plain English. You don't need to phrase it like a keyword search — "things the user mentioned about their dog" works.
 
-### `actor_id`
+### `actor_id` / `actorId`
 
 Pass it to scope the search to one user/agent. Omit it to search across every actor in the organization. In most user-facing flows you want to pass the current actor.
 
@@ -43,35 +89,92 @@ How many results to return. Memsy may return fewer if not enough pass the thresh
 
 A floor on the similarity score. The default `0.3` is a practical starting point — lower to get more results, raise to cut noise. A very high threshold (e.g. `0.8`) returns only near-exact matches.
 
-### `include_source_events`
+### `include_source_events` / `includeSourceEvents`
 
-When `True`, each result additionally includes the source events the memory was extracted from. Useful for showing provenance in a UI.
+When `true`, each result additionally includes the source events the memory was extracted from. Useful for showing provenance in a UI.
 
 ## The result shape
 
-```python
-results.results  # list[SearchResult]
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    results.results  # list[SearchResult]
 
-r.id        # stable memory ID
-r.content   # natural-language memory, e.g. "User prefers dark mode"
-r.score     # float; higher = closer match
-r.metadata  # dict | None — whatever app-level data was attached
-```
+    r.id        # stable memory ID
+    r.content   # natural-language memory, e.g. "User prefers dark mode"
+    r.score     # float; higher = closer match
+    r.metadata  # dict | None — whatever app-level data was attached
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    results.results;  // SearchResult[]
+
+    r.id;        // stable memory ID
+    r.content;   // natural-language memory, e.g. "User prefers dark mode"
+    r.score;     // number; higher = closer match
+    r.metadata;  // Record<string, unknown> | null
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```json
+    {
+      "results": [
+        {
+          "id": "01JK...",
+          "content": "User prefers dark mode across apps.",
+          "score": 0.84,
+          "metadata": null
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Reading usage and rate-limit info
 
 Every response carries observability metadata:
 
-```python
-results = client.search("preferences", actor_id="user_42")
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    results = client.search("preferences", actor_id="user_42")
 
-if results.usage:
-    print(f"Plan: {results.usage.plan}")
-    print(f"Search queries: {results.usage.search_queries}/{results.usage.search_queries_limit}")
+    if results.usage:
+        print(f"Plan: {results.usage.plan}")
+        print(f"Search queries: {results.usage.search_queries}/{results.usage.search_queries_limit}")
 
-if results.rate_limit:
-    print(f"Remaining this window: {results.rate_limit.remaining}")
-```
+    if results.rate_limit:
+        print(f"Remaining this window: {results.rate_limit.remaining}")
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    const results = await client.search('preferences', { actorId: 'user_42' });
+
+    if (results.usage) {
+      console.log(`Plan: ${results.usage.plan}`);
+      console.log(
+        `Search queries: ${results.usage.searchQueries}/${results.usage.searchQueriesLimit}`,
+      );
+    }
+
+    if (results.rateLimit) {
+      console.log(`Remaining this window: ${results.rateLimit.remaining}`);
+    }
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    # Read response headers — same data the SDKs parse for you.
+    curl -i -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "preferences", "actor_id": "user_42"}' | grep -E "X-(Usage|Plan|RateLimit)-"
+    ```
+  </Tab>
+</Tabs>
 
 See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
 
@@ -79,24 +182,49 @@ See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
 
 ### Personalisation at prompt time
 
-```python
-memories = client.search(
-    query=user_message,
-    actor_id=user_id,
-    limit=5,
-    threshold=0.4,
-).results
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```python
+    memories = client.search(
+        query=user_message,
+        actor_id=user_id,
+        limit=5,
+        threshold=0.4,
+    ).results
 
-system_preamble = "Relevant context:\n" + "\n".join(f"- {m.content}" for m in memories)
-```
+    system_preamble = "Relevant context:\n" + "\n".join(f"- {m.content}" for m in memories)
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```ts
+    const { results: memories } = await client.search(userMessage, {
+      actorId: userId,
+      limit: 5,
+      threshold: 0.4,
+    });
+
+    const systemPreamble =
+      'Relevant context:\n' + memories.map((m) => `- ${m.content}`).join('\n');
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    # In a real app, this lives in your backend code — cURL example shown for clarity only.
+    curl -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d "{\"query\": \"$USER_MESSAGE\", \"actor_id\": \"$USER_ID\", \"limit\": 5, \"threshold\": 0.4}"
+    ```
+  </Tab>
+</Tabs>
 
 ### Cross-actor search (admin tools)
 
-Leave `actor_id` unset and you'll search every actor in the org. Good for analytics dashboards and support tooling; almost never what you want in an end-user-facing agent loop.
+Leave `actor_id`/`actorId` unset and you'll search every actor in the org. Good for analytics dashboards and support tooling; almost never what you want in an end-user-facing agent loop.
 
 ### Empty results
 
-`search()` always returns a `SearchResponse`. If nothing passed the threshold, `results.results == []`. Handle that case in your UI.
+`search()` always returns a response object. If nothing passed the threshold, `results.results` is `[]`. Handle that case in your UI.
 
 ## Limitations
 
@@ -108,4 +236,4 @@ Search only returns memories that have finished processing. Very recent events m
 
 ## Next
 
-- Run the same thing from asyncio → **[Async client](/docs/async-client)**.
+- Run the same thing from asyncio (Python) → **[Async client](/docs/async-client)**.

@@ -3,87 +3,152 @@ title: Error Handling
 description: The typed exception hierarchy and how to catch each case.
 ---
 
-All SDK calls raise instances of a single exception tree rooted at `MemsyError`. Catching the right one lets you distinguish "need to reconnect" from "upgrade your plan" from "bad credentials".
+All SDK calls throw/raise instances of a single exception tree. Catching the right one lets you distinguish "need to reconnect" from "upgrade your plan" from "bad credentials".
+
+The two SDKs expose **different-sized hierarchies**: Python has many fine-grained classes for 403/409 cases; Node maps those to a generic `MemsyAPIError` with `statusCode`/`detail`. Same wire-level information, different ergonomics — pick your tab below.
 
 ## The hierarchy
 
-```
-MemsyError
-├── MemsyConnectionError        # network error or timeout
-└── MemsyAPIError               # non-2xx HTTP response
-    ├── AuthenticationError     # 401 — invalid or missing API key
-    ├── AuthorizationError      # 403 — key lacks the required scope
-    ├── FeatureNotAvailable     # 403 — feature not on your tier
-    ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in request
-    ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
-    ├── OrgLimitReachedError    # 403 — org tier limit reached
-    ├── KeyLimitReachedError    # 403 — API key tier limit reached
-    ├── BillingNotEnabledError  # 403 — billing not enabled for this org
-    ├── SeatLimitReachedError   # 409 — purchased seat limit reached
-    ├── RateLimitExceeded       # 429 — rate limit hit (after retries)
-    └── UsageLimitExceeded      # 429 — plan quota exceeded
-```
-
-The SDK exposes all of them from `memsy.exceptions`:
-
-```python
-from memsy.exceptions import (
-    MemsyError,
-    MemsyConnectionError,
-    MemsyAPIError,
-    AuthenticationError,
-    AuthorizationError,
-    FeatureNotAvailable,
-    OrgIdNotAllowedError,
-    SeatRequiredError,
-    OrgLimitReachedError,
-    KeyLimitReachedError,
-    BillingNotEnabledError,
-    SeatLimitReachedError,
-    RateLimitExceeded,
-    UsageLimitExceeded,
-)
-```
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    ```
+    MemsyError
+    ├── MemsyConnectionError        # network error or timeout
+    └── MemsyAPIError               # non-2xx HTTP response
+        ├── AuthenticationError     # 401 — invalid or missing API key
+        ├── AuthorizationError      # 403 — key lacks the required scope
+        ├── FeatureNotAvailable     # 403 — feature not on your tier
+        ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in request
+        ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
+        ├── OrgLimitReachedError    # 403 — org tier limit reached
+        ├── KeyLimitReachedError    # 403 — API key tier limit reached
+        ├── BillingNotEnabledError  # 403 — billing not enabled for this org
+        ├── SeatLimitReachedError   # 409 — purchased seat limit reached
+        ├── RateLimitExceeded       # 429 — rate limit hit (after retries)
+        └── UsageLimitExceeded      # 429 — plan quota exceeded
+    ```
+  </Tab>
+  <Tab value="Node">
+    ```
+    MemsyError
+    ├── MemsyConnectionError       # network error or timeout
+    └── MemsyAPIError              # non-2xx HTTP response — inspect statusCode
+        ├── MemsyAuthError         # 401 — invalid or missing API key
+        └── MemsyRateLimitError    # 429 — rate limit hit (after retries)
+    ```
+    For 403/409 cases (feature gating, billing, seat limits), inspect `MemsyAPIError.statusCode` and `MemsyAPIError.detail`. See the [Node errors reference](/docs/reference/node/errors).
+  </Tab>
+  <Tab value="cURL">
+    No exception classes — read the HTTP status code directly from the response.
+    ```
+    200/204    success
+    400        request validation failed
+    401        invalid or missing API key
+    403        permission denied (feature/billing/seat/scope — read response body for details)
+    409        seat limit reached
+    429        rate-limited (Retry-After header may be set) or plan quota exhausted
+    5xx        server-side error
+    ```
+  </Tab>
+</Tabs>
 
 ## A full example
 
-```python
-from memsy import MemsyClient
-from memsy.exceptions import (
-    AuthenticationError,
-    AuthorizationError,
-    FeatureNotAvailable,
-    RateLimitExceeded,
-    UsageLimitExceeded,
-    MemsyConnectionError,
-    MemsyAPIError,
-)
+<Tabs items={['Python', 'Node', 'cURL']}>
+  <Tab value="Python">
+    Imports come from `memsy.exceptions`:
 
-client = MemsyClient(base_url="...", api_key="***")
+    ```python
+    from memsy import MemsyClient
+    from memsy.exceptions import (
+        AuthenticationError,
+        AuthorizationError,
+        FeatureNotAvailable,
+        RateLimitExceeded,
+        UsageLimitExceeded,
+        MemsyConnectionError,
+        MemsyAPIError,
+    )
 
-try:
-    results = client.search("preferences")
-except AuthenticationError:
-    refresh_api_key()
-except AuthorizationError as e:
-    print(f"Missing required scope: {e.required_scope}")
-except FeatureNotAvailable as e:
-    print(f"Feature '{e.feature}' requires an upgrade from {e.current_tier}")
-    print(f"Upgrade at: {e.upgrade_url}")
-except RateLimitExceeded as e:
-    print(f"Rate limited; retry after {e.retry_after}s")
-except UsageLimitExceeded as e:
-    print(f"Hit {e.dimension} limit ({e.current}/{e.limit})")
-    print(f"Upgrade at: {e.upgrade_url}")
-except MemsyConnectionError:
-    ...
-except MemsyAPIError as e:
-    print(f"API error {e.status_code}: {e.detail}")
-```
+    client = MemsyClient(base_url="...", api_key="***")
 
-## Control-plane errors
+    try:
+        results = client.search("preferences")
+    except AuthenticationError:
+        refresh_api_key()
+    except AuthorizationError as e:
+        print(f"Missing required scope: {e.required_scope}")
+    except FeatureNotAvailable as e:
+        print(f"Feature '{e.feature}' requires an upgrade from {e.current_tier}")
+        print(f"Upgrade at: {e.upgrade_url}")
+    except RateLimitExceeded as e:
+        print(f"Rate limited; retry after {e.retry_after}s")
+    except UsageLimitExceeded as e:
+        print(f"Hit {e.dimension} limit ({e.current}/{e.limit})")
+        print(f"Upgrade at: {e.upgrade_url}")
+    except MemsyConnectionError:
+        ...
+    except MemsyAPIError as e:
+        print(f"API error {e.status_code}: {e.detail}")
+    ```
+  </Tab>
+  <Tab value="Node">
+    All errors are exported from the package root:
 
-When using `MemsyControlClient`, you may also encounter:
+    ```ts
+    import {
+      MemsyClient,
+      MemsyAuthError,
+      MemsyRateLimitError,
+      MemsyConnectionError,
+      MemsyAPIError,
+    } from '@memsy-io/memsy';
+
+    const client = new MemsyClient({ baseUrl: '...', apiKey: '***' });
+
+    try {
+      const results = await client.search('preferences');
+    } catch (err) {
+      if (err instanceof MemsyAuthError) {
+        await refreshApiKey();
+      } else if (err instanceof MemsyRateLimitError) {
+        console.log(`Rate limited; retry after ${err.retryAfter ?? 'unknown'}s`);
+      } else if (err instanceof MemsyConnectionError) {
+        // network / timeout — retry with backoff
+      } else if (err instanceof MemsyAPIError) {
+        // 403/409 — read err.statusCode + err.detail to handle feature/billing/seat cases
+        console.log(`API error ${err.statusCode}: ${err.detail}`);
+      } else {
+        throw err;
+      }
+    }
+    ```
+  </Tab>
+  <Tab value="cURL">
+    ```bash
+    response=$(curl -s -w "\n%{http_code}" -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "preferences"}')
+
+    body=$(echo "$response" | head -n -1)
+    status=$(echo "$response" | tail -n 1)
+
+    case "$status" in
+      200) echo "$body" ;;
+      401) echo "Auth failed — refresh API key" ;;
+      403) echo "Permission denied: $body" ;;
+      429) echo "Rate limited or quota exhausted: $body" ;;
+      5*)  echo "Server error $status — retry later" ;;
+      *)   echo "Unexpected $status: $body" ;;
+    esac
+    ```
+  </Tab>
+</Tabs>
+
+## Control-plane errors (Python only)
+
+`MemsyControlClient` is currently Python-only. When using it, you may also encounter:
 
 ```python
 from memsy.exceptions import (
@@ -102,7 +167,7 @@ except BillingNotEnabledError as e:
     print(f"Billing not enabled. Express interest at: {e.interest_path}")
 ```
 
-## Exception-specific attributes
+## Exception-specific attributes (Python)
 
 ### `AuthorizationError`
 

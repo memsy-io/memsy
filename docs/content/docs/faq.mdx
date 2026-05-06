@@ -13,7 +13,7 @@ description: Answers to questions we hear most often.
   </Accordion>
 
   <Accordion title="What happens if an event fails to process?">
-    It shows up in `status().failed_ids`. Typical causes: LLM extraction errors after retries, content filtering, or quarantined resources. Re-ingest if appropriate — the SDK de-duplicates by content hash in a short rolling window.
+    It shows up in `status().failed_ids` (Python) / `status().failedIds` (Node). Typical causes: LLM extraction errors after retries, content filtering, or quarantined resources. Re-ingest if appropriate — the SDKs de-duplicate by content hash in a short rolling window.
   </Accordion>
 
   <Accordion title="How do I rotate API keys?">
@@ -23,30 +23,34 @@ description: Answers to questions we hear most often.
   <Accordion title="How do I delete data?">
     Two mechanisms:
 
-    - `client.clear(container_tag)` clears tracking state for a container/conversation tag.
+    - `client.clear(container_tag)` (Python) / `client.clear(containerTag)` (Node) — clears tracking state for a container/conversation tag.
     - **Dashboard → Data** supports broader actor-level deletion and export.
 
     For GDPR / DSAR requests, use the dashboard — it gives you a confirmation receipt and logs the deletion.
   </Accordion>
 
-  <Accordion title="Is the SDK thread-safe?">
-    Yes. Both `MemsyClient` and `AsyncMemsyClient` wrap `httpx` clients that are designed for concurrent use. Create one per process and share it.
+  <Accordion title="Are the SDKs thread/concurrency safe?">
+    **Python**: Yes — both `MemsyClient` and `AsyncMemsyClient` wrap `httpx` clients designed for concurrent use. Create one per process and share it.
+
+    **Node**: Yes — `MemsyClient` is async-only and uses the global `fetch`. Reuse one instance across requests; the runtime pools HTTP connections automatically.
   </Accordion>
 
-  <Accordion title="Can I use this SDK with a self-hosted Memsy deployment?">
-    Yes — the SDK talks to any endpoint that implements the Memsy API. Point `base_url` at your deployment and provide a valid API key.
+  <Accordion title="Can I use the SDKs with a self-hosted Memsy deployment?">
+    Yes — both SDKs talk to any endpoint that implements the Memsy API. Point `base_url` (Python) / `baseUrl` (Node) at your deployment and provide a valid API key.
   </Accordion>
 
-  <Accordion title="Which Python versions are supported?">
-    3.10, 3.11, 3.12. Older versions are not supported.
+  <Accordion title="Which language versions are supported?">
+    **Python**: 3.10, 3.11, 3.12, 3.13.
+
+    **Node.js**: 18.x or newer (the SDK uses the global `fetch` and `AbortSignal.timeout`).
   </Accordion>
 
   <Accordion title="Where is the source code?">
-    The SDK source will be available on GitHub once the public repository is published. Until then, the canonical release is on [PyPI](https://pypi.org/project/memsy/).
+    Both SDKs live in the [`memsy-io/memsy`](https://github.com/memsy-io/memsy) monorepo under `sdks/python` and `sdks/node`. Releases publish to [PyPI](https://pypi.org/project/memsy/) and [npm](https://www.npmjs.com/package/@memsy-io/memsy).
   </Accordion>
 
   <Accordion title="How does versioning work?">
-    The SDK follows **semantic versioning**: patch for fixes, minor for additive changes, major for breaking changes.
+    Both SDKs follow **semantic versioning**: patch for fixes, minor for additive changes, major for breaking changes. Versions track independently — a Python `1.x` release is unrelated to a Node `1.x` release.
   </Accordion>
 
   <Accordion title="Who do I contact for help?">
