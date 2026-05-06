@@ -12,8 +12,8 @@ Both may be `None` / `null` if the server didn't return the corresponding header
 
 ## Accessing usage
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     result = client.search("query")
 
@@ -23,7 +23,7 @@ Both may be `None` / `null` if the server didn't return the corresponding header
         print(f"Search queries: {result.usage.search_queries}/{result.usage.search_queries_limit}")
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const result = await client.search('query');
 
@@ -36,7 +36,7 @@ Both may be `None` / `null` if the server didn't return the corresponding header
     }
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     curl -i -X POST "$MEMSY_BASE_URL/search" \
       -H "Authorization: Bearer $MEMSY_API_KEY" \
@@ -69,15 +69,15 @@ Fields on `UsageInfo` (Python `snake_case` / Node `camelCase`):
 
 ## Accessing rate limits
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     if result.rate_limit:
         print(f"Remaining: {result.rate_limit.remaining}")
         print(f"Resets at:  {result.rate_limit.reset}")  # Unix timestamp
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     if (result.rateLimit) {
       console.log(`Remaining: ${result.rateLimit.remaining}`);
@@ -85,7 +85,7 @@ Fields on `UsageInfo` (Python `snake_case` / Node `camelCase`):
     }
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     curl -is "$MEMSY_BASE_URL/search" ... | grep -i "^X-RateLimit-"
     # X-RateLimit-Limit: 60
@@ -126,8 +126,8 @@ Fields on `RateLimitInfo`:
 
 ### Log usage to your observability stack
 
-<Tabs items={['Python', 'Node']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     import logging
 
@@ -146,7 +146,7 @@ Fields on `RateLimitInfo`:
     log_usage(result.usage)
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     function logUsage(usage: typeof result.usage) {
       if (!usage) return;
@@ -164,8 +164,8 @@ Fields on `RateLimitInfo`:
 
 ### Alert before you hit a cap
 
-<Tabs items={['Python', 'Node']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     def too_close(current, limit, ratio=0.9):
         return current is not None and limit is not None and current >= ratio * limit
@@ -174,7 +174,7 @@ Fields on `RateLimitInfo`:
         emit_alert("Memsy API call usage above 90% of plan limit")
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     function tooClose(current: number | null, limit: number | null, ratio = 0.9) {
       return current !== null && limit !== null && current >= ratio * limit;

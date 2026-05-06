@@ -13,18 +13,18 @@ The actor is the entity the memory is **about**. In most applications this is th
 - Use the same `actor_id` across all event kinds for a given person — `user_message`, `assistant_message`, `tool_result` all share the actor.
 - Scope a search to one actor:
 
-  <Tabs items={['Python', 'Node', 'cURL']}>
-    <Tab value="Python">
+  <Tabs>
+    <Tab title="Python">
       ```python
       client.search("preferences", actor_id="user_42")
       ```
     </Tab>
-    <Tab value="Node">
+    <Tab title="Node">
       ```ts
       await client.search('preferences', { actorId: 'user_42' });
       ```
     </Tab>
-    <Tab value="cURL">
+    <Tab title="cURL">
       ```bash
       curl -X POST "$MEMSY_BASE_URL/search" \
         -H "Authorization: Bearer $MEMSY_API_KEY" \
@@ -45,8 +45,8 @@ Sessions aren't used to filter `search()` today, but Memsy uses them during extr
 
 ## A complete example
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import MemsyClient, EventPayload
 
@@ -78,7 +78,7 @@ Sessions aren't used to filter `search()` today, but Memsy uses them during extr
     results = client.search("pets", actor_id="user_42")
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     import { MemsyClient } from '@memsy-io/memsy';
 
@@ -113,7 +113,7 @@ Sessions aren't used to filter `search()` today, but Memsy uses them during extr
     const results = await client.search('pets', { actorId: 'user_42' });
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     # First conversation
     curl -X POST "$MEMSY_BASE_URL/ingest" \

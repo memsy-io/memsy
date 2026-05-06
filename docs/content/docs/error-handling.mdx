@@ -9,8 +9,8 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
 
 ## The hierarchy
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```
     MemsyError
     ├── MemsyConnectionError        # network error or timeout
@@ -28,7 +28,7 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
         └── UsageLimitExceeded      # 429 — plan quota exceeded
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```
     MemsyError
     ├── MemsyConnectionError       # network error or timeout
@@ -38,7 +38,7 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
     ```
     For 403/409 cases (feature gating, billing, seat limits), inspect `MemsyAPIError.statusCode` and `MemsyAPIError.detail`. See the [Node errors reference](/docs/reference/node/errors).
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     No exception classes — read the HTTP status code directly from the response.
     ```
     200/204    success
@@ -54,8 +54,8 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
 
 ## A full example
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     Imports come from `memsy.exceptions`:
 
     ```python
@@ -92,7 +92,7 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
         print(f"API error {e.status_code}: {e.detail}")
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     All errors are exported from the package root:
 
     ```ts
@@ -124,7 +124,7 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
     }
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     response=$(curl -s -w "\n%{http_code}" -X POST "$MEMSY_BASE_URL/search" \
       -H "Authorization: Bearer $MEMSY_API_KEY" \

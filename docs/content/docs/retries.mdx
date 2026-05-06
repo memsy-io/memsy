@@ -19,8 +19,8 @@ The SDK retries rate-limited (HTTP 429) requests automatically. Everything else 
 
 ## Tuning retry behaviour
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import MemsyClient
 
@@ -33,7 +33,7 @@ The SDK retries rate-limited (HTTP 429) requests automatically. Everything else 
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     import { MemsyClient } from '@memsy-io/memsy';
 
@@ -47,7 +47,7 @@ The SDK retries rate-limited (HTTP 429) requests automatically. Everything else 
 
     The Node SDK exposes `maxRetries` and `timeoutMs`. Backoff is `1000 * Math.pow(2, attempt)` ms by default and isn't user-configurable today.
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     cURL itself does no application-level retry. Implement it in your shell loop:
 
     ```bash
@@ -80,8 +80,8 @@ Tune if you're sharing one API key across many workers and want to spread retrie
 
 The SDK raises a rate-limit exception with the `Retry-After` value populated if the server provided one.
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy.exceptions import RateLimitExceeded
 
@@ -91,7 +91,7 @@ The SDK raises a rate-limit exception with the `Retry-After` value populated if 
         print(f"Still rate limited after retries; try again in {e.retry_after}s")
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     import { MemsyRateLimitError } from '@memsy-io/memsy';
 
@@ -104,7 +104,7 @@ The SDK raises a rate-limit exception with the `Retry-After` value populated if 
     }
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     With raw HTTP, you read `Retry-After` directly:
 
     ```bash

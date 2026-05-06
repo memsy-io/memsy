@@ -11,8 +11,8 @@ An **event** is an immutable record of something that happened in your applicati
 
 In the SDKs an event is an `EventPayload`:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import EventPayload
 
@@ -26,7 +26,7 @@ In the SDKs an event is an `EventPayload`:
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     import type { EventPayload } from '@memsy-io/memsy';
 
@@ -40,7 +40,7 @@ In the SDKs an event is an `EventPayload`:
     };
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "actor_id": "user_42",
@@ -71,8 +71,8 @@ A **memory** is something Memsy has distilled from one or more events — a stab
 
 In the SDKs a memory surfaces as a `SearchResult`:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import SearchResult  # returned from client.search()
 
@@ -84,7 +84,7 @@ In the SDKs a memory surfaces as a `SearchResult`:
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     import type { SearchResult } from '@memsy-io/memsy';
 
@@ -96,7 +96,7 @@ In the SDKs a memory surfaces as a `SearchResult`:
     };
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "id": "mem_01JK...",

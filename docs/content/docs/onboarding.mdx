@@ -138,8 +138,8 @@ client.teams.delete(team.team_id, "my-org")
 
 Once the hierarchy is set up, tag events at ingest time. **This part works from any SDK or raw HTTP:**
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import EventPayload
 
@@ -155,7 +155,7 @@ Once the hierarchy is set up, tag events at ingest time. **This part works from 
     ])
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     await client.ingest([
       {
@@ -169,7 +169,7 @@ Once the hierarchy is set up, tag events at ingest time. **This part works from 
     ]);
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     curl -X POST "$MEMSY_BASE_URL/ingest" \
       -H "Authorization: Bearer $MEMSY_API_KEY" \

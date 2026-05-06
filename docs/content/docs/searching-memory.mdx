@@ -7,8 +7,8 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
 
 ## Basic usage
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     results = client.search("what does the user prefer?")
 
@@ -16,7 +16,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
         print(r.score, r.content)
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const results = await client.search('what does the user prefer?');
 
@@ -25,7 +25,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
     }
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     curl -X POST "$MEMSY_BASE_URL/search" \
       -H "Authorization: Bearer $MEMSY_API_KEY" \
@@ -37,8 +37,8 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
 
 ## Parameters
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     client.search(
         query,                              # required, natural language
@@ -50,7 +50,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     client.search(query, {
       actorId,                  // optional — filter to one actor
@@ -60,7 +60,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
     });
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "query": "natural language",
@@ -95,8 +95,8 @@ When `true`, each result additionally includes the source events the memory was 
 
 ## The result shape
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     results.results  # list[SearchResult]
 
@@ -106,7 +106,7 @@ When `true`, each result additionally includes the source events the memory was 
     r.metadata  # dict | None — whatever app-level data was attached
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     results.results;  // SearchResult[]
 
@@ -116,7 +116,7 @@ When `true`, each result additionally includes the source events the memory was 
     r.metadata;  // Record<string, unknown> | null
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "results": [
@@ -136,8 +136,8 @@ When `true`, each result additionally includes the source events the memory was 
 
 Every response carries observability metadata:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     results = client.search("preferences", actor_id="user_42")
 
@@ -149,7 +149,7 @@ Every response carries observability metadata:
         print(f"Remaining this window: {results.rate_limit.remaining}")
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const results = await client.search('preferences', { actorId: 'user_42' });
 
@@ -165,7 +165,7 @@ Every response carries observability metadata:
     }
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     # Read response headers — same data the SDKs parse for you.
     curl -i -X POST "$MEMSY_BASE_URL/search" \
@@ -182,8 +182,8 @@ See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
 
 ### Personalisation at prompt time
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     memories = client.search(
         query=user_message,
@@ -195,7 +195,7 @@ See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
     system_preamble = "Relevant context:\n" + "\n".join(f"- {m.content}" for m in memories)
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const { results: memories } = await client.search(userMessage, {
       actorId: userId,
@@ -207,7 +207,7 @@ See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
       'Relevant context:\n' + memories.map((m) => `- ${m.content}`).join('\n');
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     # In a real app, this lives in your backend code — cURL example shown for clarity only.
     curl -X POST "$MEMSY_BASE_URL/search" \

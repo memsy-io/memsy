@@ -9,8 +9,8 @@ description: Batch size, metadata, timestamps, scoping — everything beyond the
 
 This is what sets Memsy apart: every event can be scoped to a role and team in your [onboarding hierarchy](/docs/onboarding). Extracted memories are stored at the right level of your org — not just a flat blob per user — so searches respect organizational context automatically.
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import EventPayload
 
@@ -26,7 +26,7 @@ This is what sets Memsy apart: every event can be scoped to a role and team in y
     ])
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     await client.ingest([
       {
@@ -40,7 +40,7 @@ This is what sets Memsy apart: every event can be scoped to a role and team in y
     ]);
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     curl -X POST "$MEMSY_BASE_URL/ingest" \
       -H "Authorization: Bearer $MEMSY_API_KEY" \
@@ -69,8 +69,8 @@ The memory extractor uses the role's and team's `promotion_prompt` to bias extra
 
 ## The minimum viable event
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     from memsy import EventPayload
 
@@ -82,7 +82,7 @@ The memory extractor uses the role's and team's `promotion_prompt` to bias extra
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const event = {
       actorId: 'user_42',
@@ -92,7 +92,7 @@ The memory extractor uses the role's and team's `promotion_prompt` to bias extra
     };
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "actor_id": "user_42",
@@ -110,8 +110,8 @@ Four fields. Everything else is optional.
 
 If your events are live, omit `ts` and the server stamps them. If you're **backfilling** historical data, always pass an ISO-8601 timestamp:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     EventPayload(
         actor_id="user_42",
@@ -122,7 +122,7 @@ If your events are live, omit `ts` and the server stamps them. If you're **backf
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const event = {
       actorId: 'user_42',
@@ -133,7 +133,7 @@ If your events are live, omit `ts` and the server stamps them. If you're **backf
     };
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "actor_id": "user_42",
@@ -152,8 +152,8 @@ Backfilled events with explicit timestamps get the same treatment as live events
 
 `metadata` is a **JSON-serialised string** (not a dict/object). Use it for application-level fields you want back with search results — tags, source identifiers, custom flags:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     import json
 
@@ -166,7 +166,7 @@ Backfilled events with explicit timestamps get the same treatment as live events
     )
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const event = {
       actorId: 'user_42',
@@ -177,7 +177,7 @@ Backfilled events with explicit timestamps get the same treatment as live events
     };
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     {
       "actor_id": "user_42",
@@ -196,8 +196,8 @@ Memsy echoes the raw metadata string back in each `SearchResult` so you can dese
 
 `ingest()` is designed for batches. Send many events in one call whenever you can:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     batch: list[EventPayload] = []
 
@@ -212,7 +212,7 @@ Memsy echoes the raw metadata string back in each `SearchResult` so you can dese
     result = client.ingest(batch)
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const batch = conversationTurns.map((msg) => ({
       actorId: userId,
@@ -224,7 +224,7 @@ Memsy echoes the raw metadata string back in each `SearchResult` so you can dese
     const result = await client.ingest(batch);
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```bash
     # Send all events in one request body — array under "events".
     curl -X POST "$MEMSY_BASE_URL/ingest" \
@@ -241,14 +241,14 @@ Recommended batch size: tens to low hundreds. Very large batches (thousands) inc
 
 `event_ids` / `eventIds` gives you the IDs the server assigned, in the **same order** as the input. Pair them up if you need to track processing per event:
 
-<Tabs items={['Python', 'Node', 'cURL']}>
-  <Tab value="Python">
+<Tabs>
+  <Tab title="Python">
     ```python
     result = client.ingest(batch)
     pairs = dict(zip(result.event_ids, batch))
     ```
   </Tab>
-  <Tab value="Node">
+  <Tab title="Node">
     ```ts
     const result = await client.ingest(batch);
     const pairs = Object.fromEntries(
@@ -256,7 +256,7 @@ Recommended batch size: tens to low hundreds. Very large batches (thousands) inc
     );
     ```
   </Tab>
-  <Tab value="cURL">
+  <Tab title="cURL">
     ```json
     // Response body
     {
