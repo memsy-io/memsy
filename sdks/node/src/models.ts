@@ -104,6 +104,21 @@ export interface SearchResult {
   content: string;
   score: number;
   metadata: Record<string, unknown> | null;
+  sourceEvents: SourceEvent[] | null;
+}
+
+export function parseSourceEvents(
+  metadata: Record<string, unknown> | null | undefined
+): SourceEvent[] | null {
+  if (!metadata) return null;
+  const raw = metadata.source_events;
+  if (!Array.isArray(raw)) return null;
+  return raw.map((e: Record<string, unknown>) => ({
+    eventId: String(e.event_id ?? ""),
+    kind: String(e.kind ?? ""),
+    content: String(e.content ?? ""),
+    ts: typeof e.ts === "string" ? e.ts : null,
+  }));
 }
 
 export interface SearchResponse {

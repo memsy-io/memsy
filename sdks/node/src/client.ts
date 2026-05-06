@@ -8,6 +8,7 @@ import {
   type StatusResponse,
   type UsageInfo,
   parseRateLimitInfo,
+  parseSourceEvents,
   parseUsageInfo,
   serializeEvent,
 } from "./models.js";
@@ -158,6 +159,7 @@ export class MemsyClient {
         content: r.content,
         score: r.score,
         metadata: r.metadata ?? null,
+        sourceEvents: parseSourceEvents(r.metadata),
       })),
       usage,
       rateLimit,
