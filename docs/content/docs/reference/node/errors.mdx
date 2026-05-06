@@ -1,0 +1,140 @@
+---
+title: Errors
+description: The Node SDK exception hierarchy — what gets thrown and how to catch it.
+---
+
+All errors thrown by the Node SDK extend `MemsyError`. Catching the right subclass lets you distinguish a transient connection issue from an auth failure from a hit rate limit.
+
+```ts
+import {
+  MemsyError,
+  MemsyAPIError,
+  MemsyConnectionError,
+  MemsyAuthError,
+  MemsyRateLimitError,
+} from '@memsy-io/memsy';
+```
+
+## The hierarchy
+
+```
+MemsyError
+├── MemsyConnectionError       // network error or timeout
+└── MemsyAPIError              // non-2xx HTTP response
+    ├── MemsyAuthError         // 401 — invalid or missing API key
+    └── MemsyRateLimitError    // 429 — rate limit hit (after retries)
+```
+
+The Node SDK's error tree is intentionally smaller than the Python equivalent — the platform's typed `403` and `409` responses surface as a generic `MemsyAPIError` with `statusCode` and `detail` fields. Inspect `statusCode` for fine-grained handling.
+
+## Classes
+
+### `MemsyError`
+
+Base class. Catch this if you don't care about the specific cause.
+
+| Field     | Type     | Description           |
+|-----------|----------|-----------------------|
+| `name`    | `string` | `'MemsyError'`        |
+| `message` | `string` | Human-readable summary|
+
+### `MemsyConnectionError`
+
+Thrown when the request couldn't reach the Memsy API at all — DNS failure, TCP reset, TLS handshake error, or a request that exceeded `timeoutMs`.
+
+```ts
+try {
+  await client.health();
+} catch (err) {
+  if (err instanceof MemsyConnectionError) {
+    // network is down or timeout — retry with backoff
+  }
+}
+```
+
+### `MemsyAPIError`
+
+Thrown for any non-2xx HTTP response. Carries the status code and raw response body.
+
+| Field        | Type      | Description                                              |
+|--------------|-----------|----------------------------------------------------------|
+| `statusCode` | `number`  | HTTP status (e.g. `400`, `403`, `500`).                  |
+| `detail`     | `string`  | Raw response body (often JSON, sometimes plain text).    |
+
+```ts
+try {
+  await client.ingest([badEvent]);
+} catch (err) {
+  if (err instanceof MemsyAPIError) {
+    if (err.statusCode === 400) {
+      // payload validation failed — fix the event
+    } else if (err.statusCode === 403) {
+      // permission denied — check key scope or plan
+    } else if (err.statusCode >= 500) {
+      // server-side error — retry later
+    }
+  }
+}
+```
+
+### `MemsyAuthError`
+
+Subclass of `MemsyAPIError` thrown when the API returns `401`. The API key is missing, malformed, expired, or revoked.
+
+```ts
+try {
+  await client.search('preferences');
+} catch (err) {
+  if (err instanceof MemsyAuthError) {
+    // refresh the key and retry — see Sign Up docs
+  }
+}
+```
+
+### `MemsyRateLimitError`
+
+Subclass of `MemsyAPIError` thrown when the API returns `429` *and* the SDK has exhausted its automatic retries (`maxRetries` is reached).
+
+| Field        | Type            | Description                                                                 |
+|--------------|-----------------|-----------------------------------------------------------------------------|
+| `statusCode` | `number`        | Always `429`.                                                               |
+| `retryAfter` | `number \| null`| Seconds the server suggested waiting (parsed from the `Retry-After` header).|
+
+```ts
+try {
+  await client.ingest(largeBatch);
+} catch (err) {
+  if (err instanceof MemsyRateLimitError) {
+    const wait = (err.retryAfter ?? 60) * 1000;
+    setTimeout(() => retry(), wait);
+  }
+}
+```
+
+<Tip>
+The SDK already retries `429` responses with exponential backoff — you only see `MemsyRateLimitError` when retries are exhausted. Bump `maxRetries` in [`MemsyClientOptions`](/docs/reference/node/memsy-client#memsyclientoptions) if your workload bursts hard.
+</Tip>
+
+## Catching everything
+
+If you just want a safety net for `client.*` calls:
+
+```ts
+import { MemsyError } from '@memsy-io/memsy';
+
+try {
+  await client.ingest(events);
+} catch (err) {
+  if (err instanceof MemsyError) {
+    // any Memsy-level failure (connection, API, auth, rate limit)
+    logger.error({ err }, 'Memsy call failed');
+  } else {
+    throw err; // not from the SDK — re-raise
+  }
+}
+```
+
+## See also
+
+- [`MemsyClient`](/docs/reference/node/memsy-client) — methods that throw these errors
+- [Error Handling guide](/docs/error-handling) — practical patterns for production apps
