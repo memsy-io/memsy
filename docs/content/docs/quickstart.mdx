@@ -1,0 +1,185 @@
+---
+title: Quickstart
+description: Sign up, install memsy, and run your first ingest + search in under five minutes.
+---
+
+Five minutes to your first memory. This page walks you through **dashboard → install → ingest → search** end-to-end.
+
+<Steps>
+  <Step title="Get your API key">
+    Open **[app.memsy.io](https://app.memsy.io)**, create an account, and create an org (or pick an existing one).
+
+    Then in **Settings → API Keys**:
+
+    1. Click **Create key** and give it a label (`local-dev` works).
+    2. Copy the key — it's shown once and looks like `memsy_live_xxxxxxxxxxxx`.
+    3. While you're there, copy your **API base URL** (e.g. `https://api.memsy.io`).
+
+    <Info>
+    Screenshots coming soon. For the detailed walkthrough (verification, teammates, rotation) see [Sign Up](/docs/signup).
+    </Info>
+  </Step>
+
+  <Step title="Install the SDK">
+    ```bash
+    pip install memsy
+    ```
+
+    Python 3.10, 3.11, or 3.12 required. See [Installation](/docs/installation) for `uv`, `poetry`, and dev extras.
+  </Step>
+
+  <Step title="Set your credentials">
+    ```bash
+    export MEMSY_BASE_URL="https://api.memsy.io"
+    export MEMSY_API_KEY="memsy_live_xxxxxxxxxxxx"
+    ```
+
+    <Tip>
+    Put these in a `.env` file for local dev — and keep `.env` in `.gitignore`.
+    </Tip>
+  </Step>
+
+  <Step title="Remember something">
+    Send a batch of events. The call returns immediately; processing happens server-side.
+
+    <Tabs>
+      <Tab title="Python (sync)">
+        ```python
+        import os
+        from memsy import MemsyClient, EventPayload
+
+        client = MemsyClient(
+            base_url=os.environ["MEMSY_BASE_URL"],
+            api_key=os.environ["MEMSY_API_KEY"],
+        )
+
+        result = client.ingest([
+            EventPayload(
+                actor_id="user_42",
+                session_id="session_1",
+                kind="user_message",
+                content="I prefer dark mode in all apps.",
+            ),
+            EventPayload(
+                actor_id="user_42",
+                session_id="session_1",
+                kind="assistant_message",
+                content="Got it — I'll use dark mode by default.",
+            ),
+        ])
+
+        print(result.event_ids)
+        # ['01JK...', '01JK...']
+        ```
+      </Tab>
+      <Tab title="Python (async)">
+        ```python
+        import asyncio, os
+        from memsy import AsyncMemsyClient, EventPayload
+
+        async def main():
+            async with AsyncMemsyClient(
+                base_url=os.environ["MEMSY_BASE_URL"],
+                api_key=os.environ["MEMSY_API_KEY"],
+            ) as client:
+                result = await client.ingest([
+                    EventPayload(
+                        actor_id="user_42",
+                        session_id="session_1",
+                        kind="user_message",
+                        content="I prefer dark mode in all apps.",
+                    ),
+                ])
+                print(result.event_ids)
+
+        asyncio.run(main())
+        ```
+      </Tab>
+      <Tab title="cURL">
+        ```bash
+        curl -X POST "$MEMSY_BASE_URL/ingest" \
+          -H "Authorization: Bearer $MEMSY_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "events": [
+              {
+                "actor_id": "user_42",
+                "session_id": "session_1",
+                "kind": "user_message",
+                "content": "I prefer dark mode in all apps."
+              }
+            ]
+          }'
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Recall it">
+    Ask in plain English. The SDK returns ranked memories.
+
+    <Tabs>
+      <Tab title="Python (sync)">
+        ```python
+        results = client.search("user preferences", actor_id="user_42")
+
+        for r in results.results:
+            print(f"{r.score:.2f}  {r.content}")
+        # 0.84  User prefers dark mode across apps.
+        ```
+      </Tab>
+      <Tab title="Python (async)">
+        ```python
+        results = await client.search("user preferences", actor_id="user_42")
+
+        for r in results.results:
+            print(f"{r.score:.2f}  {r.content}")
+        ```
+      </Tab>
+      <Tab title="cURL">
+        ```bash
+        curl -X POST "$MEMSY_BASE_URL/search" \
+          -H "Authorization: Bearer $MEMSY_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "query": "user preferences",
+            "actor_id": "user_42",
+            "limit": 10,
+            "threshold": 0.3
+          }'
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## What just happened?
+
+In three calls you:
+
+1. **Ingested** raw events over HTTPS with Bearer-token auth.
+2. **Memsy queued them** and ran extraction → embeddings → indexing on its worker pool.
+3. **Searched** a semantic index and got back ranked `SearchResult` objects.
+
+And as a bonus:
+
+- Every response has `.usage` and `.rate_limit` populated from response headers — you already know how much of your plan you've used.
+- Rate-limited calls (HTTP 429) are retried automatically with exponential backoff. No code to write.
+- HTTP errors come back as typed Python exceptions (`AuthenticationError`, `UsageLimitExceeded`, `FeatureNotAvailable`, …).
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Events vs. memories" icon="book" href="/docs/events-and-memories">
+    The mental model: what you send vs. what Memsy stores.
+  </Card>
+  <Card title="Searching memory" icon="terminal" href="/docs/searching-memory">
+    Thresholds, limits, actor scoping, reading scores.
+  </Card>
+  <Card title="Error handling" icon="gear" href="/docs/error-handling">
+    Catch the right exception for auth, quota, and rate-limit failures.
+  </Card>
+  <Card title="API reference" icon="code" href="/docs/memsy-client">
+    Every class, method, and model — with parameter tables.
+  </Card>
+</CardGroup>

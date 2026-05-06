@@ -1,0 +1,116 @@
+---
+title: Usage and Rate Limits
+description: Track plan consumption from response headers automatically.
+---
+
+Every successful response from the Memsy API carries HTTP headers describing your current usage and rate-limit posture. The SDK parses them into two typed objects on every response:
+
+- `response.usage` — a `UsageInfo`, from `X-Usage-*` and `X-Plan` headers.
+- `response.rate_limit` — a `RateLimitInfo`, from `X-RateLimit-*` headers.
+
+Both may be `None` if the server didn't return the corresponding headers.
+
+## Accessing usage
+
+```python
+result = client.search("query")
+
+if result.usage:
+    print(f"Plan: {result.usage.plan}")
+    print(f"API calls: {result.usage.api_calls}/{result.usage.api_calls_limit}")
+    print(f"Search queries: {result.usage.search_queries}/{result.usage.search_queries_limit}")
+```
+
+Fields on `UsageInfo`:
+
+| Field | Description |
+|---|---|
+| `api_calls` | Total API calls this billing period. |
+| `api_calls_limit` | API call limit for your plan. |
+| `events_ingested` | Events ingested this period. |
+| `events_ingested_limit` | Ingestion limit. |
+| `memory_stored` | Memories currently stored. |
+| `memory_stored_limit` | Storage limit. |
+| `llm_tokens` | LLM tokens consumed during extraction. |
+| `llm_tokens_limit` | Token limit. |
+| `search_queries` | Search queries issued this period. |
+| `search_queries_limit` | Query limit. |
+| `plan` | Your plan name (e.g. `"free"`, `"pro"`). |
+
+## Accessing rate limits
+
+```python
+if result.rate_limit:
+    print(f"Remaining: {result.rate_limit.remaining}")
+    print(f"Resets at:  {result.rate_limit.reset}")  # Unix timestamp
+```
+
+Fields on `RateLimitInfo`:
+
+| Field | Description |
+|---|---|
+| `limit` | Max requests per window. |
+| `remaining` | Requests remaining in the current window. |
+| `reset` | Unix timestamp when the window resets. |
+
+## Underlying headers
+
+| Header | Field |
+|---|---|
+| `X-Usage-ApiCall` | `usage.api_calls` |
+| `X-Usage-ApiCall-Limit` | `usage.api_calls_limit` |
+| `X-Usage-EventsIngested` | `usage.events_ingested` |
+| `X-Usage-EventsIngested-Limit` | `usage.events_ingested_limit` |
+| `X-Usage-MemoryStored` | `usage.memory_stored` |
+| `X-Usage-MemoryStored-Limit` | `usage.memory_stored_limit` |
+| `X-Usage-LlmTokens` | `usage.llm_tokens` |
+| `X-Usage-LlmTokens-Limit` | `usage.llm_tokens_limit` |
+| `X-Usage-SearchQueries` | `usage.search_queries` |
+| `X-Usage-SearchQueries-Limit` | `usage.search_queries_limit` |
+| `X-Plan` | `usage.plan` |
+| `X-RateLimit-Limit` | `rate_limit.limit` |
+| `X-RateLimit-Remaining` | `rate_limit.remaining` |
+| `X-RateLimit-Reset` | `rate_limit.reset` |
+
+## Patterns
+
+### Log usage to your observability stack
+
+```python
+import logging
+
+log = logging.getLogger("memsy-usage")
+
+def log_usage(usage):
+    if usage is None:
+        return
+    log.info(
+        "plan=%s api=%s/%s tokens=%s/%s",
+        usage.plan, usage.api_calls, usage.api_calls_limit,
+        usage.llm_tokens, usage.llm_tokens_limit,
+    )
+
+result = client.search("query")
+log_usage(result.usage)
+```
+
+### Alert before you hit a cap
+
+```python
+def too_close(current, limit, ratio=0.9):
+    return current is not None and limit is not None and current >= ratio * limit
+
+if too_close(result.usage.api_calls, result.usage.api_calls_limit):
+    emit_alert("Memsy API call usage above 90% of plan limit")
+```
+
+## When usage is missing
+
+<Note>
+If `response.usage` is `None`, the server didn't emit usage headers for that response (e.g. `/health` may omit them). That is not an error.
+</Note>
+
+## Next
+
+- What happens when you blow a cap → **[Error handling](/docs/error-handling)**.
+- How the SDK auto-handles 429s → **[Retries](/docs/retries)**.

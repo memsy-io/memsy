@@ -1,0 +1,89 @@
+---
+title: Async Client
+description: AsyncMemsyClient mirrors the sync client method-for-method.
+---
+
+`AsyncMemsyClient` mirrors `MemsyClient` method-for-method. If you're building on `asyncio` — FastAPI, agent runtimes, worker pools — use it.
+
+## Setup
+
+```python
+import asyncio
+from memsy import AsyncMemsyClient, EventPayload
+
+async def main():
+    async with AsyncMemsyClient(
+        base_url="https://api.memsy.io",
+        api_key="***",
+    ) as client:
+        health = await client.health()
+        print(health.status)
+
+asyncio.run(main())
+```
+
+The `async with` block closes the underlying connection pool for you. If you can't use a context manager, call `await client.close()` explicitly.
+
+## Every method is `async`
+
+The interface is identical to the sync client — just add `await`:
+
+```python
+await client.ingest([...])
+await client.search("query", actor_id="user_42")
+await client.status(event_ids=[...])
+await client.health()
+await client.clear("container_tag")
+```
+
+All parameter names, defaults, return types, and exceptions match the sync client.
+
+## Parallel calls
+
+```python
+import asyncio
+
+async def personalise(user_id: str):
+    async with AsyncMemsyClient(...) as client:
+        prefs, recent = await asyncio.gather(
+            client.search("preferences", actor_id=user_id, limit=5),
+            client.search("recent topics", actor_id=user_id, limit=5),
+        )
+    return prefs.results, recent.results
+```
+
+`httpx.AsyncClient` (the underlying transport) pools connections per-client, so repeated calls within one `AsyncMemsyClient` share TCP connections.
+
+## Long-lived clients in web servers
+
+In a FastAPI or Starlette app, create one `AsyncMemsyClient` per process and reuse it — don't create one per request.
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from memsy import AsyncMemsyClient
+import os
+
+memsy: AsyncMemsyClient | None = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global memsy
+    memsy = AsyncMemsyClient(
+        base_url=os.environ["MEMSY_BASE_URL"],
+        api_key=os.environ["MEMSY_API_KEY"],
+    )
+    yield
+    await memsy.close()
+
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/chat")
+async def chat(msg: str):
+    results = await memsy.search(msg, actor_id="user_42")
+    ...
+```
+
+## Parity guarantee
+
+Every public method on `MemsyClient` also exists on `AsyncMemsyClient` with the same signature. When a new method is added to one, the other follows in the same release.

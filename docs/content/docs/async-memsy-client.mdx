@@ -1,0 +1,80 @@
+---
+title: AsyncMemsyClient
+description: Async HTTP client — mirrors MemsyClient method-for-method.
+---
+
+Asynchronous HTTP client for the Memsy hot-path API. Mirrors **[`MemsyClient`](/docs/memsy-client)** method-for-method.
+
+```python
+from memsy import AsyncMemsyClient
+```
+
+## Constructor
+
+```python
+AsyncMemsyClient(
+    base_url: str,
+    api_key: str,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    retry_backoff: float = 1.0,
+)
+```
+
+Parameters are identical to `MemsyClient`. See [that page](/docs/memsy-client) for the full table.
+
+## Async context manager
+
+```python
+async with AsyncMemsyClient(base_url="...", api_key="***") as client:
+    await client.health()
+```
+
+If you can't use `async with`, call `await client.close()` explicitly.
+
+## Methods
+
+Each method has the same signature as the sync client but returns a coroutine.
+
+| Method | Returns |
+|---|---|
+| `await ingest(events)` | `IngestResponse` |
+| `await search(query, *, actor_id, limit, threshold, include_source_events)` | `SearchResponse` |
+| `await status(event_ids)` | `StatusResponse` |
+| `await health()` | `HealthResponse` |
+| `await clear(container_tag)` | `ClearResponse` |
+| `await close()` | `None` |
+
+All raise the same exceptions as the sync client.
+
+## Sub-resource accessors
+
+`AsyncMemsyClient` exposes async versions of all sub-resources.
+
+| Accessor | Methods |
+|---|---|
+| `client.orgs` | `await list()`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
+| `client.roles` | `await list(org_id)`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
+| `client.teams` | `await list(org_id)`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
+| `client.memories` | `await list(...)`, `await get(memory_id)`, `await stats()` |
+
+See **[`MemsyClient`](/docs/memsy-client)** for the full method signatures — async versions are identical except for `await`.
+
+## Parallel calls
+
+```python
+import asyncio
+
+async def two_in_parallel(client: AsyncMemsyClient, user_id: str):
+    prefs, recent = await asyncio.gather(
+        client.search("preferences", actor_id=user_id),
+        client.search("recent topics", actor_id=user_id),
+    )
+    return prefs.results, recent.results
+```
+
+## See also
+
+- **[Async client guide](/docs/async-client)** — FastAPI/Starlette integration patterns.
+- **[`MemsyClient`](/docs/memsy-client)** — the synchronous twin.
+- **[`AsyncMemsyControlClient`](/docs/control-client)** — async control-plane client.

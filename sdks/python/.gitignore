@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+
+# Node / JS
+node_modules/
+
+# Docs site (python-sdk/website — Next.js + Fumadocs / Unmint)
+website/.next/
+website/.source/
+website/.unmint/
+website/out/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

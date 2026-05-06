@@ -1,0 +1,164 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Brand palette — available as Tailwind utilities e.g. text-brand-pink */
+  --color-brand-pink: #ff3d7f;
+  --color-brand-blue: #2f5bff;
+  --color-brand-green: #94f923;
+  --color-brand-orange: #ff7a00;
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), 'DM Mono', ui-monospace, monospace;
+
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ─── Light mode ──────────────────────────────────────────────── */
+:root {
+  --background: #ffffff;
+  --foreground: #0a0a0b;
+  --card: #fafafa;
+  --card-foreground: #0a0a0b;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0b;
+  --primary: #e0155d;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f4;
+  --secondary-foreground: #3a3a3d;
+  --muted: #f3f3f4;
+  --muted-foreground: #6b6b70;
+  --destructive: #ef4444;
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.06);
+  --ring: rgba(255, 61, 127, 0.35);
+
+  --accent: #ff3d7f;
+  --accent-foreground: #ffffff;
+  --accent-muted: rgba(255, 61, 127, 0.1);
+
+  --gradient-brand: linear-gradient(135deg, #ff3d7f 0%, #ff91ab 50%, #2f5bff 100%);
+  --gradient-brand-subtle: linear-gradient(135deg, rgba(255, 61, 127, 0.12) 0%, rgba(255, 145, 171, 0.08) 50%, rgba(47, 91, 255, 0.12) 100%);
+}
+
+/* ─── Dark mode ───────────────────────────────────────────────── */
+.dark {
+  --background: #050506;
+  --foreground: #ffffff;
+  --card: #0e0e10;
+  --card-foreground: #ffffff;
+  --popover: #141416;
+  --popover-foreground: #ffffff;
+  --primary: #ff3d7f;
+  --primary-foreground: #ffffff;
+  --secondary: #141416;
+  --secondary-foreground: #d6d6d6;
+  --muted: #1c1c1f;
+  --muted-foreground: #898989;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: rgba(255, 61, 127, 0.5);
+
+  --accent: #ff3d7f;
+  --accent-foreground: #ffffff;
+  --accent-muted: rgba(255, 61, 127, 0.08);
+
+  --gradient-brand: linear-gradient(135deg, #ff3d7f 0%, #ff91ab 50%, #2f5bff 100%);
+  --gradient-brand-subtle: linear-gradient(135deg, rgba(255, 61, 127, 0.15) 0%, rgba(255, 145, 171, 0.10) 50%, rgba(47, 91, 255, 0.15) 100%);
+  --gradient-glow: radial-gradient(ellipse at top, rgba(255, 61, 127, 0.07) 0%, rgba(47, 91, 255, 0.04) 30%, transparent 60%);
+  --gradient-surface: linear-gradient(180deg, #0e0e10 0%, #050506 100%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ─── Syntax highlighting (Shiki) ────────────────────────────── */
+pre {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+}
+
+pre code {
+  display: block;
+  min-width: max-content;
+  background: transparent !important;
+  border: none !important;
+  padding: 1rem !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  font-family: var(--font-mono);
+}
+
+code {
+  font-family: var(--font-mono);
+}
+
+pre code span {
+  color: var(--shiki-light);
+}
+
+.dark pre code span {
+  color: var(--shiki-dark);
+}
+
+pre code [data-highlighted-line] {
+  background-color: rgba(0, 0, 0, 0.05);
+  display: block;
+  margin: 0 -1rem;
+  padding: 0 1rem;
+}
+
+.dark pre code [data-highlighted-line] {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 61, 127, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 61, 127, 0.4);
+}

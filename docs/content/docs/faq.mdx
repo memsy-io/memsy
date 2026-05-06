@@ -1,0 +1,55 @@
+---
+title: FAQ
+description: Answers to questions we hear most often.
+---
+
+<AccordionGroup>
+  <Accordion title="Is my data sent to a third party?">
+    You send events to Memsy over HTTPS. Memsy processes them (extraction, embedding, indexing) using managed model providers; you can view the current provider set in the dashboard. Your events and memories are isolated per organization and never shared across tenants.
+  </Accordion>
+
+  <Accordion title="Do I need to run anything locally?">
+    No. The SDK is a thin HTTP client. All extraction, embedding, and retrieval happen on the Memsy platform.
+  </Accordion>
+
+  <Accordion title="What happens if an event fails to process?">
+    It shows up in `status().failed_ids`. Typical causes: LLM extraction errors after retries, content filtering, or quarantined resources. Re-ingest if appropriate — the SDK de-duplicates by content hash in a short rolling window.
+  </Accordion>
+
+  <Accordion title="How do I rotate API keys?">
+    Open **Settings → API Keys** in the dashboard. Rotate a key (new value, old still works until deleted) or revoke it (old stops working immediately). See [Sign Up](/docs/signup).
+  </Accordion>
+
+  <Accordion title="How do I delete data?">
+    Two mechanisms:
+
+    - `client.clear(container_tag)` clears tracking state for a container/conversation tag.
+    - **Dashboard → Data** supports broader actor-level deletion and export.
+
+    For GDPR / DSAR requests, use the dashboard — it gives you a confirmation receipt and logs the deletion.
+  </Accordion>
+
+  <Accordion title="Is the SDK thread-safe?">
+    Yes. Both `MemsyClient` and `AsyncMemsyClient` wrap `httpx` clients that are designed for concurrent use. Create one per process and share it.
+  </Accordion>
+
+  <Accordion title="Can I use this SDK with a self-hosted Memsy deployment?">
+    Yes — the SDK talks to any endpoint that implements the Memsy API. Point `base_url` at your deployment and provide a valid API key.
+  </Accordion>
+
+  <Accordion title="Which Python versions are supported?">
+    3.10, 3.11, 3.12. Older versions are not supported.
+  </Accordion>
+
+  <Accordion title="Where is the source code?">
+    The SDK source will be available on GitHub once the public repository is published. Until then, the canonical release is on [PyPI](https://pypi.org/project/memsy/).
+  </Accordion>
+
+  <Accordion title="How does versioning work?">
+    The SDK follows **semantic versioning**: patch for fixes, minor for additive changes, major for breaking changes.
+  </Accordion>
+
+  <Accordion title="Who do I contact for help?">
+    Bugs or feature requests — file an issue on GitHub. Account, billing, or urgent production questions — email support via the dashboard.
+  </Accordion>
+</AccordionGroup>

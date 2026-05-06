@@ -1,0 +1,183 @@
+---
+title: Onboarding Hierarchy
+description: Create orgs, roles, and teams to scope memory extraction and retrieval.
+---
+
+Memsy supports a three-level onboarding hierarchy — **org → role → team** — that controls how memories are scoped and how extraction prompts are customised. Setting this up is optional: the SDK works fine without it, but adding hierarchy lets you tune extraction for different parts of your user base.
+
+## Hierarchy overview
+
+```
+org
+├── team   (e.g. "platform team", "enterprise sales")
+└── role   (e.g. "frontend engineer", "sales rep")
+```
+
+Roles and teams are **independent siblings** under an org — a role does not belong to a team in the data model. An actor can be tagged with both a `role_id` and a `team_id` at the same time.
+
+What connects them is the **memory promotion chain**: when memories are promoted up the hierarchy, the path is actor → role → team → org. Each level has its own `promotion_prompt` that biases extraction for what matters at that scope.
+
+Events tagged with `role_id` or `team_id` in `EventPayload` are extracted with the customised prompt for that role/team.
+
+## Accessing the sub-resources
+
+```python
+from memsy import MemsyClient
+
+client = MemsyClient(base_url="...", api_key="msy_...")
+
+# Org sub-resource
+client.orgs
+
+# Role sub-resource
+client.roles
+
+# Team sub-resource
+client.teams
+```
+
+Async equivalents are available on `AsyncMemsyClient` — same methods, all `await`ed.
+
+---
+
+## Orgs
+
+### Create
+
+```python
+org = client.orgs.create(
+    org_id="my-org",
+    name="Acme Inc",
+    focus="B2B SaaS company building developer tools",
+)
+print(org.promotion_prompt)  # auto-generated extraction prompt
+```
+
+### List
+
+```python
+orgs: list[OrgResource] = client.orgs.list()
+```
+
+### Get
+
+```python
+org = client.orgs.get("my-org")
+```
+
+### Update
+
+```python
+org = client.orgs.update("my-org", name="Acme Corp", focus="Updated focus")
+```
+
+### Regenerate prompt
+
+Re-runs the LLM prompt generation using the current `name` and `focus`:
+
+```python
+org = client.orgs.regenerate_prompt("my-org")
+print(org.promotion_prompt)
+```
+
+### Delete
+
+```python
+client.orgs.delete("my-org")
+```
+
+---
+
+## Roles
+
+Roles represent distinct personas or job functions within your org.
+
+```python
+role = client.roles.create(
+    org_id="my-org",
+    name="Backend Engineer",
+    focus="Python, distributed systems, Postgres",
+)
+# role.role_id is assigned by the server
+
+roles = client.roles.list("my-org")
+role = client.roles.get(role.role_id, "my-org")
+role = client.roles.update(role.role_id, "my-org", focus="Updated focus")
+role = client.roles.regenerate_prompt(role.role_id, "my-org")
+client.roles.delete(role.role_id, "my-org")
+```
+
+---
+
+## Teams
+
+Teams represent groups of actors that share a context.
+
+```python
+team = client.teams.create(
+    org_id="my-org",
+    name="Platform Team",
+    focus="Infrastructure, CI/CD, reliability",
+)
+# team.team_id is assigned by the server
+
+teams = client.teams.list("my-org")
+team = client.teams.get(team.team_id, "my-org")
+team = client.teams.update(team.team_id, "my-org", name="Platform & Infra")
+team = client.teams.regenerate_prompt(team.team_id, "my-org")
+client.teams.delete(team.team_id, "my-org")
+```
+
+---
+
+## Tagging events with role/team
+
+Once the hierarchy is set up, tag events at ingest time:
+
+```python
+from memsy import EventPayload
+
+client.ingest([
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="user_message",
+        content="I prefer to use Rust for performance-critical paths.",
+        role_id="role_eng",
+        team_id="team_platform",
+    )
+])
+```
+
+The memory extractor uses the role's/team's `promotion_prompt` to bias extraction toward relevant facts for that context.
+
+---
+
+## Response model
+
+All three sub-resources return their respective models:
+
+```python
+@dataclass
+class OrgResource:
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+
+# RoleResource adds role_id; TeamResource adds team_id
+# All share the same remaining fields
+```
+
+See **[Models](/docs/models)** for the full `OrgResource`, `RoleResource`, and `TeamResource` definitions.
+
+---
+
+## See also
+
+- **[Ingesting Events](/docs/ingesting-events)** — `role_id` / `team_id` on `EventPayload`.
+- **[Console Memories](/docs/console-memories)** — browse memories scoped to roles/teams.
+- **[`MemsyClient`](/docs/memsy-client)** — full sub-resource method signatures.

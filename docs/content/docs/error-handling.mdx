@@ -1,0 +1,177 @@
+---
+title: Error Handling
+description: The typed exception hierarchy and how to catch each case.
+---
+
+All SDK calls raise instances of a single exception tree rooted at `MemsyError`. Catching the right one lets you distinguish "need to reconnect" from "upgrade your plan" from "bad credentials".
+
+## The hierarchy
+
+```
+MemsyError
+├── MemsyConnectionError        # network error or timeout
+└── MemsyAPIError               # non-2xx HTTP response
+    ├── AuthenticationError     # 401 — invalid or missing API key
+    ├── AuthorizationError      # 403 — key lacks the required scope
+    ├── FeatureNotAvailable     # 403 — feature not on your tier
+    ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in request
+    ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
+    ├── OrgLimitReachedError    # 403 — org tier limit reached
+    ├── KeyLimitReachedError    # 403 — API key tier limit reached
+    ├── BillingNotEnabledError  # 403 — billing not enabled for this org
+    ├── SeatLimitReachedError   # 409 — purchased seat limit reached
+    ├── RateLimitExceeded       # 429 — rate limit hit (after retries)
+    └── UsageLimitExceeded      # 429 — plan quota exceeded
+```
+
+The SDK exposes all of them from `memsy.exceptions`:
+
+```python
+from memsy.exceptions import (
+    MemsyError,
+    MemsyConnectionError,
+    MemsyAPIError,
+    AuthenticationError,
+    AuthorizationError,
+    FeatureNotAvailable,
+    OrgIdNotAllowedError,
+    SeatRequiredError,
+    OrgLimitReachedError,
+    KeyLimitReachedError,
+    BillingNotEnabledError,
+    SeatLimitReachedError,
+    RateLimitExceeded,
+    UsageLimitExceeded,
+)
+```
+
+## A full example
+
+```python
+from memsy import MemsyClient
+from memsy.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    FeatureNotAvailable,
+    RateLimitExceeded,
+    UsageLimitExceeded,
+    MemsyConnectionError,
+    MemsyAPIError,
+)
+
+client = MemsyClient(base_url="...", api_key="***")
+
+try:
+    results = client.search("preferences")
+except AuthenticationError:
+    refresh_api_key()
+except AuthorizationError as e:
+    print(f"Missing required scope: {e.required_scope}")
+except FeatureNotAvailable as e:
+    print(f"Feature '{e.feature}' requires an upgrade from {e.current_tier}")
+    print(f"Upgrade at: {e.upgrade_url}")
+except RateLimitExceeded as e:
+    print(f"Rate limited; retry after {e.retry_after}s")
+except UsageLimitExceeded as e:
+    print(f"Hit {e.dimension} limit ({e.current}/{e.limit})")
+    print(f"Upgrade at: {e.upgrade_url}")
+except MemsyConnectionError:
+    ...
+except MemsyAPIError as e:
+    print(f"API error {e.status_code}: {e.detail}")
+```
+
+## Control-plane errors
+
+When using `MemsyControlClient`, you may also encounter:
+
+```python
+from memsy.exceptions import (
+    OrgLimitReachedError,
+    KeyLimitReachedError,
+    BillingNotEnabledError,
+    SeatRequiredError,
+    SeatLimitReachedError,
+)
+
+try:
+    key = control.keys.create("my-key", scopes=["read", "write"])
+except KeyLimitReachedError as e:
+    print(f"Key limit reached: {e.current}/{e.limit}")
+except BillingNotEnabledError as e:
+    print(f"Billing not enabled. Express interest at: {e.interest_path}")
+```
+
+## Exception-specific attributes
+
+### `AuthorizationError`
+
+| Attribute | Description |
+|---|---|
+| `required_scope` | Scope your API key is missing, if known. |
+
+### `FeatureNotAvailable`
+
+| Attribute | Description |
+|---|---|
+| `feature` | The gated feature's identifier. |
+| `current_tier` | The tier of the API key that tried to use it. |
+| `upgrade_url` | Deep-link to the dashboard billing page. |
+
+### `OrgLimitReachedError` / `KeyLimitReachedError`
+
+| Attribute | Description |
+|---|---|
+| `limit` | Tier limit (orgs or keys). |
+| `current` | Current count. |
+
+### `BillingNotEnabledError`
+
+| Attribute | Description |
+|---|---|
+| `interest_path` | API path to express Pro plan interest. |
+
+### `SeatLimitReachedError`
+
+| Attribute | Description |
+|---|---|
+| `purchased_seats` | Total purchased seats. |
+| `assigned_seats` | Currently assigned seats. |
+| `pending_invites` | Pending invite count. |
+
+### `RateLimitExceeded`
+
+| Attribute | Description |
+|---|---|
+| `retry_after` | Seconds to wait before retrying, parsed from `Retry-After`. |
+
+### `UsageLimitExceeded`
+
+| Attribute | Description |
+|---|---|
+| `dimension` | What quota was exhausted (e.g. `"events_ingested"`). |
+| `current` | Current usage count. |
+| `limit` | The limit that was exceeded. |
+| `upgrade_url` | Deep-link to upgrade. |
+
+### `MemsyAPIError` (base class)
+
+Every API-side error carries:
+
+| Attribute | Description |
+|---|---|
+| `status_code` | HTTP status. |
+| `detail` | Server-provided message. |
+| `error_code` | Stable machine-readable code, e.g. `"feature_not_available"`. |
+| `response` | The raw `httpx.Response` for deeper inspection. |
+
+## Catch broadly or narrowly?
+
+- **In request handlers / agent loops** — catch `MemsyError` and surface a friendly error. Log the specific subclass for debugging.
+- **In pipelines with budgets** — handle `UsageLimitExceeded` and `FeatureNotAvailable` distinctly so you can route to an alert channel and link the upgrade page.
+- **In retryable background jobs** — catch `MemsyConnectionError` and `RateLimitExceeded` separately from API-level errors; they're the only ones that "just work" on a later retry.
+- **In control-plane admin code** — handle `BillingNotEnabledError` and `SeatLimitReachedError` and link users to the appropriate dashboard flow.
+
+## Next
+
+- How automatic 429 retry behaves before these exceptions fire → **[Retries](/docs/retries)**.

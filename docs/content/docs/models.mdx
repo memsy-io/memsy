@@ -1,0 +1,507 @@
+---
+title: Models
+description: Request and response dataclasses exposed by the SDK.
+---
+
+All SDK models are plain Python `@dataclass`es imported from `memsy`.
+
+## Core imports
+
+```python
+from memsy import (
+    # Request
+    EventPayload,
+    # Core responses
+    IngestResponse,
+    SearchResponse,
+    SearchResult,
+    SourceEvent,
+    StatusResponse,
+    HealthResponse,
+    ClearResponse,
+    # Onboarding (memsy-core)
+    OrgResource,
+    RoleResource,
+    TeamResource,
+    # Console memories (memsy-core)
+    MemoryScopeInfo,
+    MemoryItemResource,
+    MemoryListResponse,
+    MemoryStatsResponse,
+    # Control-plane (api/)
+    MeResponse,
+    UsageSummaryResponse,
+    DimensionUsage,
+    UsageTimeseriesResponse,
+    TimeseriesPoint,
+    BillingSummary,
+    PaymentMethod,
+    UpcomingInvoice,
+    Invoice,
+    ApiKeyInfo,
+    ApiKeyListResponse,
+    CreateKeyResponse,
+    EventItemResponse,
+    EventListResponse,
+    ProInterestResponse,
+    # Observability
+    UsageInfo,
+    RateLimitInfo,
+)
+```
+
+---
+
+## Request models
+
+### `EventPayload`
+
+A single event to ingest.
+
+```python
+@dataclass
+class EventPayload:
+    actor_id: str
+    session_id: str
+    kind: str           # "user_message" | "assistant_message" | "tool_result" | "app_event"
+    content: str
+    ts: str | None = None        # optional ISO-8601 timestamp
+    metadata: str | None = None  # optional JSON-serialised string
+    role_id: str | None = None   # role scope for the event
+    team_id: str | None = None   # team scope for the event
+```
+
+`role_id` and `team_id` are optional scope hints that associate the event with a specific role or team in your onboarding hierarchy. They are ignored on free-tier orgs.
+
+---
+
+## Core response models
+
+### `IngestResponse`
+
+```python
+@dataclass
+class IngestResponse:
+    event_ids: list[str]
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `SearchResponse`
+
+```python
+@dataclass
+class SearchResponse:
+    results: list[SearchResult]
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `SearchResult`
+
+A single memory returned by `search()`.
+
+```python
+@dataclass
+class SearchResult:
+    id: str
+    content: str
+    score: float
+    metadata: dict[str, Any] | None = None
+```
+
+**Typed metadata properties** (shortcuts into `metadata`):
+
+| Property | Type | Description |
+|---|---|---|
+| `.title` | `str \| None` | Memory title, if set. |
+| `.summary` | `str \| None` | Short summary of the memory. |
+| `.tags` | `list[str]` | Tags attached to this memory. |
+| `.entities` | `list[dict]` | Named entities extracted during processing. |
+| `.kind` | `str \| None` | Memory kind (e.g. `"semantic"`, `"episodic"`). |
+| `.type` | `str \| None` | Memory type (e.g. `"preference"`, `"fact"`). |
+| `.strength` | `float \| None` | Reinforcement strength (0–1). |
+| `.confidence` | `float \| None` | Extraction confidence (0–1). |
+| `.observed_at` | `str \| None` | ISO-8601 timestamp when memory was observed. |
+| `.source_event_ids` | `list[str]` | IDs of the source events. |
+| `.source_events` | `list[SourceEvent]` | Hydrated source events (requires `include_source_events=True`). |
+
+### `SourceEvent`
+
+A source event hydrated inside `SearchResult.source_events`.
+
+```python
+@dataclass
+class SourceEvent:
+    event_id: str
+    kind: str
+    content: str
+    ts: str | None = None
+```
+
+Only populated when you pass `include_source_events=True` to `search()`.
+
+### `StatusResponse`
+
+```python
+@dataclass
+class StatusResponse:
+    completed_ids: list[str]
+    failed_ids: list[str]
+    pending_ids: list[str]
+    total: int
+    statuses: dict[str, str] | None = None  # event_id → status map
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `HealthResponse`
+
+```python
+@dataclass
+class HealthResponse:
+    status: str
+    version: str = ""
+    billing_enabled: bool | None = None       # present on control-plane /health
+    components: dict[str, str] | None = None  # component → status map
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `ClearResponse`
+
+```python
+@dataclass
+class ClearResponse:
+    deleted: int
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+---
+
+## Onboarding models (memsy-core)
+
+Returned by `client.orgs.*`, `client.roles.*`, and `client.teams.*`.
+
+### `OrgResource`
+
+```python
+@dataclass
+class OrgResource:
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+```
+
+### `RoleResource`
+
+```python
+@dataclass
+class RoleResource:
+    role_id: str
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+```
+
+### `TeamResource`
+
+```python
+@dataclass
+class TeamResource:
+    team_id: str
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+```
+
+---
+
+## Console memory models (memsy-core)
+
+Returned by `client.memories.*`.
+
+### `MemoryScopeInfo`
+
+```python
+@dataclass
+class MemoryScopeInfo:
+    level: str               # "org" | "role" | "team" | "actor"
+    actor_id: str | None = None
+    team_id: str | None = None
+    role_id: str | None = None
+```
+
+### `MemoryItemResource`
+
+A full memory record as stored in the engine.
+
+```python
+@dataclass
+class MemoryItemResource:
+    memory_id: str
+    org_id: str
+    scope: MemoryScopeInfo
+    type: str
+    kind: str
+    memory_kind: str
+    status: str
+    text: str
+    confidence: float
+    strength: float
+    recall_count: int
+    decay_half_life_days: float
+    pinned: bool
+    tags: list[str]
+    entity_refs: list[dict[str, str]]
+    source_event_ids: list[str]
+    source_urls: list[str]
+    summary: str | None = None
+    payload: dict[str, Any] | None = None
+    last_recalled_at: str | None = None
+    effective_from: str | None = None
+    effective_to: str | None = None
+    observed_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+```
+
+### `MemoryListResponse`
+
+```python
+@dataclass
+class MemoryListResponse:
+    items: list[MemoryItemResource]
+    total: int
+    limit: int
+    offset: int
+```
+
+### `MemoryStatsResponse`
+
+```python
+@dataclass
+class MemoryStatsResponse:
+    total: int
+    total_memories: int
+    active_memories: int
+    by_type: dict[str, int]
+    by_kind: dict[str, int]
+    by_status: dict[str, int]
+    avg_confidence: float
+    avg_strength: float
+    top_entities: list[dict[str, Any]]
+    confidence_buckets: list[dict[str, Any]] | None = None
+    date_range: dict[str, str | None] | None = None
+```
+
+---
+
+## Control-plane models (api/)
+
+Returned by `MemsyControlClient` and its sub-resources.
+
+### `MeResponse`
+
+```python
+@dataclass
+class MeResponse:
+    customer_id: str
+    email: str
+    tier: str
+    is_superadmin: bool
+    org_id: str
+    is_billing_admin: bool
+    user_id: str | None = None
+    org_role: str | None = None
+```
+
+### `UsageSummaryResponse` / `DimensionUsage`
+
+```python
+@dataclass
+class DimensionUsage:
+    dimension: str
+    used: int
+    limit: int | None = None
+    overage_rate: float | None = None
+
+@dataclass
+class UsageSummaryResponse:
+    org_id: str
+    tier: str
+    period_start: str
+    period_end: str
+    dimensions: list[DimensionUsage]
+```
+
+### `UsageTimeseriesResponse` / `TimeseriesPoint`
+
+```python
+@dataclass
+class TimeseriesPoint:
+    date: str
+    dimension: str
+    quantity: int
+
+@dataclass
+class UsageTimeseriesResponse:
+    org_id: str
+    granularity: str
+    data: list[TimeseriesPoint]
+```
+
+### `BillingSummary` / `PaymentMethod` / `UpcomingInvoice`
+
+```python
+@dataclass
+class PaymentMethod:
+    brand: str
+    last4: str
+    exp_month: int
+    exp_year: int
+
+@dataclass
+class UpcomingInvoice:
+    amount_due: int   # amount in smallest currency unit (e.g. cents)
+    currency: str
+    period_end: int   # Unix timestamp from Stripe
+
+@dataclass
+class BillingSummary:
+    tier: str
+    purchased_seats: int
+    assigned_seats: int
+    available_seats: int
+    stripe_customer_id: str | None = None
+    payment_method: PaymentMethod | None = None
+    upcoming_invoice: UpcomingInvoice | None = None
+    subscription_status: str | None = None
+    billing_contact: str | None = None
+    stripe_subscription_id: str | None = None
+```
+
+### `Invoice`
+
+```python
+@dataclass
+class Invoice:
+    id: str
+    amount_due: int
+    amount_paid: int
+    currency: str
+    status: str
+    created: str              # stringified Unix timestamp as returned by the API
+    hosted_invoice_url: str | None = None
+```
+
+### `ApiKeyInfo` / `ApiKeyListResponse` / `CreateKeyResponse`
+
+```python
+@dataclass
+class ApiKeyInfo:
+    key_id: str
+    prefix: str
+    name: str
+    scopes: list[str]
+    is_active: bool
+    created_at: str
+    last_used_at: str | None = None
+    expires_at: str | None = None
+
+@dataclass
+class ApiKeyListResponse:
+    keys: list[ApiKeyInfo]
+    max_keys: int
+    active_count: int
+
+@dataclass
+class CreateKeyResponse:
+    key_id: str
+    raw_key: str      # shown once — store securely
+    prefix: str
+    name: str
+    scopes: list[str]
+```
+
+### `EventItemResponse` / `EventListResponse`
+
+```python
+@dataclass
+class EventItemResponse:
+    event_id: str
+    org_id: str
+    actor_id: str
+    kind: str
+    content: str
+    ts: str
+    session_id: str | None = None
+    metadata: dict[str, Any] | None = None
+    ingested_at: str | None = None
+
+@dataclass
+class EventListResponse:
+    items: list[EventItemResponse]
+    total: int
+    limit: int
+    offset: int
+```
+
+### `ProInterestResponse`
+
+```python
+@dataclass
+class ProInterestResponse:
+    message: str
+```
+
+---
+
+## Observability models
+
+### `UsageInfo`
+
+Parsed from `X-Usage-*` and `X-Plan` response headers. Present on most `MemsyClient` responses.
+
+```python
+@dataclass
+class UsageInfo:
+    api_calls: int | None = None
+    api_calls_limit: int | None = None
+    events_ingested: int | None = None
+    events_ingested_limit: int | None = None
+    memory_stored: int | None = None
+    memory_stored_limit: int | None = None
+    llm_tokens: int | None = None
+    llm_tokens_limit: int | None = None
+    search_queries: int | None = None
+    search_queries_limit: int | None = None
+    plan: str | None = None
+```
+
+### `RateLimitInfo`
+
+Parsed from `X-RateLimit-*` headers.
+
+```python
+@dataclass
+class RateLimitInfo:
+    limit: int | None = None
+    remaining: int | None = None
+    reset: int | None = None  # Unix timestamp
+```
+
+See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for the full header mapping.
