@@ -1,0 +1,156 @@
+---
+title: Exceptions
+description: Every error class the SDK can raise.
+---
+
+All SDK errors are importable from `memsy.exceptions`. The SDK also re-exports them from the top-level `memsy` package.
+
+```python
+from memsy.exceptions import (
+    MemsyError,
+    MemsyConnectionError,
+    MemsyAPIError,
+    AuthenticationError,
+    AuthorizationError,
+    FeatureNotAvailable,
+    OrgIdNotAllowedError,
+    SeatRequiredError,
+    OrgLimitReachedError,
+    KeyLimitReachedError,
+    BillingNotEnabledError,
+    SeatLimitReachedError,
+    RateLimitExceeded,
+    UsageLimitExceeded,
+)
+```
+
+## Hierarchy
+
+```
+MemsyError
+├── MemsyConnectionError        # network error / timeout
+└── MemsyAPIError               # non-2xx HTTP response
+    ├── AuthenticationError     # 401 — invalid or missing API key
+    ├── AuthorizationError      # 403 — key lacks required scope
+    ├── FeatureNotAvailable     # 403 — feature not on your tier
+    ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in body
+    ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
+    ├── OrgLimitReachedError    # 403 — tier limit on orgs reached
+    ├── KeyLimitReachedError    # 403 — tier limit on API keys reached
+    ├── BillingNotEnabledError  # 403 — billing not enabled for this org
+    ├── SeatLimitReachedError   # 409 — purchased seat limit reached
+    ├── RateLimitExceeded       # 429 — rate limit hit (after retries)
+    └── UsageLimitExceeded      # 429 — plan quota exceeded
+```
+
+## `MemsyError`
+
+Base class. Catch this to handle any SDK error.
+
+## `MemsyConnectionError`
+
+Raised when the SDK cannot reach the Memsy endpoint: connection refused, DNS failure, timeout. No additional attributes.
+
+## `MemsyAPIError`
+
+Raised on any non-2xx response not captured by a specific subclass.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `status_code` | `int` | HTTP status. |
+| `detail` | `str` | Server-provided detail message. |
+| `error_code` | `str \| None` | Stable machine-readable error code. |
+| `response` | `httpx.Response` | Raw response. |
+
+## `AuthenticationError` (401)
+
+Invalid or missing API key. Same attributes as `MemsyAPIError`.
+
+## `AuthorizationError` (403)
+
+API key is valid but lacks the required scope.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `required_scope` | `str \| None` | Scope that was missing. |
+
+## `FeatureNotAvailable` (403)
+
+The endpoint is gated behind a higher plan tier.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `feature` | `str \| None` | Feature identifier. |
+| `current_tier` | `str \| None` | Plan tier the key is on. |
+| `upgrade_url` | `str \| None` | Deep link to the upgrade flow. |
+
+## `OrgIdNotAllowedError` (400)
+
+Raised when a free-tier client sends an `org_id` field in the request body. Organization is derived from the API key on free-tier plans; passing one explicitly is rejected.
+
+No extra attributes beyond `MemsyAPIError`.
+
+## `SeatRequiredError` (403)
+
+The console or control-plane endpoint requires the caller to have an assigned seat. Check your org's seat assignments in the dashboard.
+
+No extra attributes beyond `MemsyAPIError`.
+
+## `OrgLimitReachedError` (403)
+
+Your tier's limit on org customization records has been reached. Raised by `client.orgs.create()` when the tier cap is exceeded.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `limit` | `int \| None` | Org limit for your tier. |
+| `current` | `int \| None` | Current org count. |
+
+## `KeyLimitReachedError` (403)
+
+Your tier's limit on API keys has been reached.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `limit` | `int \| None` | Key limit for your tier. |
+| `current` | `int \| None` | Current active key count. |
+
+## `BillingNotEnabledError` (403)
+
+A billing endpoint was called but billing has not been enabled for this org. The response includes a path to express interest in the Pro plan.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `interest_path` | `str \| None` | API path to express interest (`/interest/express`). |
+
+## `SeatLimitReachedError` (409)
+
+A seat-management operation would exceed the number of purchased seats.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `purchased_seats` | `int \| None` | Total purchased seats. |
+| `assigned_seats` | `int \| None` | Currently assigned seats. |
+| `pending_invites` | `int \| None` | Pending invite count. |
+
+## `RateLimitExceeded` (429)
+
+The SDK exhausted its automatic retries.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `retry_after` | `float \| None` | Seconds to wait, parsed from `Retry-After`. |
+
+## `UsageLimitExceeded` (429)
+
+A plan-level quota was exceeded.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `dimension` | `str \| None` | Which quota was exhausted (e.g. `"events_ingested"`). |
+| `current` | `int \| None` | Current usage. |
+| `limit` | `int \| None` | Limit that was exceeded. |
+| `upgrade_url` | `str \| None` | Deep link. |
+
+## See also
+
+- **[Error handling guide](/docs/error-handling)** — patterns for each exception.

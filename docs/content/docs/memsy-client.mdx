@@ -1,0 +1,208 @@
+---
+title: MemsyClient
+description: Synchronous HTTP client — constructor, methods, parameters, exceptions.
+---
+
+Synchronous HTTP client for the Memsy hot-path API (memsy-core).
+
+```python
+from memsy import MemsyClient
+```
+
+## Constructor
+
+```python
+MemsyClient(
+    base_url: str,
+    api_key: str,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    retry_backoff: float = 1.0,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `base_url` | `str` | — | Memsy API base URL, e.g. `"https://api.memsy.io"`. Trailing slashes are trimmed. |
+| `api_key` | `str` | — | API key of the form `msy_...`. Sent as `Authorization: Bearer <key>`. |
+| `timeout` | `float` | `30.0` | Request timeout in seconds. Covers connect + read + write. |
+| `max_retries` | `int` | `3` | Max automatic retries on HTTP 429. |
+| `retry_backoff` | `float` | `1.0` | Base exponential backoff in seconds between 429 retries. |
+
+## Context manager
+
+```python
+with MemsyClient(base_url="...", api_key="***") as client:
+    client.health()
+```
+
+## Methods
+
+### `ingest(events)`
+
+Ingest a batch of events.
+
+```python
+ingest(events: list[EventPayload]) -> IngestResponse
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `events` | `list[EventPayload]` | Events to ingest. Same order is preserved in the response. |
+
+**Returns**: `IngestResponse` with `event_ids`, plus optional `usage` / `rate_limit`.
+
+**Raises**: `AuthenticationError`, `AuthorizationError`, `FeatureNotAvailable`, `RateLimitExceeded`, `UsageLimitExceeded`, `MemsyConnectionError`, `MemsyAPIError`.
+
+---
+
+### `search(query, *, actor_id, limit, threshold, include_source_events)`
+
+Retrieve memories via semantic search.
+
+```python
+search(
+    query: str,
+    *,
+    actor_id: str | None = None,
+    limit: int = 10,
+    threshold: float = 0.3,
+    include_source_events: bool = False,
+) -> SearchResponse
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `query` | `str` | — | Natural-language query. |
+| `actor_id` | `str \| None` | `None` | Filter results to a single actor. |
+| `limit` | `int` | `10` | Maximum number of results. |
+| `threshold` | `float` | `0.3` | Minimum similarity score. |
+| `include_source_events` | `bool` | `False` | Include source events in each result. |
+
+**Returns**: `SearchResponse` with `results: list[SearchResult]`, plus optional `usage` / `rate_limit`.
+
+---
+
+### `status(event_ids)`
+
+```python
+status(event_ids: list[str]) -> StatusResponse
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `event_ids` | `list[str]` | Event IDs returned from a prior `ingest()` call. |
+
+**Returns**: `StatusResponse` with `completed_ids`, `failed_ids`, `pending_ids`, `total`.
+
+---
+
+### `health()`
+
+```python
+health() -> HealthResponse
+```
+
+**Returns**: `HealthResponse` with `status`, `version`, and optionally `billing_enabled` and `components`.
+
+---
+
+### `clear(container_tag)`
+
+```python
+clear(container_tag: str) -> ClearResponse
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `container_tag` | `str` | Container/conversation tag to clear. |
+
+**Returns**: `ClearResponse` with `deleted` (count of cleared items).
+
+---
+
+### `close()`
+
+Close the underlying HTTP connection pool. Called automatically by the context manager.
+
+```python
+close() -> None
+```
+
+---
+
+## Sub-resource accessors
+
+`MemsyClient` exposes three onboarding sub-resources and a console-memory sub-resource. Each is a thin accessor that delegates to the same underlying HTTP client.
+
+### `client.orgs`
+
+CRUD for org customization records. See **[Onboarding](/docs/onboarding)**.
+
+```python
+client.orgs.list() -> list[OrgResource]
+client.orgs.create(org_id, name, focus) -> OrgResource
+client.orgs.get(org_id) -> OrgResource
+client.orgs.update(org_id, *, name=None, focus=None, promotion_prompt=None) -> OrgResource
+client.orgs.regenerate_prompt(org_id) -> OrgResource
+client.orgs.delete(org_id) -> None
+```
+
+### `client.roles`
+
+CRUD for role customization records within an org. The server assigns `role_id` — it is returned in the response, not supplied at creation.
+
+```python
+client.roles.list(org_id) -> list[RoleResource]
+client.roles.create(org_id, name, focus) -> RoleResource
+client.roles.get(role_id, org_id) -> RoleResource
+client.roles.update(role_id, org_id, *, name=None, focus=None, promotion_prompt=None) -> RoleResource
+client.roles.regenerate_prompt(role_id, org_id) -> RoleResource
+client.roles.delete(role_id, org_id) -> None
+```
+
+### `client.teams`
+
+CRUD for team customization records within an org. The server assigns `team_id` — it is returned in the response, not supplied at creation.
+
+```python
+client.teams.list(org_id) -> list[TeamResource]
+client.teams.create(org_id, name, focus) -> TeamResource
+client.teams.get(team_id, org_id) -> TeamResource
+client.teams.update(team_id, org_id, *, name=None, focus=None, promotion_prompt=None) -> TeamResource
+client.teams.regenerate_prompt(team_id, org_id) -> TeamResource
+client.teams.delete(team_id, org_id) -> None
+```
+
+### `client.memories`
+
+Browse and inspect stored memories. See **[Console Memories](/docs/console-memories)**.
+
+```python
+client.memories.list(
+    *,
+    kind: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    sort: str = "observed_at_desc",
+    search: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> MemoryListResponse
+
+client.memories.get(memory_id: str) -> MemoryItemResource
+client.memories.stats() -> MemoryStatsResponse
+```
+
+---
+
+## Thread safety
+
+A `MemsyClient` wraps an `httpx.Client`, which is safe to share across threads for HTTP calls. Create one client per process and reuse it.
+
+## See also
+
+- **[`AsyncMemsyClient`](/docs/async-memsy-client)** — same interface, async.
+- **[`MemsyControlClient`](/docs/control-client)** — control-plane client (billing, keys, usage).
+- **[Models](/docs/models)** — every request/response dataclass.
+- **[Exceptions](/docs/exceptions)** — every error class.

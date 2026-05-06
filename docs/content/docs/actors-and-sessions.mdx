@@ -1,0 +1,68 @@
+---
+title: Actors and Sessions
+description: How actor_id and session_id control grouping and retrieval.
+---
+
+Events carry two identifiers that control how Memsy groups and retrieves memories: `actor_id` and `session_id`. Getting these right upfront makes search meaningfully better later.
+
+## `actor_id` — *who*
+
+The actor is the entity the memory is **about**. In most applications this is the end user. It can also be an AI agent, a customer account, or any stable identity you want to attach memories to.
+
+- Pick an ID that is stable across sessions (your internal user UUID), not something that rotates (like a JWT).
+- Use the same `actor_id` across all event kinds for a given person — `user_message`, `assistant_message`, `tool_result` all share the actor.
+- Scope a search to one actor:
+
+  ```python
+  client.search("preferences", actor_id="user_42")
+  ```
+
+## `session_id` — *where in the conversation*
+
+The session is the immediate context window the event belongs to — a conversation, a thread, a job run.
+
+- Start a new `session_id` when the context logically resets (new chat, new task).
+- Keep the same `session_id` for every event that belongs to one conversational flow, including assistant replies and tool results.
+
+Sessions aren't used to filter `search()` today, but Memsy uses them during extraction to understand what's in scope.
+
+## A complete example
+
+```python
+from memsy import MemsyClient, EventPayload
+
+client = MemsyClient(base_url="...", api_key="***")
+
+client.ingest([
+    EventPayload(
+        actor_id="user_42", session_id="sess_abc",
+        kind="user_message",
+        content="My dog's name is Rex.",
+    ),
+    EventPayload(
+        actor_id="user_42", session_id="sess_abc",
+        kind="assistant_message",
+        content="Nice — Rex is a great name.",
+    ),
+])
+
+# Later, a different conversation
+client.ingest([
+    EventPayload(
+        actor_id="user_42", session_id="sess_xyz",
+        kind="user_message",
+        content="Book a vet visit for tomorrow.",
+    ),
+])
+
+# Both sessions contribute memories to user_42
+results = client.search("pets", actor_id="user_42")
+```
+
+## Shared actor IDs vs. isolation
+
+Memories are always isolated per organization (each API key belongs to one org). Within an org, memories are keyed by `actor_id`. If two users share an `actor_id`, they share memories — so don't reuse IDs across people.
+
+## Next
+
+- How `ingest()` returns before processing completes → **[Async Processing](/docs/async-processing)**.

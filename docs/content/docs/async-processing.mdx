@@ -1,0 +1,73 @@
+---
+title: Async Processing
+description: Why ingest returns before processing completes — and how to poll.
+---
+
+Memsy intentionally decouples ingestion from processing. This matters in a few places, so it's worth understanding the model.
+
+## What happens when you call `ingest()`
+
+```python
+result = client.ingest(events)
+# <-- returns here, usually within ~100ms
+```
+
+The server:
+
+1. Validates the payload.
+2. Writes the raw events to durable storage.
+3. Returns a list of `event_ids`.
+4. **Enqueues** the events for downstream processing (LLM extraction → embedding → indexing).
+
+Steps 1–3 happen synchronously over HTTP. Step 4 happens on the server's worker pool, after your call has already returned.
+
+## Why it's designed this way
+
+- Applications in the hot path (chat loops, agent runtimes) log events without blocking on LLM latency.
+- Extraction can batch, retry, and prioritize without the client caring.
+- Costs and failures on the extraction side don't punish the caller.
+
+## When can I search for a newly ingested event?
+
+Usually within a few seconds, but there's no guarantee. If your UX depends on memory being present immediately after ingest, poll for completion:
+
+```python
+import time
+
+result = client.ingest(events)
+
+status = client.status(event_ids=result.event_ids)
+while status.pending_ids:
+    time.sleep(1.0)
+    status = client.status(event_ids=result.event_ids)
+
+print("done:", status.completed_ids)
+print("failed:", status.failed_ids)
+```
+
+`StatusResponse` partitions the IDs you sent into three buckets:
+
+- `completed_ids` — extracted, embedded, indexed. Searchable now.
+- `pending_ids` — still in the queue or mid-processing.
+- `failed_ids` — something went wrong during extraction. These won't become memories.
+
+## What causes an event to fail?
+
+- Content rejected by a content filter.
+- An extraction-time LLM call that could not be recovered after retries.
+- An event that referenced a deleted or quarantined resource.
+
+Failures are rare but not zero. Check `failed_ids` in your pollers if correctness matters.
+
+## Design implications
+
+<Warning>
+**Don't block your request pipeline on `status()`.** Use it only when your next action requires the memory to be present.
+</Warning>
+
+- **Don't re-ingest the same event to "retry".** Memsy de-duplicates ingestion by content hash within a short window; re-sending can create noise.
+- **Do batch aggressively.** `ingest()` accepts many events per call; fifty events in one batch is much cheaper than fifty single-event calls.
+
+## Next
+
+- How to build batches that ingest well → **[Ingesting events](/docs/ingesting-events)**.

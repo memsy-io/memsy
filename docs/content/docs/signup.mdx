@@ -1,0 +1,61 @@
+---
+title: Sign Up & Get an API Key
+description: Create an account, provision an organization, and generate your first API key.
+---
+
+Before you can use the SDK you need a Memsy account, an organization, and an API key. Everything below happens in the dashboard at **[app.memsy.io](https://app.memsy.io)**.
+
+<Steps>
+  <Step title="Create an account">
+    Visit **[app.memsy.io](https://app.memsy.io)**, sign up with your work email (or one of the supported SSO providers, if enabled), and confirm the verification email.
+  </Step>
+
+  <Step title="Create or join an organization">
+    Each API key is scoped to a single organization. First-time users are walked through creating one.
+
+    - **Org name** — shown in billing and in the dashboard switcher.
+    - **Plan** — start on the free tier; upgrade later from **Settings → Billing**.
+
+    <Tip>
+    Teams typically create one org per product or environment (`acme-prod`, `acme-staging`). Memories stored under one org are isolated from every other org.
+    </Tip>
+  </Step>
+
+  <Step title="Generate an API key">
+    Open **Settings → API Keys**.
+
+    1. Click **Create key**, give it a human-readable label (`local-dev`, `ci`, `prod-worker`).
+    2. Copy the key immediately — it's shown **only once** and looks like:
+
+       ```
+       msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+       ```
+  </Step>
+
+  <Step title="Grab your base URL">
+    The dashboard also shows your **API base URL** (for example `https://api.memsy.io`). Copy it — the SDK needs both the key and the URL.
+  </Step>
+
+  <Step title="Store the credentials">
+    Never paste credentials into source code. Set them as environment variables:
+
+    ```bash
+    export MEMSY_BASE_URL="https://api.memsy.io"
+    export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ```
+
+    For local dev, add them to a `.env` file loaded at startup and make sure `.env` is in `.gitignore`.
+  </Step>
+</Steps>
+
+## Rotate or revoke a key
+
+Back in **Settings → API Keys** you can rotate any key at any time. A revoked key stops working immediately; rotation issues a new key and leaves the old one working until you delete it.
+
+<Warning>
+If a key is ever exposed in a commit, a log, or a bug report, revoke it from the dashboard and generate a new one before doing anything else.
+</Warning>
+
+## Next
+
+→ **[Install the package](/docs/installation)**

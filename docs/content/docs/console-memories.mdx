@@ -1,0 +1,136 @@
+---
+title: Console Memories
+description: Browse and inspect stored memories via client.memories.
+---
+
+`client.memories` exposes read-only access to the memories stored in your org. Use it to audit extraction quality, debug unexpected search results, or build admin dashboards.
+
+```python
+from memsy import MemsyClient
+
+client = MemsyClient(base_url="...", api_key="msy_...")
+```
+
+## List memories
+
+```python
+from memsy import MemoryListResponse
+
+result: MemoryListResponse = client.memories.list(
+    kind="semantic",        # optional: "semantic" | "episodic" | ...
+    type="preference",      # optional: "preference" | "fact" | "event" | ...
+    status="active",        # optional: "active" | "archived" | "decayed"
+    sort="observed_at_desc",# "observed_at_desc" | "strength_desc" | "confidence_desc"
+    search="dark mode",     # optional: full-text search over memory text
+    limit=50,
+    offset=0,
+)
+
+print(f"{result.total} total memories")
+for m in result.items:
+    print(m.memory_id, m.text, m.confidence)
+```
+
+### Pagination
+
+```python
+page_size = 50
+offset = 0
+
+while True:
+    page = client.memories.list(limit=page_size, offset=offset)
+    for m in page.items:
+        process(m)
+    offset += page_size
+    if offset >= page.total:
+        break
+```
+
+## Get a single memory
+
+```python
+from memsy import MemoryItemResource
+
+memory: MemoryItemResource = client.memories.get("mem_01abc...")
+print(memory.text, memory.strength, memory.tags)
+print(memory.scope.level, memory.scope.actor_id)
+```
+
+## Stats
+
+Aggregate statistics for all memories in the org:
+
+```python
+from memsy import MemoryStatsResponse
+
+stats: MemoryStatsResponse = client.memories.stats()
+print(f"Total: {stats.total_memories}, Active: {stats.active_memories}")
+print(f"Avg confidence: {stats.avg_confidence:.2f}")
+print("By type:", stats.by_type)
+print("By kind:", stats.by_kind)
+print("Top entities:", stats.top_entities[:5])
+```
+
+---
+
+## `MemoryItemResource` fields
+
+| Field | Type | Description |
+|---|---|---|
+| `memory_id` | `str` | Unique memory ID. |
+| `org_id` | `str` | Owning org. |
+| `scope` | `MemoryScopeInfo` | Scope (level + actor/team/role IDs). |
+| `type` | `str` | Memory type (e.g. `"preference"`, `"fact"`). |
+| `kind` | `str` | Memory kind (e.g. `"semantic"`, `"episodic"`). |
+| `memory_kind` | `str` | Low-level memory kind classification. |
+| `status` | `str` | `"active"`, `"archived"`, or `"decayed"`. |
+| `text` | `str` | The extracted memory text. |
+| `confidence` | `float` | Extraction confidence (0–1). |
+| `strength` | `float` | Reinforcement strength (0–1). |
+| `recall_count` | `int` | Number of times this memory was recalled in search. |
+| `decay_half_life_days` | `float` | Days until strength halves. |
+| `pinned` | `bool` | Pinned memories never decay. |
+| `tags` | `list[str]` | Tags from extraction. |
+| `entity_refs` | `list[dict]` | Named entity references. |
+| `source_event_ids` | `list[str]` | IDs of contributing events. |
+| `source_urls` | `list[str]` | Source URLs if applicable. |
+| `summary` | `str \| None` | Short auto-generated summary. |
+| `payload` | `dict \| None` | Raw extraction payload from the LLM, if retained. |
+| `last_recalled_at` | `str \| None` | ISO-8601 timestamp of last search recall. |
+| `observed_at` | `str \| None` | ISO-8601 timestamp of first observation. |
+| `effective_from` | `str \| None` | Start of validity window. |
+| `effective_to` | `str \| None` | End of validity window (`None` = indefinite). |
+| `created_at` | `str \| None` | Record creation timestamp. |
+| `updated_at` | `str \| None` | Last update timestamp. |
+
+### `MemoryScopeInfo`
+
+```python
+@dataclass
+class MemoryScopeInfo:
+    level: str               # "org" | "role" | "team" | "actor"
+    actor_id: str | None = None
+    team_id: str | None = None
+    role_id: str | None = None
+```
+
+---
+
+## Async usage
+
+```python
+from memsy import AsyncMemsyClient
+
+async with AsyncMemsyClient(base_url="...", api_key="msy_...") as client:
+    stats = await client.memories.stats()
+    result = await client.memories.list(kind="semantic", limit=20)
+    memory = await client.memories.get("mem_01abc...")
+```
+
+---
+
+## See also
+
+- **[Onboarding](/docs/onboarding)** — set up org/role/team hierarchy to scope memories.
+- **[Searching memory](/docs/searching-memory)** — retrieve memories via semantic search.
+- **[Models](/docs/models)** — full `MemoryItemResource` and `MemoryStatsResponse` definitions.

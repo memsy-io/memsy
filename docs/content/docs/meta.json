@@ -1,0 +1,31 @@
+{
+  "title": "Memsy Python SDK",
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "signup",
+    "installation",
+    "quickstart",
+    "---Concepts---",
+    "events-and-memories",
+    "actors-and-sessions",
+    "async-processing",
+    "---Guides---",
+    "ingesting-events",
+    "searching-memory",
+    "onboarding",
+    "console-memories",
+    "async-client",
+    "usage-and-rate-limits",
+    "error-handling",
+    "retries",
+    "---API Reference---",
+    "memsy-client",
+    "async-memsy-client",
+    "control-client",
+    "models",
+    "exceptions",
+    "---Reference---",
+    "faq"
+  ]
+}

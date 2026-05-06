@@ -1,0 +1,187 @@
+---
+title: MemsyControlClient
+description: Control-plane client for billing, API keys, usage, and account management.
+---
+
+`MemsyControlClient` and `AsyncMemsyControlClient` wrap the Memsy control-plane API (`api/`). This is a separate service from the hot-path memory engine — it handles account management, billing, API key lifecycle, and usage reporting.
+
+```python
+from memsy import MemsyControlClient, AsyncMemsyControlClient
+```
+
+## When to use this client
+
+Use `MemsyControlClient` when you need to:
+
+- Look up account or org identity (`me()`)
+- Read usage metrics and billing summaries
+- Programmatically create or rotate API keys (admin-only)
+- Browse ingested events in the console
+- Express interest in the Pro plan
+
+For memory operations (ingest, search, clear), use **[`MemsyClient`](/docs/memsy-client)** instead.
+
+## Constructor
+
+```python
+MemsyControlClient(
+    base_url: str,
+    api_key: str,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    retry_backoff: float = 1.0,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `base_url` | `str` | — | Control-plane base URL, e.g. `"https://api.memsy.io/api"`. |
+| `api_key` | `str` | — | API key (`msy_...`). Sent as `Authorization: Bearer <key>`. |
+| `timeout` | `float` | `30.0` | Request timeout in seconds. |
+| `max_retries` | `int` | `3` | Max automatic retries on HTTP 429. |
+| `retry_backoff` | `float` | `1.0` | Base exponential backoff in seconds. |
+
+## Context manager
+
+```python
+with MemsyControlClient(base_url="https://api.memsy.io/api", api_key="msy_...") as control:
+    me = control.me()
+```
+
+## Top-level methods
+
+### `me()`
+
+Return identity information for the authenticated API key.
+
+```python
+me() -> MeResponse
+```
+
+```python
+me = control.me()
+print(me.email, me.tier, me.org_role)
+```
+
+### `health()`
+
+Check if the control-plane is healthy.
+
+```python
+health() -> HealthResponse
+```
+
+---
+
+## Sub-resource accessors
+
+### `control.usage`
+
+Usage metrics for the current org.
+
+```python
+# Summary for the current billing period
+summary: UsageSummaryResponse = control.usage.summary()
+
+# Timeseries (daily by default)
+ts: UsageTimeseriesResponse = control.usage.timeseries(
+    dimension="events_ingested",   # optional filter
+    granularity="daily",           # "daily" | "hourly"
+    period_start="2026-04-01",     # optional ISO-8601 date
+    period_end="2026-04-30",
+)
+```
+
+### `control.billing`
+
+Billing summary and invoice history.
+
+```python
+summary: BillingSummary = control.billing.summary()
+invoices: list[Invoice] = control.billing.invoices()
+```
+
+<Note>
+Billing endpoints require `billing_enabled=True` on your org. If billing is not yet enabled, these calls raise `BillingNotEnabledError`. Use `control.interest.express(...)` to join the waitlist.
+</Note>
+
+### `control.keys`
+
+API key management. **Requires `org_role == "org:admin"`** — plain API keys will receive `AuthorizationError`.
+
+```python
+# List all keys (includes quota info)
+key_list: ApiKeyListResponse = control.keys.list()
+
+# Create a new key
+new_key: CreateKeyResponse = control.keys.create(
+    name="ci-deploy",
+    scopes=["read", "write"],
+    expires_at="2027-01-01T00:00:00Z",  # optional
+)
+print(new_key.raw_key)  # shown once — store immediately
+
+# Per-key usage stats (returns list[dict] — raw usage records)
+usage: list[dict] = control.keys.usage(key_id)
+
+# Revoke a key
+control.keys.delete(key_id)
+```
+
+### `control.events`
+
+Browse raw ingested events for your org (console view).
+
+```python
+events: EventListResponse = control.events.list(
+    actor_id="user_42",            # optional filter
+    session_id="session_1",        # optional filter
+    kind="user_message",           # optional filter
+    sort="ts_desc",                # "ts_desc" | "ts_asc"
+    limit=50,
+    offset=0,
+)
+```
+
+### `control.interest`
+
+Express interest in the Pro plan or check waitlist status.
+
+```python
+# Express interest
+resp: ProInterestResponse = control.interest.express(
+    email="you@example.com",
+    name="Your Name",
+    company="Acme Inc",        # optional
+    use_case="AI agent memory", # optional
+)
+
+# Check whether your org has already expressed interest
+already_expressed: bool = control.interest.status()
+```
+
+---
+
+## Async variant
+
+`AsyncMemsyControlClient` is the async counterpart. Every method is identical but returns a coroutine.
+
+```python
+async with AsyncMemsyControlClient(
+    base_url="https://api.memsy.io/api",
+    api_key="msy_...",
+) as control:
+    me = await control.me()
+    summary = await control.usage.summary()
+    events = await control.events.list(limit=20)
+```
+
+Sub-resources (`control.usage`, `control.billing`, `control.keys`, `control.events`, `control.interest`) are all available with `await` equivalents.
+
+---
+
+## See also
+
+- **[`MemsyClient`](/docs/memsy-client)** — hot-path memory client.
+- **[Models](/docs/models)** — all control-plane response dataclasses.
+- **[Exceptions](/docs/exceptions)** — `BillingNotEnabledError`, `KeyLimitReachedError`, `SeatLimitReachedError`, and others raised by this client.

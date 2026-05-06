@@ -1,0 +1,72 @@
+---
+title: Retries and Timeouts
+description: Auto-retry on 429, how to tune it, and when to back off yourself.
+---
+
+The SDK retries rate-limited (HTTP 429) requests automatically. Everything else is up to you.
+
+## What the SDK retries
+
+- **429 responses**, up to `max_retries` times with exponential backoff.
+- If the response includes a `Retry-After` header, the SDK waits exactly that long.
+- Otherwise the SDK waits `retry_backoff * (2 ** attempt)` seconds — `1s, 2s, 4s, …` with the defaults.
+
+## What the SDK does not retry
+
+- 4xx responses other than 429. These raise immediately.
+- 5xx responses. These surface as `MemsyAPIError`; retry them yourself if appropriate.
+- Timeouts and connection errors. These raise `MemsyConnectionError`.
+
+## Tuning retry behaviour
+
+```python
+from memsy import MemsyClient
+
+client = MemsyClient(
+    base_url="https://api.memsy.io",
+    api_key="***",
+    max_retries=5,       # try up to 5 times on 429 (default: 3)
+    retry_backoff=2.0,   # base backoff, doubles per attempt (default: 1.0)
+    timeout=60.0,        # per-request timeout in seconds (default: 30.0)
+)
+```
+
+### When to increase `max_retries`
+
+For background workers and batch jobs where latency doesn't matter but making forward progress does.
+
+### When to decrease `max_retries`
+
+For user-facing request paths where you'd rather fail fast and show an error than hang the request while the SDK sleeps.
+
+### `retry_backoff`
+
+Tune if you're sharing one API key across many workers and want to spread retries out. In most single-client setups the default is fine.
+
+## What happens after retries are exhausted
+
+The SDK raises `RateLimitExceeded` with `retry_after` populated if the server provided one.
+
+```python
+from memsy.exceptions import RateLimitExceeded
+
+try:
+    client.search("preferences")
+except RateLimitExceeded as e:
+    print(f"Still rate limited after retries; try again in {e.retry_after}s")
+```
+
+## Idempotency considerations
+
+- `search()` is read-only and always safe to retry.
+- `ingest()` is idempotent within a short rolling window — the server de-duplicates by content hash. Retrying a batch after a 429 is safe.
+- `status()` is read-only.
+- `clear()` is idempotent by definition.
+
+## Timeouts
+
+`timeout` is passed straight through to `httpx`. It covers the full request lifecycle — connect + read + write. If a single call can take longer, raise it. Timeouts raise `MemsyConnectionError`, not `RateLimitExceeded`.
+
+## Next
+
+- Back to the [API Reference](/docs/memsy-client).

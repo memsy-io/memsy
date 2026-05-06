@@ -1,0 +1,111 @@
+---
+title: Searching Memory
+description: Natural-language queries, thresholds, scoping, and score interpretation.
+---
+
+`search()` takes a natural-language query and returns ranked memories.
+
+## Basic usage
+
+```python
+results = client.search("what does the user prefer?")
+
+for r in results.results:
+    print(r.score, r.content)
+```
+
+## Parameters
+
+```python
+client.search(
+    query,                              # required, natural language
+    *,
+    actor_id=None,                      # optional — filter to one actor
+    limit=10,                           # max results (default 10)
+    threshold=0.3,                      # minimum similarity (0.0–1.0)
+    include_source_events=False,        # attach source events to results
+)
+```
+
+### `query`
+
+Plain English. You don't need to phrase it like a keyword search — "things the user mentioned about their dog" works.
+
+### `actor_id`
+
+Pass it to scope the search to one user/agent. Omit it to search across every actor in the organization. In most user-facing flows you want to pass the current actor.
+
+### `limit`
+
+How many results to return. Memsy may return fewer if not enough pass the threshold. Valid range: 1–100.
+
+### `threshold`
+
+A floor on the similarity score. The default `0.3` is a practical starting point — lower to get more results, raise to cut noise. A very high threshold (e.g. `0.8`) returns only near-exact matches.
+
+### `include_source_events`
+
+When `True`, each result additionally includes the source events the memory was extracted from. Useful for showing provenance in a UI.
+
+## The result shape
+
+```python
+results.results  # list[SearchResult]
+
+r.id        # stable memory ID
+r.content   # natural-language memory, e.g. "User prefers dark mode"
+r.score     # float; higher = closer match
+r.metadata  # dict | None — whatever app-level data was attached
+```
+
+## Reading usage and rate-limit info
+
+Every response carries observability metadata:
+
+```python
+results = client.search("preferences", actor_id="user_42")
+
+if results.usage:
+    print(f"Plan: {results.usage.plan}")
+    print(f"Search queries: {results.usage.search_queries}/{results.usage.search_queries_limit}")
+
+if results.rate_limit:
+    print(f"Remaining this window: {results.rate_limit.remaining}")
+```
+
+See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
+
+## Common patterns
+
+### Personalisation at prompt time
+
+```python
+memories = client.search(
+    query=user_message,
+    actor_id=user_id,
+    limit=5,
+    threshold=0.4,
+).results
+
+system_preamble = "Relevant context:\n" + "\n".join(f"- {m.content}" for m in memories)
+```
+
+### Cross-actor search (admin tools)
+
+Leave `actor_id` unset and you'll search every actor in the org. Good for analytics dashboards and support tooling; almost never what you want in an end-user-facing agent loop.
+
+### Empty results
+
+`search()` always returns a `SearchResponse`. If nothing passed the threshold, `results.results == []`. Handle that case in your UI.
+
+## Limitations
+
+<Note>
+Scores are not comparable across queries — `0.6` for query A is not the same thing as `0.6` for query B. Use `threshold` relative to the domain, not as an absolute quality bar.
+</Note>
+
+Search only returns memories that have finished processing. Very recent events may still be in the queue — see **[Async Processing](/docs/async-processing)**.
+
+## Next
+
+- Run the same thing from asyncio → **[Async client](/docs/async-client)**.

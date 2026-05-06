@@ -1,5 +1,5 @@
 {
-  "name": "memsy",
+  "name": "@memsy-io/memsy",
   "version": "0.1.0",
   "description": "Official Node.js SDK for the Memsy memory service",
   "main": "./dist/index.js",
@@ -34,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/memsy-ai/memsy-node"
+    "url": "https://github.com/memsy-io/memsy-node"
   },
   "dependencies": {},
   "devDependencies": {
