@@ -92,13 +92,15 @@ class AsyncMemsyClient(HttpCoreMixin):
             except httpx.TimeoutException as e:
                 raise MemsyConnectionError(f"Request to Memsy timed out: {e}") from e
 
-            if response.status_code == 429 and attempt < self._max_retries:
-                retry_after = response.headers.get("Retry-After")
-                wait_time = (
-                    float(retry_after) if retry_after else self._retry_backoff * (2**attempt)
-                )
-                await asyncio.sleep(wait_time)
-                continue
+            if response.status_code == 429:
+                if attempt < self._max_retries:
+                    retry_after = response.headers.get("Retry-After")
+                    wait_time = (
+                        float(retry_after) if retry_after else self._retry_backoff * (2**attempt)
+                    )
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise MemsyAPIError("Max retries exceeded", status_code=429, detail="")
 
             usage, rate_limit = self._parse_response_headers(response)
 
@@ -109,8 +111,6 @@ class AsyncMemsyClient(HttpCoreMixin):
                 return None, usage, rate_limit
 
             return response.json(), usage, rate_limit
-
-        raise MemsyAPIError("Max retries exceeded", status_code=429, detail="")
 
     async def ingest(self, events: list[EventPayload]) -> IngestResponse:
         """

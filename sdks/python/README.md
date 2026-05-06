@@ -15,7 +15,7 @@ pip install memsy
 ```python
 from memsy import MemsyClient, EventPayload
 
-client = MemsyClient(base_url="https://your-memsy-core-url", api_key="msy_...")
+client = MemsyClient(base_url="https://api.memsy.io", api_key="msy_...")
 
 # Remember something
 client.ingest([EventPayload(

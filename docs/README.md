@@ -16,7 +16,7 @@ npm run test         # vitest
 ## Where things live
 
 ```
-website/
+docs/
 ├── app/                       # Next.js app router routes
 │   ├── docs/[[...slug]]       # dynamic docs route
 │   ├── api/og                 # OG image generator
@@ -46,7 +46,7 @@ All colors, logo, footer, and link metadata live in `lib/theme-config.ts`. Edit 
 
 Configure once in the Vercel project UI:
 
-- **Root Directory**: `python-sdk/website`
+- **Root Directory**: `docs/`
 - **Framework Preset**: Next.js (auto-detected)
 - Production domain: e.g. `docs.memsy.io`
 

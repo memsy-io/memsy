@@ -85,8 +85,6 @@ class EventPayload:
     team_id: str | None = None
     ts: str | None = None  # ISO 8601 timestamp
     metadata: str | None = None  # JSON-serialised string
-    role_id: str | None = None
-    team_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -103,10 +101,6 @@ class EventPayload:
             d["ts"] = self.ts
         if self.metadata is not None:
             d["metadata"] = self.metadata
-        if self.role_id is not None:
-            d["role_id"] = self.role_id
-        if self.team_id is not None:
-            d["team_id"] = self.team_id
         return d
 
 
@@ -262,7 +256,7 @@ class HealthResponse:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HealthResponse:
         return cls(
-            status=data["status"],
+            status=data.get("status", "unknown"),
             version=data.get("version", ""),
             billing_enabled=data.get("billing_enabled"),
             components=data.get("components"),
@@ -407,16 +401,16 @@ class MemoryItemResource:
             memory_id=data["memory_id"],
             org_id=data["org_id"],
             scope=MemoryScopeInfo.from_dict(data["scope"]),
-            type=data["type"],
-            kind=data["kind"],
-            memory_kind=data["memory_kind"],
-            status=data["status"],
-            text=data["text"],
-            confidence=data["confidence"],
-            strength=data["strength"],
-            recall_count=data["recall_count"],
-            decay_half_life_days=data["decay_half_life_days"],
-            pinned=data["pinned"],
+            type=data.get("type", ""),
+            kind=data.get("kind", ""),
+            memory_kind=data.get("memory_kind", ""),
+            status=data.get("status", ""),
+            text=data.get("text", ""),
+            confidence=data.get("confidence", 0.0),
+            strength=data.get("strength", 0.0),
+            recall_count=data.get("recall_count", 0),
+            decay_half_life_days=data.get("decay_half_life_days", 0.0),
+            pinned=data.get("pinned", False),
             tags=data.get("tags") or [],
             entity_refs=data.get("entity_refs") or [],
             source_event_ids=data.get("source_event_ids") or [],

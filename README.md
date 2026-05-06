@@ -10,8 +10,8 @@ Persistent memory for AI agents and applications. 88.12% on LoCoMo — the highe
 
 | Language | Package | Install |
 |----------|---------|---------|
-| Python | [memsy-io/memsy-python](https://github.com/memsy-io/memsy-python) | `pip install memsy` |
-| Node.js | [memsy-io/memsy-node](https://github.com/memsy-io/memsy-node) | `npm install @memsy-io/memsy` |
+| Python | [memsy-io/memsy-python](https://github.com/memsy-io/sdks/python) | `pip install memsy` |
+| Node.js | [memsy-io/memsy-node](https://github.com/memsy-io/sdks/node) | `npm install @memsy-io/memsy` |
 
 ## Quick Start
 
