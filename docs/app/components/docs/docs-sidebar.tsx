@@ -29,8 +29,10 @@ export function DocsSidebar({ tree }: DocsSidebarProps) {
   return (
     <aside className="hidden lg:block w-64 shrink-0">
       <nav className="sticky top-36 max-h-[calc(100vh-10rem)] overflow-y-auto pb-10 pr-4">
-        {/* Quick links */}
-        <div className="mb-6 pb-5 border-b border-border">
+        <SidebarNodes nodes={visibleNodes} pathname={pathname} level={0} />
+
+        {/* Quick links — pinned to the bottom of the sidebar */}
+        <div className="mt-8 pt-5 border-t border-border">
           <ul className="space-y-2">
             <li>
               <Link
@@ -101,8 +103,6 @@ export function DocsSidebar({ tree }: DocsSidebarProps) {
             )}
           </ul>
         </div>
-
-        <SidebarNodes nodes={visibleNodes} pathname={pathname} level={0} />
       </nav>
     </aside>
   )

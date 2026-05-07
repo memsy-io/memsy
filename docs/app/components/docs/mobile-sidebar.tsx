@@ -164,8 +164,36 @@ export function MobileSidebar({ tree, isOpen, onClose }: MobileSidebarProps) {
 
         {/* Navigation */}
         <nav className="h-[calc(100%-4rem)] overflow-y-auto p-4">
-          {/* Quick links */}
-          <div className="mb-6 pb-5 border-b border-border">
+          {/* Section tabs */}
+          <div className="mb-4 flex gap-1 border-b border-border -mx-1 px-1">
+            {DOCS_TABS.map((tab) => {
+              const Icon = MOBILE_TAB_ICONS[tab.id]
+              const isActive = activeTab === tab.id
+              return (
+                <Link
+                  key={tab.id}
+                  href={tab.defaultUrl}
+                  onClick={onClose}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cn(
+                    'inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                    isActive
+                      ? 'border-[var(--accent)] text-[var(--accent)]'
+                      : 'border-transparent text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Icon aria-hidden="true" className="w-4 h-4" />
+                  {tab.label}
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Page tree navigation */}
+          <MobileSidebarNodes nodes={visibleNodes} pathname={pathname} onNavigate={onClose} />
+
+          {/* Quick links — pinned to the bottom */}
+          <div className="mt-8 pt-5 border-t border-border">
             <ul className="space-y-1">
               <li>
                 <Link
@@ -215,34 +243,6 @@ export function MobileSidebar({ tree, isOpen, onClose }: MobileSidebarProps) {
               )}
             </ul>
           </div>
-
-          {/* Section tabs */}
-          <div className="mb-4 flex gap-1 border-b border-border -mx-1 px-1">
-            {DOCS_TABS.map((tab) => {
-              const Icon = MOBILE_TAB_ICONS[tab.id]
-              const isActive = activeTab === tab.id
-              return (
-                <Link
-                  key={tab.id}
-                  href={tab.defaultUrl}
-                  onClick={onClose}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={cn(
-                    'inline-flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-                    isActive
-                      ? 'border-[var(--accent)] text-[var(--accent)]'
-                      : 'border-transparent text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <Icon aria-hidden="true" className="w-4 h-4" />
-                  {tab.label}
-                </Link>
-              )
-            })}
-          </div>
-
-          {/* Page tree navigation */}
-          <MobileSidebarNodes nodes={visibleNodes} pathname={pathname} onNavigate={onClose} />
         </nav>
       </div>
     </>
