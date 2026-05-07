@@ -5,9 +5,7 @@ description: Create orgs, roles, and teams to scope memory extraction and retrie
 
 Memsy supports a three-level onboarding hierarchy — **org → role → team** — that controls how memories are scoped and how extraction prompts are customised. Setting this up is optional: the SDKs work fine without it, but adding hierarchy lets you tune extraction for different parts of your user base.
 
-<Note>
-The CRUD operations on this page (creating/listing/updating orgs, roles, and teams) are currently exposed only on the **Python SDK** via `client.orgs`, `client.roles`, `client.teams`. The Node SDK can still **tag events** with `roleId`/`teamId` once the hierarchy exists — see the [last section on this page](#tagging-events-with-roleteam). Org/role/team management from Node is on the roadmap; for now use the Python SDK or call the control-plane HTTP endpoints directly.
-</Note>
+The CRUD operations on this page are exposed in **both** SDKs via `client.orgs`, `client.roles`, and `client.teams`. Most of these endpoints are **admin-gated**; non-admin keys will receive a typed `AuthorizationError` (Python) / `MemsyAuthorizationError` (Node).
 
 ## Hierarchy overview
 
@@ -25,70 +23,88 @@ Events tagged with `role_id` or `team_id` in `EventPayload` are extracted with t
 
 ## Accessing the sub-resources
 
-```python
-from memsy import MemsyClient
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import MemsyClient
 
-client = MemsyClient(base_url="...", api_key="msy_...")
+    client = MemsyClient(base_url="...", api_key="msy_...")
 
-# Org sub-resource
-client.orgs
+    client.orgs
+    client.roles
+    client.teams
+    ```
 
-# Role sub-resource
-client.roles
+    Async equivalents are available on `AsyncMemsyClient` — same methods, all `await`ed.
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import { MemsyClient } from '@memsy-io/memsy';
 
-# Team sub-resource
-client.teams
-```
+    const client = new MemsyClient({ baseUrl: '...', apiKey: 'msy_...' });
 
-Async equivalents are available on `AsyncMemsyClient` — same methods, all `await`ed.
+    client.orgs;
+    client.roles;
+    client.teams;
+    ```
+
+    Every method returns a `Promise<T>` — Node is async-only.
+  </Tab>
+</Tabs>
 
 ---
 
 ## Orgs
 
-### Create
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Create
+    org = client.orgs.create(
+        org_id="my-org",
+        name="Acme Inc",
+        focus="B2B SaaS company building developer tools",
+    )
+    print(org.promotion_prompt)
 
-```python
-org = client.orgs.create(
-    org_id="my-org",
-    name="Acme Inc",
-    focus="B2B SaaS company building developer tools",
-)
-print(org.promotion_prompt)  # auto-generated extraction prompt
-```
+    # List / Get / Update
+    orgs = client.orgs.list()
+    org = client.orgs.get("my-org")
+    org = client.orgs.update("my-org", name="Acme Corp", focus="Updated focus")
 
-### List
+    # Re-generate the LLM prompt from current name + focus
+    org = client.orgs.regenerate_prompt("my-org")
 
-```python
-orgs: list[OrgResource] = client.orgs.list()
-```
+    # Delete
+    client.orgs.delete("my-org")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    // Create
+    const org = await client.orgs.create(
+      'my-org',
+      'Acme Inc',
+      'B2B SaaS company building developer tools',
+    );
+    console.log(org.promotionPrompt);
 
-### Get
+    // List / Get / Update
+    const orgs = await client.orgs.list();
+    const fetched = await client.orgs.get('my-org');
+    const updated = await client.orgs.update('my-org', {
+      name: 'Acme Corp',
+      focus: 'Updated focus',
+    });
 
-```python
-org = client.orgs.get("my-org")
-```
+    // Re-generate the LLM prompt from current name + focus
+    const regenerated = await client.orgs.regeneratePrompt('my-org');
 
-### Update
-
-```python
-org = client.orgs.update("my-org", name="Acme Corp", focus="Updated focus")
-```
-
-### Regenerate prompt
-
-Re-runs the LLM prompt generation using the current `name` and `focus`:
-
-```python
-org = client.orgs.regenerate_prompt("my-org")
-print(org.promotion_prompt)
-```
-
-### Delete
-
-```python
-client.orgs.delete("my-org")
-```
+    // Delete
+    await client.orgs.delete('my-org');
+    ```
+  </Tab>
+</Tabs>
 
 ---
 
@@ -96,20 +112,42 @@ client.orgs.delete("my-org")
 
 Roles represent distinct personas or job functions within your org.
 
-```python
-role = client.roles.create(
-    org_id="my-org",
-    name="Backend Engineer",
-    focus="Python, distributed systems, Postgres",
-)
-# role.role_id is assigned by the server
+<Tabs>
+  <Tab title="Python">
+    ```python
+    role = client.roles.create(
+        org_id="my-org",
+        name="Backend Engineer",
+        focus="Python, distributed systems, Postgres",
+    )
+    # role.role_id is assigned by the server
 
-roles = client.roles.list("my-org")
-role = client.roles.get(role.role_id, "my-org")
-role = client.roles.update(role.role_id, "my-org", focus="Updated focus")
-role = client.roles.regenerate_prompt(role.role_id, "my-org")
-client.roles.delete(role.role_id, "my-org")
-```
+    roles = client.roles.list("my-org")
+    role = client.roles.get(role.role_id, "my-org")
+    role = client.roles.update(role.role_id, "my-org", focus="Updated focus")
+    role = client.roles.regenerate_prompt(role.role_id, "my-org")
+    client.roles.delete(role.role_id, "my-org")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const role = await client.roles.create(
+      'my-org',
+      'Backend Engineer',
+      'Python, distributed systems, Postgres',
+    );
+    // role.roleId is assigned by the server
+
+    const roles = await client.roles.list('my-org');
+    const fetched = await client.roles.get(role.roleId, 'my-org');
+    const updated = await client.roles.update(role.roleId, 'my-org', {
+      focus: 'Updated focus',
+    });
+    const regenerated = await client.roles.regeneratePrompt(role.roleId, 'my-org');
+    await client.roles.delete(role.roleId, 'my-org');
+    ```
+  </Tab>
+</Tabs>
 
 ---
 
@@ -117,20 +155,42 @@ client.roles.delete(role.role_id, "my-org")
 
 Teams represent groups of actors that share a context.
 
-```python
-team = client.teams.create(
-    org_id="my-org",
-    name="Platform Team",
-    focus="Infrastructure, CI/CD, reliability",
-)
-# team.team_id is assigned by the server
+<Tabs>
+  <Tab title="Python">
+    ```python
+    team = client.teams.create(
+        org_id="my-org",
+        name="Platform Team",
+        focus="Infrastructure, CI/CD, reliability",
+    )
+    # team.team_id is assigned by the server
 
-teams = client.teams.list("my-org")
-team = client.teams.get(team.team_id, "my-org")
-team = client.teams.update(team.team_id, "my-org", name="Platform & Infra")
-team = client.teams.regenerate_prompt(team.team_id, "my-org")
-client.teams.delete(team.team_id, "my-org")
-```
+    teams = client.teams.list("my-org")
+    team = client.teams.get(team.team_id, "my-org")
+    team = client.teams.update(team.team_id, "my-org", name="Platform & Infra")
+    team = client.teams.regenerate_prompt(team.team_id, "my-org")
+    client.teams.delete(team.team_id, "my-org")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const team = await client.teams.create(
+      'my-org',
+      'Platform Team',
+      'Infrastructure, CI/CD, reliability',
+    );
+    // team.teamId is assigned by the server
+
+    const teams = await client.teams.list('my-org');
+    const fetched = await client.teams.get(team.teamId, 'my-org');
+    const updated = await client.teams.update(team.teamId, 'my-org', {
+      name: 'Platform & Infra',
+    });
+    const regenerated = await client.teams.regeneratePrompt(team.teamId, 'my-org');
+    await client.teams.delete(team.teamId, 'my-org');
+    ```
+  </Tab>
+</Tabs>
 
 ---
 
@@ -196,24 +256,18 @@ The memory extractor uses the role's/team's `promotion_prompt` to bias extractio
 
 ## Response model
 
-All three sub-resources return their respective models:
+All three sub-resources return shaped objects with the same fields (Python is `snake_case`, Node is `camelCase`):
 
-```python
-@dataclass
-class OrgResource:
-    org_id: str
-    name: str
-    focus: str
-    promotion_prompt: str
-    created_at: str
-    updated_at: str
-    prompt_meta: dict[str, Any] | None = None
+| Python | Node | Description |
+|---|---|---|
+| `org_id` / `role_id` / `team_id` | `orgId` / `roleId` / `teamId` | Stable resource ID. |
+| `name` | `name` | Display name. |
+| `focus` | `focus` | Description used to generate the promotion prompt. |
+| `promotion_prompt` | `promotionPrompt` | Auto-generated extraction prompt for this scope. |
+| `created_at` / `updated_at` | `createdAt` / `updatedAt` | ISO-8601 timestamps. |
+| `prompt_meta` | `promptMeta` | Metadata about the prompt generation. |
 
-# RoleResource adds role_id; TeamResource adds team_id
-# All share the same remaining fields
-```
-
-See **[Models](/docs/reference/python/models)** for the full `OrgResource`, `RoleResource`, and `TeamResource` definitions.
+See [Python models reference](/docs/reference/python/models) or [Node models reference](/docs/reference/node/models).
 
 ---
 
@@ -221,4 +275,4 @@ See **[Models](/docs/reference/python/models)** for the full `OrgResource`, `Rol
 
 - **[Ingesting Events](/docs/ingesting-events)** — `role_id` / `team_id` on `EventPayload`.
 - **[Console Memories](/docs/console-memories)** — browse memories scoped to roles/teams.
-- **[`MemsyClient`](/docs/reference/python/memsy-client)** — full sub-resource method signatures.
+- Reference: [`MemsyClient` (Python)](/docs/reference/python/memsy-client) · [`MemsyClient` (Node)](/docs/reference/node/memsy-client).

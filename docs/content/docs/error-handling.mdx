@@ -5,7 +5,7 @@ description: The typed exception hierarchy and how to catch each case.
 
 All SDK calls throw/raise instances of a single exception tree. Catching the right one lets you distinguish "need to reconnect" from "upgrade your plan" from "bad credentials".
 
-The two SDKs expose **different-sized hierarchies**: Python has many fine-grained classes for 403/409 cases; Node maps those to a generic `MemsyAPIError` with `statusCode`/`detail`. Same wire-level information, different ergonomics — pick your tab below.
+Both SDKs expose the **same fine-grained hierarchy** mapped from the API's `error_code`. Python uses bare class names (`AuthorizationError`); Node prefixes everything with `Memsy` (`MemsyAuthorizationError`).
 
 ## The hierarchy
 
@@ -31,12 +31,20 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
   <Tab title="Node">
     ```
     MemsyError
-    ├── MemsyConnectionError       # network error or timeout
-    └── MemsyAPIError              # non-2xx HTTP response — inspect statusCode
-        ├── MemsyAuthError         # 401 — invalid or missing API key
-        └── MemsyRateLimitError    # 429 — rate limit hit (after retries)
+    ├── MemsyConnectionError              # network error or timeout
+    └── MemsyAPIError                     # non-2xx HTTP response
+        ├── MemsyAuthError                # 401 — invalid or missing API key
+        ├── MemsyAuthorizationError       # 403 — key lacks the required scope
+        ├── MemsyFeatureNotAvailableError # 403 — feature not on your tier
+        ├── MemsyOrgIdNotAllowedError     # 400 — free-tier: org_id not allowed in request
+        ├── MemsySeatRequiredError        # 403 — endpoint requires an assigned seat
+        ├── MemsyOrgLimitReachedError     # 403 — org tier limit reached
+        ├── MemsyKeyLimitReachedError     # 403 — API key tier limit reached
+        ├── MemsyBillingNotEnabledError   # 403 — billing not enabled for this org
+        ├── MemsySeatLimitReachedError    # 409 — purchased seat limit reached
+        ├── MemsyRateLimitError           # 429 — rate limit hit (after retries)
+        └── MemsyUsageLimitExceededError  # 429 — plan quota exceeded
     ```
-    For 403/409 cases (feature gating, billing, seat limits), inspect `MemsyAPIError.statusCode` and `MemsyAPIError.detail`. See the [Node errors reference](/docs/reference/node/errors).
   </Tab>
   <Tab title="cURL">
     No exception classes — read the HTTP status code directly from the response.
@@ -93,13 +101,14 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
     ```
   </Tab>
   <Tab title="Node">
-    All errors are exported from the package root:
-
     ```ts
     import {
       MemsyClient,
       MemsyAuthError,
+      MemsyAuthorizationError,
+      MemsyFeatureNotAvailableError,
       MemsyRateLimitError,
+      MemsyUsageLimitExceededError,
       MemsyConnectionError,
       MemsyAPIError,
     } from '@memsy-io/memsy';
@@ -111,12 +120,17 @@ The two SDKs expose **different-sized hierarchies**: Python has many fine-graine
     } catch (err) {
       if (err instanceof MemsyAuthError) {
         await refreshApiKey();
+      } else if (err instanceof MemsyAuthorizationError) {
+        console.log(`Missing required scope: ${err.requiredScope}`);
+      } else if (err instanceof MemsyFeatureNotAvailableError) {
+        console.log(`Feature '${err.feature}' requires upgrade from ${err.currentTier}`);
       } else if (err instanceof MemsyRateLimitError) {
         console.log(`Rate limited; retry after ${err.retryAfter ?? 'unknown'}s`);
+      } else if (err instanceof MemsyUsageLimitExceededError) {
+        console.log(`Hit ${err.dimension} limit (${err.current}/${err.limit})`);
       } else if (err instanceof MemsyConnectionError) {
         // network / timeout — retry with backoff
       } else if (err instanceof MemsyAPIError) {
-        // 403/409 — read err.statusCode + err.detail to handle feature/billing/seat cases
         console.log(`API error ${err.statusCode}: ${err.detail}`);
       } else {
         throw err;

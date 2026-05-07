@@ -3,7 +3,7 @@ title: Errors
 description: The Node SDK exception hierarchy — what gets thrown and how to catch it.
 ---
 
-All errors thrown by the Node SDK extend `MemsyError`. Catching the right subclass lets you distinguish a transient connection issue from an auth failure from a hit rate limit.
+All errors thrown by the Node SDK extend `MemsyError`. Both `MemsyClient` and `MemsyControlClient` raise the same hierarchy. Catching the right subclass lets you distinguish a transient connection issue from auth failure from a hit rate limit from a feature-gated endpoint.
 
 ```ts
 import {
@@ -11,7 +11,16 @@ import {
   MemsyAPIError,
   MemsyConnectionError,
   MemsyAuthError,
+  MemsyAuthorizationError,
+  MemsyFeatureNotAvailableError,
+  MemsyOrgIdNotAllowedError,
+  MemsySeatRequiredError,
+  MemsyOrgLimitReachedError,
+  MemsyKeyLimitReachedError,
+  MemsyBillingNotEnabledError,
+  MemsySeatLimitReachedError,
   MemsyRateLimitError,
+  MemsyUsageLimitExceededError,
 } from '@memsy-io/memsy';
 ```
 
@@ -19,120 +28,131 @@ import {
 
 ```
 MemsyError
-├── MemsyConnectionError       // network error or timeout
-└── MemsyAPIError              // non-2xx HTTP response
-    ├── MemsyAuthError         // 401 — invalid or missing API key
-    └── MemsyRateLimitError    // 429 — rate limit hit (after retries)
+├── MemsyConnectionError              // network error or timeout
+└── MemsyAPIError                     // non-2xx HTTP response
+    ├── MemsyAuthError                // 401 — invalid or missing API key
+    ├── MemsyAuthorizationError       // 403 — key lacks the required scope
+    ├── MemsyFeatureNotAvailableError // 403 — feature not on your tier
+    ├── MemsyOrgIdNotAllowedError     // 400 — free-tier: org_id not allowed in request
+    ├── MemsySeatRequiredError        // 403 — endpoint requires an assigned seat
+    ├── MemsyOrgLimitReachedError     // 403 — org tier limit reached
+    ├── MemsyKeyLimitReachedError     // 403 — API key tier limit reached
+    ├── MemsyBillingNotEnabledError   // 403 — billing not enabled for this org
+    ├── MemsySeatLimitReachedError    // 409 — purchased seat limit reached
+    ├── MemsyRateLimitError           // 429 — rate limit hit (after retries)
+    └── MemsyUsageLimitExceededError  // 429 — plan quota exceeded
 ```
 
-The Node SDK's error tree is intentionally smaller than the Python equivalent — the platform's typed `403` and `409` responses surface as a generic `MemsyAPIError` with `statusCode` and `detail` fields. Inspect `statusCode` for fine-grained handling.
+## Common base fields
 
-## Classes
+Every `MemsyAPIError` (and its subclasses) carries:
 
-### `MemsyError`
+| Field        | Type             | Description                                              |
+|--------------|------------------|----------------------------------------------------------|
+| `statusCode` | `number`         | HTTP status code.                                        |
+| `detail`     | `string`         | Human-readable detail from the response body.            |
+| `errorCode`  | `string \| null` | Stable machine-readable code (e.g. `"feature_not_available"`). |
+| `response`   | `Response \| null` | The raw `fetch` Response for further inspection.       |
 
-Base class. Catch this if you don't care about the specific cause.
+## Error-specific fields
 
-| Field     | Type     | Description           |
-|-----------|----------|-----------------------|
-| `name`    | `string` | `'MemsyError'`        |
-| `message` | `string` | Human-readable summary|
+### `MemsyAuthorizationError`
 
-### `MemsyConnectionError`
+| Field           | Type             | Description                                       |
+|-----------------|------------------|---------------------------------------------------|
+| `requiredScope` | `string \| null` | Scope your API key is missing, if known.          |
 
-Thrown when the request couldn't reach the Memsy API at all — DNS failure, TCP reset, TLS handshake error, or a request that exceeded `timeoutMs`.
+### `MemsyFeatureNotAvailableError`
 
-```ts
-try {
-  await client.health();
-} catch (err) {
-  if (err instanceof MemsyConnectionError) {
-    // network is down or timeout — retry with backoff
-  }
-}
-```
+| Field         | Type             | Description                                     |
+|---------------|------------------|-------------------------------------------------|
+| `feature`     | `string \| null` | The gated feature's identifier.                 |
+| `currentTier` | `string \| null` | The tier of the API key that tried to use it.   |
+| `upgradeUrl`  | `string \| null` | Deep-link to the dashboard billing page.        |
 
-### `MemsyAPIError`
+### `MemsyOrgLimitReachedError` / `MemsyKeyLimitReachedError`
 
-Thrown for any non-2xx HTTP response. Carries the status code and raw response body.
+| Field      | Type             | Description       |
+|------------|------------------|-------------------|
+| `limit`    | `number \| null` | Tier limit.       |
+| `current`  | `number \| null` | Current count.    |
 
-| Field        | Type      | Description                                              |
-|--------------|-----------|----------------------------------------------------------|
-| `statusCode` | `number`  | HTTP status (e.g. `400`, `403`, `500`).                  |
-| `detail`     | `string`  | Raw response body (often JSON, sometimes plain text).    |
+### `MemsyBillingNotEnabledError`
 
-```ts
-try {
-  await client.ingest([badEvent]);
-} catch (err) {
-  if (err instanceof MemsyAPIError) {
-    if (err.statusCode === 400) {
-      // payload validation failed — fix the event
-    } else if (err.statusCode === 403) {
-      // permission denied — check key scope or plan
-    } else if (err.statusCode >= 500) {
-      // server-side error — retry later
-    }
-  }
-}
-```
+| Field          | Type             | Description                                    |
+|----------------|------------------|------------------------------------------------|
+| `interestPath` | `string \| null` | API path to express Pro plan interest.         |
 
-### `MemsyAuthError`
+### `MemsySeatLimitReachedError`
 
-Subclass of `MemsyAPIError` thrown when the API returns `401`. The API key is missing, malformed, expired, or revoked.
-
-```ts
-try {
-  await client.search('preferences');
-} catch (err) {
-  if (err instanceof MemsyAuthError) {
-    // refresh the key and retry — see Sign Up docs
-  }
-}
-```
+| Field             | Type             | Description                |
+|-------------------|------------------|----------------------------|
+| `purchasedSeats`  | `number \| null` | Total purchased seats.     |
+| `assignedSeats`   | `number \| null` | Currently assigned seats.  |
+| `pendingInvites`  | `number \| null` | Pending invite count.      |
 
 ### `MemsyRateLimitError`
 
-Subclass of `MemsyAPIError` thrown when the API returns `429` *and* the SDK has exhausted its automatic retries (`maxRetries` is reached).
+| Field        | Type             | Description                                                   |
+|--------------|------------------|---------------------------------------------------------------|
+| `retryAfter` | `number \| null` | Seconds the server suggested waiting (parsed `Retry-After`).  |
 
-| Field        | Type            | Description                                                                 |
-|--------------|-----------------|-----------------------------------------------------------------------------|
-| `statusCode` | `number`        | Always `429`.                                                               |
-| `retryAfter` | `number \| null`| Seconds the server suggested waiting (parsed from the `Retry-After` header).|
+### `MemsyUsageLimitExceededError`
 
-```ts
-try {
-  await client.ingest(largeBatch);
-} catch (err) {
-  if (err instanceof MemsyRateLimitError) {
-    const wait = (err.retryAfter ?? 60) * 1000;
-    setTimeout(() => retry(), wait);
-  }
-}
-```
+| Field        | Type             | Description                                              |
+|--------------|------------------|----------------------------------------------------------|
+| `dimension`  | `string \| null` | What quota was exhausted (e.g. `"events_ingested"`).     |
+| `current`    | `number \| null` | Current usage count.                                     |
+| `limit`      | `number \| null` | The limit that was exceeded.                             |
+| `upgradeUrl` | `string \| null` | Deep-link to upgrade.                                    |
 
-<Tip>
-The SDK already retries `429` responses with exponential backoff — you only see `MemsyRateLimitError` when retries are exhausted. Bump `maxRetries` in [`MemsyClientOptions`](/docs/reference/node/memsy-client#memsyclientoptions) if your workload bursts hard.
-</Tip>
-
-## Catching everything
-
-If you just want a safety net for `client.*` calls:
+## A full example
 
 ```ts
-import { MemsyError } from '@memsy-io/memsy';
+import {
+  MemsyClient,
+  MemsyAuthError,
+  MemsyAuthorizationError,
+  MemsyFeatureNotAvailableError,
+  MemsyRateLimitError,
+  MemsyUsageLimitExceededError,
+  MemsyConnectionError,
+  MemsyAPIError,
+} from '@memsy-io/memsy';
+
+const client = new MemsyClient({ baseUrl: '...', apiKey: '***' });
 
 try {
-  await client.ingest(events);
+  const results = await client.search('preferences');
 } catch (err) {
-  if (err instanceof MemsyError) {
-    // any Memsy-level failure (connection, API, auth, rate limit)
-    logger.error({ err }, 'Memsy call failed');
+  if (err instanceof MemsyAuthError) {
+    await refreshApiKey();
+  } else if (err instanceof MemsyAuthorizationError) {
+    console.log(`Missing required scope: ${err.requiredScope}`);
+  } else if (err instanceof MemsyFeatureNotAvailableError) {
+    console.log(`Feature '${err.feature}' requires upgrade from ${err.currentTier}`);
+    console.log(`Upgrade at: ${err.upgradeUrl}`);
+  } else if (err instanceof MemsyRateLimitError) {
+    console.log(`Rate limited; retry after ${err.retryAfter ?? 'unknown'}s`);
+  } else if (err instanceof MemsyUsageLimitExceededError) {
+    console.log(`Hit ${err.dimension} limit (${err.current}/${err.limit})`);
+    console.log(`Upgrade at: ${err.upgradeUrl}`);
+  } else if (err instanceof MemsyConnectionError) {
+    /* retry with backoff */
+  } else if (err instanceof MemsyAPIError) {
+    console.log(`API error ${err.statusCode}: ${err.detail}`);
   } else {
-    throw err; // not from the SDK — re-raise
+    throw err;
   }
 }
 ```
+
+## Catch broadly or narrowly?
+
+- **Request handlers / agent loops** — catch `MemsyError` and surface a friendly error. Log the specific subclass for debugging.
+- **Pipelines with budgets** — handle `MemsyUsageLimitExceededError` and `MemsyFeatureNotAvailableError` distinctly so you can route to an alert channel and link the upgrade page.
+- **Retryable background jobs** — catch `MemsyConnectionError` and `MemsyRateLimitError` separately from API-level errors; they're the only ones that "just work" on a later retry.
+- **Control-plane admin code** — handle `MemsyBillingNotEnabledError` and `MemsySeatLimitReachedError` and link users to the appropriate dashboard flow.
 
 ## See also
 

@@ -178,7 +178,128 @@ if (rateLimit.remaining !== null && rateLimit.remaining < 5) {
 }
 ```
 
+## Onboarding types
+
+### `Org`, `Role`, `Team`
+
+All three share a common shape and differ only in the ID fields.
+
+| Field             | Type                              | Notes                                              |
+|-------------------|-----------------------------------|----------------------------------------------------|
+| `orgId`           | `string`                          | All three.                                         |
+| `roleId`          | `string`                          | `Role` only.                                       |
+| `teamId`          | `string`                          | `Team` only.                                       |
+| `name`            | `string`                          | Display name.                                      |
+| `focus`           | `string`                          | Description used to generate the promotion prompt. |
+| `promotionPrompt` | `string`                          | Auto-generated extraction prompt.                  |
+| `createdAt`       | `string`                          | ISO-8601 timestamp.                                |
+| `updatedAt`       | `string`                          | ISO-8601 timestamp.                                |
+| `promptMeta`      | `Record<string, unknown> \| null` | Metadata about prompt generation.                  |
+
+## Console memory types
+
+### `MemoryItem`
+
+| Field                | Type                              | Description                                  |
+|----------------------|-----------------------------------|----------------------------------------------|
+| `memoryId`           | `string`                          | Unique memory ID.                            |
+| `orgId`              | `string`                          | Owning org.                                  |
+| `scope`              | `MemoryScope`                     | Scope info (level + actor/team/role IDs).    |
+| `type`               | `string`                          | E.g. `"preference"`, `"fact"`.               |
+| `kind`               | `string`                          | E.g. `"semantic"`, `"episodic"`.             |
+| `memoryKind`         | `string`                          | Low-level kind classification.               |
+| `status`             | `string`                          | `"active"` / `"archived"` / `"decayed"`.     |
+| `text`               | `string`                          | The extracted memory text.                   |
+| `confidence`         | `number`                          | Extraction confidence (0–1).                 |
+| `strength`           | `number`                          | Reinforcement strength (0–1).                |
+| `recallCount`        | `number`                          | Times recalled in search.                    |
+| `decayHalfLifeDays`  | `number`                          | Days until strength halves.                  |
+| `pinned`             | `boolean`                         | Pinned memories never decay.                 |
+| `tags`               | `string[]`                        | Tags from extraction.                        |
+| `entityRefs`         | `Record<string, string>[]`        | Named entity references.                     |
+| `sourceEventIds`     | `string[]`                        | Contributing event IDs.                      |
+| `sourceUrls`         | `string[]`                        | Source URLs if applicable.                   |
+| `summary`            | `string \| null`                  | Auto-generated summary.                      |
+| `payload`            | `Record<string, unknown> \| null` | Raw extraction payload.                      |
+| `lastRecalledAt`     | `string \| null`                  | ISO-8601 timestamp.                          |
+| `effectiveFrom`      | `string \| null`                  | ISO-8601 timestamp.                          |
+| `effectiveTo`        | `string \| null`                  | ISO-8601 timestamp.                          |
+| `observedAt`         | `string \| null`                  | ISO-8601 timestamp.                          |
+| `createdAt`          | `string \| null`                  | ISO-8601 timestamp.                          |
+| `updatedAt`          | `string \| null`                  | ISO-8601 timestamp.                          |
+
+### `MemoryScope`
+
+| Field      | Type             | Description                                          |
+|------------|------------------|------------------------------------------------------|
+| `level`    | `string`         | `"org"` / `"role"` / `"team"` / `"actor"`.           |
+| `actorId`  | `string \| null` |                                                      |
+| `teamId`   | `string \| null` |                                                      |
+| `roleId`   | `string \| null` |                                                      |
+
+### `MemoryListResponse` / `MemoryStatsResponse`
+
+`MemoryListResponse` is `{ items: MemoryItem[]; total: number; limit: number; offset: number }`.
+
+`MemoryStatsResponse` carries aggregate counts: `total`, `totalMemories`, `activeMemories`, `byType`, `byKind`, `byStatus`, `avgConfidence`, `avgStrength`, `topEntities`, `confidenceBuckets`, `dateRange`.
+
+## Control-plane types
+
+### `MeResponse`
+
+| Field            | Type             | Description                              |
+|------------------|------------------|------------------------------------------|
+| `customerId`     | `string`         |                                          |
+| `email`          | `string`         |                                          |
+| `tier`           | `string`         | E.g. `"free"`, `"pro"`.                  |
+| `isSuperadmin`   | `boolean`        |                                          |
+| `orgId`          | `string`         |                                          |
+| `isBillingAdmin` | `boolean`        |                                          |
+| `userId`         | `string \| null` |                                          |
+| `orgRole`        | `string \| null` |                                          |
+
+### `BillingSummary`
+
+`{ tier, purchasedSeats, assignedSeats, availableSeats, stripeCustomerId, paymentMethod, upcomingInvoice, subscriptionStatus, billingContact, stripeSubscriptionId }`.
+
+`PaymentMethod` is `{ brand, last4, expMonth, expYear }`. `UpcomingInvoice` is `{ amountDue, currency, periodEnd }`.
+
+### `Invoice`
+
+`{ id, amountDue, amountPaid, currency, status, created, hostedInvoiceUrl }`.
+
+### `ApiKeyInfo` / `ApiKeyListResponse` / `CreateKeyResponse`
+
+```ts
+ApiKeyInfo:           { keyId, prefix, name, scopes, isActive, createdAt, lastUsedAt, expiresAt }
+ApiKeyListResponse:   { keys: ApiKeyInfo[], maxKeys, activeCount }
+CreateKeyResponse:    { keyId, rawKey, prefix, name, scopes }
+```
+
+`rawKey` is returned **only once** on create — store it securely.
+
+### `UsageSummaryResponse` / `UsageTimeseriesResponse`
+
+```ts
+DimensionUsage:           { dimension, used, limit, overageRate }
+UsageSummaryResponse:     { orgId, tier, periodStart, periodEnd, dimensions: DimensionUsage[] }
+TimeseriesPoint:          { date, dimension, quantity }
+UsageTimeseriesResponse:  { orgId, granularity, data: TimeseriesPoint[] }
+```
+
+### `EventItem` / `EventListResponse`
+
+```ts
+EventItem:           { eventId, orgId, actorId, kind, content, ts, sessionId, metadata, ingestedAt }
+EventListResponse:   { items: EventItem[], total, limit, offset }
+```
+
+### `ProInterestResponse`
+
+`{ message: string }`.
+
 ## See also
 
-- [`MemsyClient`](/docs/reference/node/memsy-client) — methods that consume and produce these types
+- [`MemsyClient`](/docs/reference/node/memsy-client) — hot-path client
+- [`MemsyControlClient`](/docs/reference/node/control-client) — control-plane client
 - [Errors](/docs/reference/node/errors) — exception classes
