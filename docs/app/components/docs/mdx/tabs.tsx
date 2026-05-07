@@ -45,18 +45,18 @@ interface SyncDetail {
 export function Tabs({ children, defaultValue, groupId: explicitGroupId }: TabsProps) {
   const tabsId = useId()
 
-  // Extract tab titles and content from children
-  const tabs: { title: string; content: React.ReactNode }[] = []
-  Children.forEach(children, (child) => {
-    if (isValidElement<TabProps>(child) && child.props.title) {
-      tabs.push({
-        title: child.props.title,
-        content: child.props.children,
-      })
-    }
-  })
+  const tabs = useMemo(() => {
+    const list: { title: string; content: React.ReactNode }[] = []
+    Children.forEach(children, (child) => {
+      if (isValidElement<TabProps>(child) && child.props.title) {
+        list.push({ title: child.props.title, content: child.props.children })
+      }
+    })
+    return list
+  }, [children])
 
-  // Auto-derive a stable group id from sorted, lowercased titles when not given.
+  const titleSet = useMemo(() => new Set(tabs.map((t) => t.title)), [tabs])
+
   const groupId = useMemo(() => {
     if (explicitGroupId) return explicitGroupId
     return tabs
@@ -68,33 +68,31 @@ export function Tabs({ children, defaultValue, groupId: explicitGroupId }: TabsP
 
   const [activeTab, setActiveTabState] = useState(defaultValue || '')
 
-  // On mount: hydrate from localStorage if a value was previously chosen for this group.
+  // Hydrate from localStorage on mount only — keeps server render and first
+  // client render identical (avoids hydration mismatch); the post-mount effect
+  // then swaps to the stored choice if present.
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
       const stored = window.localStorage.getItem(STORAGE_PREFIX + groupId)
-      if (stored && tabs.some((t) => t.title === stored)) {
-        setActiveTabState(stored)
-      }
+      if (stored && titleSet.has(stored)) setActiveTabState(stored)
     } catch {
       // localStorage may be blocked (Safari private mode, etc.) — ignore.
     }
-  }, [groupId, tabs])
+  }, [groupId, titleSet])
 
-  // Subscribe to other Tabs in the same group changing, so this instance stays in sync.
   useEffect(() => {
     if (typeof window === 'undefined') return
     function onChange(e: Event) {
       const detail = (e as CustomEvent<SyncDetail>).detail
       if (!detail || detail.groupId !== groupId) return
-      if (!tabs.some((t) => t.title === detail.value)) return
-      setActiveTabState(detail.value)
+      if (!titleSet.has(detail.value)) return
+      setActiveTabState((prev) => (prev === detail.value ? prev : detail.value))
     }
     window.addEventListener(SYNC_EVENT, onChange)
     return () => window.removeEventListener(SYNC_EVENT, onChange)
-  }, [groupId, tabs])
+  }, [groupId, titleSet])
 
-  // Default to the first tab if nothing is set yet.
   const currentActiveTab = activeTab || (tabs[0]?.title ?? '')
 
   // User-driven change: update local state, persist, and broadcast to peers.
