@@ -8,7 +8,10 @@ description: orgs, roles, teams, and memories — sub-resources on the Node Mems
 ```ts
 import { MemsyClient } from '@memsy-io/memsy';
 
-const client = new MemsyClient({ baseUrl: 'https://api.memsy.io/v1', apiKey: 'msy_...' });
+const client = new MemsyClient({
+  baseUrl: process.env.MEMSY_BASE_URL!,
+  apiKey: process.env.MEMSY_API_KEY!,
+});
 
 client.orgs;       // OrgsResource
 client.roles;      // RolesResource

@@ -5,6 +5,10 @@ description: Batch size, metadata, timestamps, scoping — everything beyond the
 
 `ingest()` takes a list of events and returns their IDs.
 
+<Note>
+**Field naming.** The JSON wire format uses `snake_case` (`actor_id`, `session_id`, `role_id`, `team_id`). The **Python SDK** accepts `snake_case`. The **Node SDK** accepts `camelCase` (`actorId`, `sessionId`, …) and converts on send. Don't mix conventions across SDKs — pasting `actor_id` into a Node call (or `actorId` into the cURL body) returns `422`.
+</Note>
+
 ## Role and team scoping
 
 This is what sets Memsy apart: every event can be scoped to a role and team in your [onboarding hierarchy](/docs/onboarding). Extracted memories are stored at the right level of your org — not just a flat blob per user — so searches respect organizational context automatically.
