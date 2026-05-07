@@ -13,9 +13,13 @@ pip install memsy
 ## Quick Start
 
 ```python
+import os
 from memsy import MemsyClient, EventPayload
 
-client = MemsyClient(base_url="https://api.memsy.io", api_key="msy_...")
+client = MemsyClient(
+    base_url=os.environ["MEMSY_BASE_URL"],
+    api_key=os.environ["MEMSY_API_KEY"],
+)
 
 # Remember something
 client.ingest([EventPayload(
@@ -43,8 +47,8 @@ The SDK uses Bearer token authentication. Pass your API key when creating the cl
 
 ```python
 client = MemsyClient(
-    base_url="https://api.memsy.io",
-    api_key="msy_...",
+    base_url=os.environ["MEMSY_BASE_URL"],
+    api_key=os.environ["MEMSY_API_KEY"],
 )
 ```
 
@@ -54,8 +58,8 @@ Configure retry behavior for rate-limited requests:
 
 ```python
 client = MemsyClient(
-    api_key="msy_...",
-    base_url="https://api.memsy.io",
+    base_url=os.environ["MEMSY_BASE_URL"],
+    api_key=os.environ["MEMSY_API_KEY"],
     max_retries=3,         # default: 3
     retry_backoff=1.0,     # default: 1.0 seconds
     timeout=30.0,          # default: 30.0 seconds
@@ -240,8 +244,8 @@ usage reporting, and raw event browsing. Use a second client pointed at the cont
 from memsy import MemsyControlClient
 
 control = MemsyControlClient(
-    base_url="https://api.memsy.io/api",  # your control-plane URL
-    api_key="msy_...",
+    base_url=os.environ["MEMSY_CONTROL_URL"],  # e.g. https://api.memsy.io/api
+    api_key=os.environ["MEMSY_API_KEY"],
 )
 ```
 

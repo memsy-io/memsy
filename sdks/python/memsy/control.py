@@ -25,9 +25,11 @@ class MemsyControlClient(HttpCoreMixin):
 
     Usage::
 
+        import os
+
         control = MemsyControlClient(
-            base_url="https://api.memsy.io/api",
-            api_key="msy_...",
+            base_url=os.environ["MEMSY_CONTROL_URL"],
+            api_key=os.environ["MEMSY_API_KEY"],
         )
 
         me = control.me()

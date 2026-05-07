@@ -2,7 +2,7 @@
 """End-to-end smoke test for the memsy Python SDK against a live Memsy API.
 
 Usage:
-    MEMSY_BASE_URL=https://api-dev.memsy.io/v1 \\
+    MEMSY_BASE_URL=https://api.memsy.io/v1 \\
     MEMSY_API_KEY=msy_xxx \\
     python sdks/python/scripts/e2e.py
 
