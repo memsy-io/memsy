@@ -1,16 +1,17 @@
 import type { BaseHttpClient } from "../http.js";
-import { type Role, parseRole } from "../models.js";
+import {
+  type OnboardingUpdate,
+  type Role,
+  buildOnboardingUpdateBody,
+  parseRole,
+} from "../models.js";
 
 export interface RoleListOptions {
   limit?: number;
   offset?: number;
 }
 
-export interface RoleUpdate {
-  name?: string;
-  focus?: string;
-  promotionPrompt?: string;
-}
+export type RoleUpdate = OnboardingUpdate;
 
 export class RolesResource {
   constructor(private readonly client: BaseHttpClient) {}
@@ -39,14 +40,10 @@ export class RolesResource {
   }
 
   async update(roleId: string, orgId: string, update: RoleUpdate): Promise<Role> {
-    const body: Record<string, unknown> = {};
-    if (update.name !== undefined) body.name = update.name;
-    if (update.focus !== undefined) body.focus = update.focus;
-    if (update.promotionPrompt !== undefined) body.promotion_prompt = update.promotionPrompt;
     const { data } = await this.client.request<Record<string, unknown>>(
       "PATCH",
       `/roles/${encodeURIComponent(roleId)}`,
-      { body, query: { org_id: orgId } }
+      { body: buildOnboardingUpdateBody(update), query: { org_id: orgId } }
     );
     return parseRole(data);
   }

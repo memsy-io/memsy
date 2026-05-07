@@ -1,16 +1,17 @@
 import type { BaseHttpClient } from "../http.js";
-import { type Team, parseTeam } from "../models.js";
+import {
+  type OnboardingUpdate,
+  type Team,
+  buildOnboardingUpdateBody,
+  parseTeam,
+} from "../models.js";
 
 export interface TeamListOptions {
   limit?: number;
   offset?: number;
 }
 
-export interface TeamUpdate {
-  name?: string;
-  focus?: string;
-  promotionPrompt?: string;
-}
+export type TeamUpdate = OnboardingUpdate;
 
 export class TeamsResource {
   constructor(private readonly client: BaseHttpClient) {}
@@ -39,14 +40,10 @@ export class TeamsResource {
   }
 
   async update(teamId: string, orgId: string, update: TeamUpdate): Promise<Team> {
-    const body: Record<string, unknown> = {};
-    if (update.name !== undefined) body.name = update.name;
-    if (update.focus !== undefined) body.focus = update.focus;
-    if (update.promotionPrompt !== undefined) body.promotion_prompt = update.promotionPrompt;
     const { data } = await this.client.request<Record<string, unknown>>(
       "PATCH",
       `/teams/${encodeURIComponent(teamId)}`,
-      { body, query: { org_id: orgId } }
+      { body: buildOnboardingUpdateBody(update), query: { org_id: orgId } }
     );
     return parseTeam(data);
   }

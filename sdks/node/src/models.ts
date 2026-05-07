@@ -219,6 +219,20 @@ export function parseTeam(d: Record<string, unknown>): Team {
   return { teamId: String(d.team_id), orgId: String(d.org_id), ...readOnboardingBase(d) };
 }
 
+export interface OnboardingUpdate {
+  name?: string;
+  focus?: string;
+  promotionPrompt?: string;
+}
+
+export function buildOnboardingUpdateBody(update: OnboardingUpdate): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (update.name !== undefined) body.name = update.name;
+  if (update.focus !== undefined) body.focus = update.focus;
+  if (update.promotionPrompt !== undefined) body.promotion_prompt = update.promotionPrompt;
+  return body;
+}
+
 // ── Console memories ─────────────────────────────────────────────────────────
 
 export interface MemoryScope {

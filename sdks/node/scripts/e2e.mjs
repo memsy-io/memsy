@@ -73,6 +73,20 @@ async function step(name, fn) {
     record(name, false, `${kind}: ${extra}`);
   }
 }
+
+// Wraps an admin-gated call: succeeds if the call returns, OR if it raises
+// the typed MemsyAuthorizationError (which itself proves the SDK error
+// classification works correctly for the 403 admin path).
+async function adminGated(label, fn, formatOk) {
+  try {
+    return formatOk(await fn());
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) {
+      return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    }
+    throw err;
+  }
+}
 function assertEqual(actual, expected, label) {
   if (actual !== expected) throw new Error(`${label}: expected ${expected}, got ${actual}`);
 }
@@ -345,35 +359,23 @@ await step('8.02 control.me()', async () => {
   return `orgId=${me.orgId} tier=${me.tier} isSuperadmin=${me.isSuperadmin}`;
 });
 
-await step('8.03 control.keys.list() (admin-gated)', async () => {
-  try {
-    const r = await control.keys.list();
-    return `keys=${r.keys.length} maxKeys=${r.maxKeys} (admin scope)`;
-  } catch (err) {
-    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
-    throw err;
-  }
-});
+await step('8.03 control.keys.list() (admin-gated)', () =>
+  adminGated('keys.list', () => control.keys.list(), (r) =>
+    `keys=${r.keys.length} maxKeys=${r.maxKeys} (admin scope)`
+  )
+);
 
-await step('8.04 control.usage.summary() (admin-gated)', async () => {
-  try {
-    const r = await control.usage.summary();
-    return `tier=${r.tier} dimensions=${r.dimensions.length}`;
-  } catch (err) {
-    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
-    throw err;
-  }
-});
+await step('8.04 control.usage.summary() (admin-gated)', () =>
+  adminGated('usage.summary', () => control.usage.summary(), (r) =>
+    `tier=${r.tier} dimensions=${r.dimensions.length}`
+  )
+);
 
-await step('8.05 control.billing.summary() (admin-gated)', async () => {
-  try {
-    const r = await control.billing.summary();
-    return `tier=${r.tier} purchasedSeats=${r.purchasedSeats}`;
-  } catch (err) {
-    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
-    throw err;
-  }
-});
+await step('8.05 control.billing.summary() (admin-gated)', () =>
+  adminGated('billing.summary', () => control.billing.summary(), (r) =>
+    `tier=${r.tier} purchasedSeats=${r.purchasedSeats}`
+  )
+);
 
 await step('8.06 control.events.list()', async () => {
   try {
@@ -394,37 +396,25 @@ await step('8.07 control.interest.status()', async () => {
 // -----------------------------------------------------------------------------
 // Group 9 — Hot-path sub-resources (orgs / roles / teams / memories)
 // -----------------------------------------------------------------------------
-await step('9.01 client.orgs.list()', async () => {
-  try {
-    const orgs = await client.orgs.list();
-    return `orgs=${orgs.length}`;
-  } catch (err) {
-    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
-    throw err;
-  }
-});
+await step('9.01 client.orgs.list()', () =>
+  adminGated('orgs.list', () => client.orgs.list(), (orgs) => `orgs=${orgs.length}`)
+);
 
-await step('9.02 client.roles.list() (with non-existent orgId)', async () => {
-  try {
-    const roles = await client.roles.list('nonexistent-org-for-e2e');
-    return `roles=${roles.length}`;
-  } catch (err) {
-    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
-    if (err instanceof MemsyAPIError) return `MemsyAPIError ${err.statusCode}: ${(err.detail ?? '').slice(0, 50)}`;
-    throw err;
-  }
-});
+await step('9.02 client.roles.list() (with non-existent orgId)', () =>
+  adminGated(
+    'roles.list',
+    () => client.roles.list('nonexistent-org-for-e2e'),
+    (roles) => `roles=${roles.length}`
+  )
+);
 
-await step('9.03 client.teams.list() (with non-existent orgId)', async () => {
-  try {
-    const teams = await client.teams.list('nonexistent-org-for-e2e');
-    return `teams=${teams.length}`;
-  } catch (err) {
-    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
-    if (err instanceof MemsyAPIError) return `MemsyAPIError ${err.statusCode}: ${(err.detail ?? '').slice(0, 50)}`;
-    throw err;
-  }
-});
+await step('9.03 client.teams.list() (with non-existent orgId)', () =>
+  adminGated(
+    'teams.list',
+    () => client.teams.list('nonexistent-org-for-e2e'),
+    (teams) => `teams=${teams.length}`
+  )
+);
 
 await step('9.04 client.memories.stats()', async () => {
   const s = await client.memories.stats();

@@ -43,6 +43,7 @@ export type {
   Org,
   Role,
   Team,
+  OnboardingUpdate,
   // Console memories
   MemoryItem,
   MemoryScope,

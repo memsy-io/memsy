@@ -12,6 +12,11 @@ export class MemsyConnectionError extends MemsyError {
   }
 }
 
+export interface MemsyAPIErrorBaseOptions {
+  errorCode?: string | null;
+  response?: Response | null;
+}
+
 export class MemsyAPIError extends MemsyError {
   readonly statusCode: number;
   readonly detail: string;
@@ -22,39 +27,43 @@ export class MemsyAPIError extends MemsyError {
     message: string,
     statusCode: number,
     detail: string = "",
-    errorCode: string | null = null,
-    response: Response | null = null
+    options: MemsyAPIErrorBaseOptions = {}
   ) {
     super(message);
     this.name = "MemsyAPIError";
     this.statusCode = statusCode;
     this.detail = detail;
-    this.errorCode = errorCode;
-    this.response = response;
+    this.errorCode = options.errorCode ?? null;
+    this.response = options.response ?? null;
   }
 }
 
 export class MemsyAuthError extends MemsyAPIError {
-  constructor(detail: string, response: Response | null = null, errorCode: string | null = null) {
-    super(`Authentication failed: ${detail}`, 401, detail, errorCode, response);
+  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
+    super(`Authentication failed: ${detail}`, 401, detail, options);
     this.name = "MemsyAuthError";
   }
+}
+
+export interface MemsyAuthorizationErrorOptions extends MemsyAPIErrorBaseOptions {
+  statusCode?: number;
+  requiredScope?: string | null;
 }
 
 export class MemsyAuthorizationError extends MemsyAPIError {
   readonly requiredScope: string | null;
 
-  constructor(
-    detail: string,
-    statusCode: number = 403,
-    errorCode: string | null = null,
-    requiredScope: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Authorization failed: ${detail}`, statusCode, detail, errorCode, response);
+  constructor(detail: string, options: MemsyAuthorizationErrorOptions = {}) {
+    super(`Authorization failed: ${detail}`, options.statusCode ?? 403, detail, options);
     this.name = "MemsyAuthorizationError";
-    this.requiredScope = requiredScope;
+    this.requiredScope = options.requiredScope ?? null;
   }
+}
+
+export interface MemsyFeatureNotAvailableErrorOptions extends MemsyAPIErrorBaseOptions {
+  feature?: string | null;
+  currentTier?: string | null;
+  upgradeUrl?: string | null;
 }
 
 export class MemsyFeatureNotAvailableError extends MemsyAPIError {
@@ -62,51 +71,43 @@ export class MemsyFeatureNotAvailableError extends MemsyAPIError {
   readonly currentTier: string | null;
   readonly upgradeUrl: string | null;
 
-  constructor(
-    detail: string,
-    feature: string | null = null,
-    currentTier: string | null = null,
-    upgradeUrl: string | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Feature not available: ${detail}`, 403, detail, errorCode, response);
+  constructor(detail: string, options: MemsyFeatureNotAvailableErrorOptions = {}) {
+    super(`Feature not available: ${detail}`, 403, detail, options);
     this.name = "MemsyFeatureNotAvailableError";
-    this.feature = feature;
-    this.currentTier = currentTier;
-    this.upgradeUrl = upgradeUrl;
+    this.feature = options.feature ?? null;
+    this.currentTier = options.currentTier ?? null;
+    this.upgradeUrl = options.upgradeUrl ?? null;
   }
 }
 
 export class MemsyOrgIdNotAllowedError extends MemsyAPIError {
-  constructor(detail: string, errorCode: string | null = null, response: Response | null = null) {
-    super(`org_id not allowed on this tier: ${detail}`, 400, detail, errorCode, response);
+  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
+    super(`org_id not allowed on this tier: ${detail}`, 400, detail, options);
     this.name = "MemsyOrgIdNotAllowedError";
   }
 }
 
 export class MemsySeatRequiredError extends MemsyAPIError {
-  constructor(detail: string, errorCode: string | null = null, response: Response | null = null) {
-    super(`Seat required: ${detail}`, 403, detail, errorCode, response);
+  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
+    super(`Seat required: ${detail}`, 403, detail, options);
     this.name = "MemsySeatRequiredError";
   }
+}
+
+export interface MemsyTierLimitErrorOptions extends MemsyAPIErrorBaseOptions {
+  limit?: number | null;
+  current?: number | null;
 }
 
 export class MemsyOrgLimitReachedError extends MemsyAPIError {
   readonly limit: number | null;
   readonly current: number | null;
 
-  constructor(
-    detail: string,
-    limit: number | null = null,
-    current: number | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Org limit reached: ${detail}`, 403, detail, errorCode, response);
+  constructor(detail: string, options: MemsyTierLimitErrorOptions = {}) {
+    super(`Org limit reached: ${detail}`, 403, detail, options);
     this.name = "MemsyOrgLimitReachedError";
-    this.limit = limit;
-    this.current = current;
+    this.limit = options.limit ?? null;
+    this.current = options.current ?? null;
   }
 }
 
@@ -114,33 +115,32 @@ export class MemsyKeyLimitReachedError extends MemsyAPIError {
   readonly limit: number | null;
   readonly current: number | null;
 
-  constructor(
-    detail: string,
-    limit: number | null = null,
-    current: number | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`API key limit reached: ${detail}`, 403, detail, errorCode, response);
+  constructor(detail: string, options: MemsyTierLimitErrorOptions = {}) {
+    super(`API key limit reached: ${detail}`, 403, detail, options);
     this.name = "MemsyKeyLimitReachedError";
-    this.limit = limit;
-    this.current = current;
+    this.limit = options.limit ?? null;
+    this.current = options.current ?? null;
   }
+}
+
+export interface MemsyBillingNotEnabledErrorOptions extends MemsyAPIErrorBaseOptions {
+  interestPath?: string | null;
 }
 
 export class MemsyBillingNotEnabledError extends MemsyAPIError {
   readonly interestPath: string | null;
 
-  constructor(
-    detail: string,
-    interestPath: string | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Billing not enabled: ${detail}`, 403, detail, errorCode, response);
+  constructor(detail: string, options: MemsyBillingNotEnabledErrorOptions = {}) {
+    super(`Billing not enabled: ${detail}`, 403, detail, options);
     this.name = "MemsyBillingNotEnabledError";
-    this.interestPath = interestPath;
+    this.interestPath = options.interestPath ?? null;
   }
+}
+
+export interface MemsySeatLimitReachedErrorOptions extends MemsyAPIErrorBaseOptions {
+  purchasedSeats?: number | null;
+  assignedSeats?: number | null;
+  pendingInvites?: number | null;
 }
 
 export class MemsySeatLimitReachedError extends MemsyAPIError {
@@ -148,35 +148,34 @@ export class MemsySeatLimitReachedError extends MemsyAPIError {
   readonly assignedSeats: number | null;
   readonly pendingInvites: number | null;
 
-  constructor(
-    detail: string,
-    purchasedSeats: number | null = null,
-    assignedSeats: number | null = null,
-    pendingInvites: number | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Seat limit reached: ${detail}`, 409, detail, errorCode, response);
+  constructor(detail: string, options: MemsySeatLimitReachedErrorOptions = {}) {
+    super(`Seat limit reached: ${detail}`, 409, detail, options);
     this.name = "MemsySeatLimitReachedError";
-    this.purchasedSeats = purchasedSeats;
-    this.assignedSeats = assignedSeats;
-    this.pendingInvites = pendingInvites;
+    this.purchasedSeats = options.purchasedSeats ?? null;
+    this.assignedSeats = options.assignedSeats ?? null;
+    this.pendingInvites = options.pendingInvites ?? null;
   }
+}
+
+export interface MemsyRateLimitErrorOptions extends MemsyAPIErrorBaseOptions {
+  retryAfter?: number | null;
 }
 
 export class MemsyRateLimitError extends MemsyAPIError {
   readonly retryAfter: number | null;
 
-  constructor(
-    detail: string,
-    retryAfter: number | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Rate limit exceeded: ${detail}`, 429, detail, errorCode, response);
+  constructor(detail: string, options: MemsyRateLimitErrorOptions = {}) {
+    super(`Rate limit exceeded: ${detail}`, 429, detail, options);
     this.name = "MemsyRateLimitError";
-    this.retryAfter = retryAfter;
+    this.retryAfter = options.retryAfter ?? null;
   }
+}
+
+export interface MemsyUsageLimitExceededErrorOptions extends MemsyAPIErrorBaseOptions {
+  dimension?: string | null;
+  current?: number | null;
+  limit?: number | null;
+  upgradeUrl?: string | null;
 }
 
 export class MemsyUsageLimitExceededError extends MemsyAPIError {
@@ -185,21 +184,13 @@ export class MemsyUsageLimitExceededError extends MemsyAPIError {
   readonly limit: number | null;
   readonly upgradeUrl: string | null;
 
-  constructor(
-    detail: string,
-    dimension: string | null = null,
-    current: number | null = null,
-    limit: number | null = null,
-    upgradeUrl: string | null = null,
-    errorCode: string | null = null,
-    response: Response | null = null
-  ) {
-    super(`Usage limit exceeded: ${detail}`, 429, detail, errorCode, response);
+  constructor(detail: string, options: MemsyUsageLimitExceededErrorOptions = {}) {
+    super(`Usage limit exceeded: ${detail}`, 429, detail, options);
     this.name = "MemsyUsageLimitExceededError";
-    this.dimension = dimension;
-    this.current = current;
-    this.limit = limit;
-    this.upgradeUrl = upgradeUrl;
+    this.dimension = options.dimension ?? null;
+    this.current = options.current ?? null;
+    this.limit = options.limit ?? null;
+    this.upgradeUrl = options.upgradeUrl ?? null;
   }
 }
 
@@ -249,7 +240,7 @@ async function readErrorBody(response: Response): Promise<ErrorBody> {
       ? { ...parsed, ...(rawDetail as Record<string, unknown>) }
       : parsed;
 
-  let detail = "";
+  let detail: string;
   if (rawDetail && typeof rawDetail === "object" && !Array.isArray(rawDetail)) {
     const d = rawDetail as Record<string, unknown>;
     detail = pickString(d, "message", "error") || pickString(parsed, "message", "error") || raw;
@@ -276,80 +267,70 @@ export async function classifyError(response: Response): Promise<MemsyAPIError> 
   const status = response.status;
   const { body, errorCode, detail } = await readErrorBody(response);
   const lowerDetail = detail.toLowerCase();
+  const base = { errorCode, response };
 
   if (status === 400 && errorCode === "org_id_not_allowed") {
-    return new MemsyOrgIdNotAllowedError(detail, errorCode, response);
+    return new MemsyOrgIdNotAllowedError(detail, base);
   }
 
   if (status === 401) {
-    return new MemsyAuthError(detail, response, errorCode);
+    return new MemsyAuthError(detail, base);
   }
 
   if (status === 403) {
     if (errorCode === "feature_not_available") {
-      return new MemsyFeatureNotAvailableError(
-        detail,
-        pickStringOrNull(body, "feature"),
-        pickStringOrNull(body, "current_tier"),
-        pickStringOrNull(body, "upgrade_url"),
-        errorCode,
-        response
-      );
+      return new MemsyFeatureNotAvailableError(detail, {
+        ...base,
+        feature: pickStringOrNull(body, "feature"),
+        currentTier: pickStringOrNull(body, "current_tier"),
+        upgradeUrl: pickStringOrNull(body, "upgrade_url"),
+      });
     }
     if (errorCode === "seat_required") {
-      return new MemsySeatRequiredError(detail, errorCode, response);
+      return new MemsySeatRequiredError(detail, base);
     }
     if (errorCode === "org_limit_reached") {
-      return new MemsyOrgLimitReachedError(
-        detail,
-        pickNumberOrNull(body, "limit"),
-        pickNumberOrNull(body, "current"),
-        errorCode,
-        response
-      );
+      return new MemsyOrgLimitReachedError(detail, {
+        ...base,
+        limit: pickNumberOrNull(body, "limit"),
+        current: pickNumberOrNull(body, "current"),
+      });
     }
     if (errorCode === "key_limit_reached") {
-      return new MemsyKeyLimitReachedError(
-        detail,
-        pickNumberOrNull(body, "limit"),
-        pickNumberOrNull(body, "current"),
-        errorCode,
-        response
-      );
+      return new MemsyKeyLimitReachedError(detail, {
+        ...base,
+        limit: pickNumberOrNull(body, "limit"),
+        current: pickNumberOrNull(body, "current"),
+      });
     }
     if (errorCode === "billing_not_enabled") {
-      return new MemsyBillingNotEnabledError(
-        detail,
-        pickStringOrNull(body, "interest_path"),
-        errorCode,
-        response
-      );
+      return new MemsyBillingNotEnabledError(detail, {
+        ...base,
+        interestPath: pickStringOrNull(body, "interest_path"),
+      });
     }
     if (
       errorCode === "wrong_scope" ||
       errorCode === "insufficient_scope" ||
       lowerDetail.includes("scope")
     ) {
-      return new MemsyAuthorizationError(
-        detail,
-        status,
-        errorCode,
-        pickStringOrNull(body, "required_scope") || pickStringOrNull(body, "scope"),
-        response
-      );
+      return new MemsyAuthorizationError(detail, {
+        ...base,
+        statusCode: status,
+        requiredScope:
+          pickStringOrNull(body, "required_scope") || pickStringOrNull(body, "scope"),
+      });
     }
-    return new MemsyAuthorizationError(detail, status, errorCode, null, response);
+    return new MemsyAuthorizationError(detail, { ...base, statusCode: status });
   }
 
   if (status === 409 && errorCode === "seat_limit_reached") {
-    return new MemsySeatLimitReachedError(
-      detail,
-      pickNumberOrNull(body, "purchased_seats"),
-      pickNumberOrNull(body, "assigned_seats"),
-      pickNumberOrNull(body, "pending_invites"),
-      errorCode,
-      response
-    );
+    return new MemsySeatLimitReachedError(detail, {
+      ...base,
+      purchasedSeats: pickNumberOrNull(body, "purchased_seats"),
+      assignedSeats: pickNumberOrNull(body, "assigned_seats"),
+      pendingInvites: pickNumberOrNull(body, "pending_invites"),
+    });
   }
 
   if (status === 429) {
@@ -357,18 +338,16 @@ export async function classifyError(response: Response): Promise<MemsyAPIError> 
     const retryAfter = retryAfterRaw ? parseFloat(retryAfterRaw) : NaN;
     const retryAfterValue = Number.isFinite(retryAfter) ? retryAfter : null;
     if (errorCode === "usage_limit_exceeded" || lowerDetail.includes("quota")) {
-      return new MemsyUsageLimitExceededError(
-        detail,
-        pickStringOrNull(body, "dimension"),
-        pickNumberOrNull(body, "current"),
-        pickNumberOrNull(body, "limit"),
-        pickStringOrNull(body, "upgrade_url"),
-        errorCode,
-        response
-      );
+      return new MemsyUsageLimitExceededError(detail, {
+        ...base,
+        dimension: pickStringOrNull(body, "dimension"),
+        current: pickNumberOrNull(body, "current"),
+        limit: pickNumberOrNull(body, "limit"),
+        upgradeUrl: pickStringOrNull(body, "upgrade_url"),
+      });
     }
-    return new MemsyRateLimitError(detail, retryAfterValue, errorCode, response);
+    return new MemsyRateLimitError(detail, { ...base, retryAfter: retryAfterValue });
   }
 
-  return new MemsyAPIError(`Memsy API error ${status}: ${detail}`, status, detail, errorCode, response);
+  return new MemsyAPIError(`Memsy API error ${status}: ${detail}`, status, detail, base);
 }

@@ -1,11 +1,7 @@
 import type { BaseHttpClient } from "../http.js";
-import { type Org, parseOrg } from "../models.js";
+import { type OnboardingUpdate, type Org, buildOnboardingUpdateBody, parseOrg } from "../models.js";
 
-export interface OrgUpdate {
-  name?: string;
-  focus?: string;
-  promotionPrompt?: string;
-}
+export type OrgUpdate = OnboardingUpdate;
 
 export class OrgsResource {
   constructor(private readonly client: BaseHttpClient) {}
@@ -31,14 +27,10 @@ export class OrgsResource {
   }
 
   async update(orgId: string, update: OrgUpdate): Promise<Org> {
-    const body: Record<string, unknown> = {};
-    if (update.name !== undefined) body.name = update.name;
-    if (update.focus !== undefined) body.focus = update.focus;
-    if (update.promotionPrompt !== undefined) body.promotion_prompt = update.promotionPrompt;
     const { data } = await this.client.request<Record<string, unknown>>(
       "PATCH",
       `/orgs/${encodeURIComponent(orgId)}`,
-      { body }
+      { body: buildOnboardingUpdateBody(update) }
     );
     return parseOrg(data);
   }
