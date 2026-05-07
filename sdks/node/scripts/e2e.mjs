@@ -30,9 +30,11 @@ const sdk = await import(DIST).catch((err) => {
 
 const {
   MemsyClient,
+  MemsyControlClient,
   MemsyError,
   MemsyAPIError,
   MemsyAuthError,
+  MemsyAuthorizationError,
   MemsyConnectionError,
   MemsyRateLimitError,
 } = sdk;
@@ -321,6 +323,117 @@ await step('7.01 concurrency — 5 parallel searches', async () => {
   const dt = Date.now() - t0;
   const total = all.reduce((s, r) => s + r.results.length, 0);
   return `5 parallel searches in ${dt}ms — ${total} total results`;
+});
+
+// -----------------------------------------------------------------------------
+// Group 8 — Control plane (mirrors the Python E2E coverage)
+// -----------------------------------------------------------------------------
+const controlUrl = (() => {
+  const u = BASE_URL.replace(/\/$/, '');
+  return u.endsWith('/v1') ? u.slice(0, -3) + '/api' : u + '/api';
+})();
+const control = new MemsyControlClient({ baseUrl: controlUrl, apiKey: API_KEY, maxRetries: 1 });
+
+await step('8.01 control.health()', async () => {
+  const h = await control.health();
+  return `status=${h.status}`;
+});
+
+await step('8.02 control.me()', async () => {
+  const me = await control.me();
+  if (!me.orgId) throw new Error('expected orgId');
+  return `orgId=${me.orgId} tier=${me.tier} isSuperadmin=${me.isSuperadmin}`;
+});
+
+await step('8.03 control.keys.list() (admin-gated)', async () => {
+  try {
+    const r = await control.keys.list();
+    return `keys=${r.keys.length} maxKeys=${r.maxKeys} (admin scope)`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    throw err;
+  }
+});
+
+await step('8.04 control.usage.summary() (admin-gated)', async () => {
+  try {
+    const r = await control.usage.summary();
+    return `tier=${r.tier} dimensions=${r.dimensions.length}`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    throw err;
+  }
+});
+
+await step('8.05 control.billing.summary() (admin-gated)', async () => {
+  try {
+    const r = await control.billing.summary();
+    return `tier=${r.tier} purchasedSeats=${r.purchasedSeats}`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    throw err;
+  }
+});
+
+await step('8.06 control.events.list()', async () => {
+  try {
+    const r = await control.events.list({ limit: 5 });
+    return `events=${r.items.length} total=${r.total}`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    if (err instanceof MemsyAPIError && err.statusCode === 403) return `${err.errorCode ?? '403'} fired correctly (seat-required)`;
+    throw err;
+  }
+});
+
+await step('8.07 control.interest.status()', async () => {
+  const expressed = await control.interest.status();
+  return `expressed=${expressed}`;
+});
+
+// -----------------------------------------------------------------------------
+// Group 9 — Hot-path sub-resources (orgs / roles / teams / memories)
+// -----------------------------------------------------------------------------
+await step('9.01 client.orgs.list()', async () => {
+  try {
+    const orgs = await client.orgs.list();
+    return `orgs=${orgs.length}`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    throw err;
+  }
+});
+
+await step('9.02 client.roles.list() (with non-existent orgId)', async () => {
+  try {
+    const roles = await client.roles.list('nonexistent-org-for-e2e');
+    return `roles=${roles.length}`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    if (err instanceof MemsyAPIError) return `MemsyAPIError ${err.statusCode}: ${(err.detail ?? '').slice(0, 50)}`;
+    throw err;
+  }
+});
+
+await step('9.03 client.teams.list() (with non-existent orgId)', async () => {
+  try {
+    const teams = await client.teams.list('nonexistent-org-for-e2e');
+    return `teams=${teams.length}`;
+  } catch (err) {
+    if (err instanceof MemsyAuthorizationError) return `MemsyAuthorizationError fired correctly (${err.statusCode})`;
+    if (err instanceof MemsyAPIError) return `MemsyAPIError ${err.statusCode}: ${(err.detail ?? '').slice(0, 50)}`;
+    throw err;
+  }
+});
+
+await step('9.04 client.memories.stats()', async () => {
+  const s = await client.memories.stats();
+  return `total=${s.total} active=${s.activeMemories} avgConfidence=${s.avgConfidence.toFixed(2)}`;
+});
+
+await step('9.05 client.memories.list({ limit: 5 })', async () => {
+  const r = await client.memories.list({ limit: 5 });
+  return `items=${r.items.length} total=${r.total}`;
 });
 
 // -----------------------------------------------------------------------------
