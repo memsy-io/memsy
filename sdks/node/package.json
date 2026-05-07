@@ -1,6 +1,6 @@
 {
   "name": "@memsy-io/memsy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official Node.js SDK for the Memsy memory service",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
