@@ -13,9 +13,26 @@ The actor is the entity the memory is **about**. In most applications this is th
 - Use the same `actor_id` across all event kinds for a given person — `user_message`, `assistant_message`, `tool_result` all share the actor.
 - Scope a search to one actor:
 
-  ```python
-  client.search("preferences", actor_id="user_42")
-  ```
+  <Tabs>
+    <Tab title="Python">
+      ```python
+      client.search("preferences", actor_id="user_42")
+      ```
+    </Tab>
+    <Tab title="Node">
+      ```ts
+      await client.search('preferences', { actorId: 'user_42' });
+      ```
+    </Tab>
+    <Tab title="cURL">
+      ```bash
+      curl -X POST "$MEMSY_BASE_URL/search" \
+        -H "Authorization: Bearer $MEMSY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{"query": "preferences", "actor_id": "user_42"}'
+      ```
+    </Tab>
+  </Tabs>
 
 ## `session_id` — *where in the conversation*
 
@@ -28,36 +45,105 @@ Sessions aren't used to filter `search()` today, but Memsy uses them during extr
 
 ## A complete example
 
-```python
-from memsy import MemsyClient, EventPayload
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import MemsyClient, EventPayload
 
-client = MemsyClient(base_url="...", api_key="***")
+    client = MemsyClient(base_url="...", api_key="***")
 
-client.ingest([
-    EventPayload(
-        actor_id="user_42", session_id="sess_abc",
-        kind="user_message",
-        content="My dog's name is Rex.",
-    ),
-    EventPayload(
-        actor_id="user_42", session_id="sess_abc",
-        kind="assistant_message",
-        content="Nice — Rex is a great name.",
-    ),
-])
+    client.ingest([
+        EventPayload(
+            actor_id="user_42", session_id="sess_abc",
+            kind="user_message",
+            content="My dog's name is Rex.",
+        ),
+        EventPayload(
+            actor_id="user_42", session_id="sess_abc",
+            kind="assistant_message",
+            content="Nice — Rex is a great name.",
+        ),
+    ])
 
-# Later, a different conversation
-client.ingest([
-    EventPayload(
-        actor_id="user_42", session_id="sess_xyz",
-        kind="user_message",
-        content="Book a vet visit for tomorrow.",
-    ),
-])
+    # Later, a different conversation
+    client.ingest([
+        EventPayload(
+            actor_id="user_42", session_id="sess_xyz",
+            kind="user_message",
+            content="Book a vet visit for tomorrow.",
+        ),
+    ])
 
-# Both sessions contribute memories to user_42
-results = client.search("pets", actor_id="user_42")
-```
+    # Both sessions contribute memories to user_42
+    results = client.search("pets", actor_id="user_42")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import { MemsyClient } from '@memsy-io/memsy';
+
+    const client = new MemsyClient({ baseUrl: '...', apiKey: '***' });
+
+    await client.ingest([
+      {
+        actorId: 'user_42',
+        sessionId: 'sess_abc',
+        kind: 'user_message',
+        content: "My dog's name is Rex.",
+      },
+      {
+        actorId: 'user_42',
+        sessionId: 'sess_abc',
+        kind: 'assistant_message',
+        content: 'Nice — Rex is a great name.',
+      },
+    ]);
+
+    // Later, a different conversation
+    await client.ingest([
+      {
+        actorId: 'user_42',
+        sessionId: 'sess_xyz',
+        kind: 'user_message',
+        content: 'Book a vet visit for tomorrow.',
+      },
+    ]);
+
+    // Both sessions contribute memories to user_42
+    const results = await client.search('pets', { actorId: 'user_42' });
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # First conversation
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "events": [
+          {"actor_id":"user_42","session_id":"sess_abc","kind":"user_message","content":"My dog'\''s name is Rex."},
+          {"actor_id":"user_42","session_id":"sess_abc","kind":"assistant_message","content":"Nice — Rex is a great name."}
+        ]
+      }'
+
+    # Later conversation
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "events": [
+          {"actor_id":"user_42","session_id":"sess_xyz","kind":"user_message","content":"Book a vet visit for tomorrow."}
+        ]
+      }'
+
+    # Search across both sessions, scoped to the actor
+    curl -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "pets", "actor_id": "user_42"}'
+    ```
+  </Tab>
+</Tabs>
 
 ## Shared actor IDs vs. isolation
 

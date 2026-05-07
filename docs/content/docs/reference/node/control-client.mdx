@@ -1,0 +1,147 @@
+---
+title: MemsyControlClient
+description: The Node.js MemsyControlClient — control-plane endpoints (api/) for identity, billing, keys, usage, events, and Pro interest.
+---
+
+`MemsyControlClient` is a separate client for the Memsy **control plane** (`api/`), distinct from the hot-path `MemsyClient` (`v1/`). Use it for account management, API key lifecycle, billing, usage reporting, and event browsing.
+
+```ts
+import { MemsyControlClient } from '@memsy-io/memsy';
+
+const control = new MemsyControlClient({
+  baseUrl: 'https://api.memsy.io/api',
+  apiKey: 'msy_...',
+});
+```
+
+## Constructor
+
+```ts
+new MemsyControlClient(options: MemsyControlClientOptions)
+```
+
+Same shape as [`MemsyClientOptions`](/docs/reference/node/memsy-client#memsyclientoptions): `baseUrl` (required), `apiKey` (required), `timeoutMs` (default `30_000`), `maxRetries` (default `3`).
+
+## Top-level methods
+
+### `me()`
+
+Identity information for the authenticated caller.
+
+```ts
+const me = await control.me();
+console.log(me.orgId, me.tier, me.email);
+```
+
+Returns a [`MeResponse`](/docs/reference/node/models#meresponse).
+
+### `health()`
+
+Control-plane liveness check.
+
+```ts
+const h = await control.health();
+console.log(h.status, h.version);
+```
+
+Returns a [`HealthResponse`](/docs/reference/node/models#healthresponse).
+
+## Sub-resources
+
+### `control.keys`
+
+API key CRUD. **Admin-gated** — non-admin keys raise `MemsyAuthorizationError`.
+
+```ts
+const keys = await control.keys.list();        // ApiKeyListResponse
+const created = await control.keys.create('ci-key', { scopes: ['read'] });
+console.log(created.rawKey);                    // shown ONCE — store securely
+await control.keys.delete(created.keyId);
+const usage = await control.keys.usage('key_id');
+```
+
+| Method | Signature |
+|---|---|
+| `list()` | `Promise<ApiKeyListResponse>` |
+| `create(name, options?)` | `Promise<CreateKeyResponse>` — `options.scopes`, `options.expiresAt` |
+| `delete(keyId)` | `Promise<void>` |
+| `usage(keyId)` | `Promise<Record<string, unknown>[]>` |
+
+### `control.usage`
+
+Plan usage summary and timeseries. **Admin-gated.**
+
+```ts
+const summary = await control.usage.summary();
+const series = await control.usage.timeseries({
+  granularity: 'daily',
+  dimension: 'api_calls',
+  periodStart: '2026-01-01',
+  periodEnd: '2026-01-31',
+});
+```
+
+| Method | Signature |
+|---|---|
+| `summary()` | `Promise<UsageSummaryResponse>` |
+| `timeseries(options?)` | `Promise<UsageTimeseriesResponse>` |
+
+### `control.billing`
+
+Stripe-backed billing summary and invoices. **Admin-gated.** May raise `MemsyBillingNotEnabledError` on free-tier orgs.
+
+```ts
+const summary = await control.billing.summary();   // BillingSummary
+const invoices = await control.billing.invoices(); // Invoice[]
+```
+
+| Method | Signature |
+|---|---|
+| `summary()` | `Promise<BillingSummary>` |
+| `invoices()` | `Promise<Invoice[]>` |
+
+### `control.events`
+
+Browse raw ingested events from the control-plane console. Requires an assigned seat — non-seated keys raise `MemsySeatRequiredError`.
+
+```ts
+const r = await control.events.list({
+  actorId: 'user_42',
+  sessionId: 'sess_abc',
+  kind: 'user_message',
+  sort: 'ts_desc',
+  limit: 50,
+  offset: 0,
+});
+```
+
+| Method | Signature |
+|---|---|
+| `list(options?)` | `Promise<EventListResponse>` |
+
+### `control.interest`
+
+Express interest in the Pro plan, or check whether your org has already done so.
+
+```ts
+const ok = await control.interest.express('me@example.com', 'Acme', {
+  company: 'Acme Inc',
+  useCase: 'agent memory for support bots',
+});
+const expressed = await control.interest.status();   // boolean
+```
+
+| Method | Signature |
+|---|---|
+| `express(email, name, options?)` | `Promise<ProInterestResponse>` |
+| `status()` | `Promise<boolean>` |
+
+## Error classes you may see
+
+`MemsyAuthError` (401), `MemsyAuthorizationError` (admin/seat scope mismatch on 403), `MemsyBillingNotEnabledError` (free-tier hitting billing routes), `MemsyKeyLimitReachedError`, `MemsySeatLimitReachedError`. See [Errors](/docs/reference/node/errors) for the full list and the per-class fields.
+
+## See also
+
+- [Models reference](/docs/reference/node/models) — `MeResponse`, `BillingSummary`, `ApiKeyInfo`, `EventItem`, …
+- [`MemsyClient`](/docs/reference/node/memsy-client) — the hot-path client
+- Python equivalents: [`MemsyControlClient` (Python)](/docs/reference/python/control-client)

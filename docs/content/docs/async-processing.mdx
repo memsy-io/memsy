@@ -7,10 +7,29 @@ Memsy intentionally decouples ingestion from processing. This matters in a few p
 
 ## What happens when you call `ingest()`
 
-```python
-result = client.ingest(events)
-# <-- returns here, usually within ~100ms
-```
+<Tabs>
+  <Tab title="Python">
+    ```python
+    result = client.ingest(events)
+    # <-- returns here, usually within ~100ms
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const result = await client.ingest(events);
+    // <-- resolves here, usually within ~100ms
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d @events.json
+    # <-- responds here, usually within ~100ms
+    ```
+  </Tab>
+</Tabs>
 
 The server:
 
@@ -31,25 +50,58 @@ Steps 1–3 happen synchronously over HTTP. Step 4 happens on the server's worke
 
 Usually within a few seconds, but there's no guarantee. If your UX depends on memory being present immediately after ingest, poll for completion:
 
-```python
-import time
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import time
 
-result = client.ingest(events)
+    result = client.ingest(events)
 
-status = client.status(event_ids=result.event_ids)
-while status.pending_ids:
-    time.sleep(1.0)
     status = client.status(event_ids=result.event_ids)
+    while status.pending_ids:
+        time.sleep(1.0)
+        status = client.status(event_ids=result.event_ids)
 
-print("done:", status.completed_ids)
-print("failed:", status.failed_ids)
-```
+    print("done:", status.completed_ids)
+    print("failed:", status.failed_ids)
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const result = await client.ingest(events);
 
-`StatusResponse` partitions the IDs you sent into three buckets:
+    let status = await client.status(result.eventIds);
+    while (status.pendingIds.length > 0) {
+      await new Promise((r) => setTimeout(r, 1000));
+      status = await client.status(result.eventIds);
+    }
 
-- `completed_ids` — extracted, embedded, indexed. Searchable now.
-- `pending_ids` — still in the queue or mid-processing.
-- `failed_ids` — something went wrong during extraction. These won't become memories.
+    console.log('done:', status.completedIds);
+    console.log('failed:', status.failedIds);
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # First call — ingest
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d @events.json
+
+    # Then poll status with the returned event_ids
+    curl -X POST "$MEMSY_BASE_URL/status" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"event_ids": ["01JK...", "01JL..."]}'
+    ```
+  </Tab>
+</Tabs>
+
+The status response partitions the IDs you sent into three buckets (Python / Node):
+
+- `completed_ids` / `completedIds` — extracted, embedded, indexed. Searchable now.
+- `pending_ids` / `pendingIds` — still in the queue or mid-processing.
+- `failed_ids` / `failedIds` — something went wrong during extraction. These won't become memories.
 
 ## What causes an event to fail?
 

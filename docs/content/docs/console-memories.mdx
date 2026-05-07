@@ -5,71 +5,140 @@ description: Browse and inspect stored memories via client.memories.
 
 `client.memories` exposes read-only access to the memories stored in your org. Use it to audit extraction quality, debug unexpected search results, or build admin dashboards.
 
-```python
-from memsy import MemsyClient
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import MemsyClient
 
-client = MemsyClient(base_url="...", api_key="msy_...")
-```
+    client = MemsyClient(base_url="...", api_key="msy_...")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import { MemsyClient } from '@memsy-io/memsy';
+
+    const client = new MemsyClient({ baseUrl: '...', apiKey: 'msy_...' });
+    ```
+  </Tab>
+</Tabs>
 
 ## List memories
 
-```python
-from memsy import MemoryListResponse
+<Tabs>
+  <Tab title="Python">
+    ```python
+    result = client.memories.list(
+        kind="semantic",        # optional: "semantic" | "episodic" | ...
+        type="preference",      # optional: "preference" | "fact" | "event" | ...
+        status="active",        # optional: "active" | "archived" | "decayed"
+        sort="observed_at_desc",# "observed_at_desc" | "strength_desc" | "confidence_desc"
+        search="dark mode",     # optional: full-text search over memory text
+        limit=50,
+        offset=0,
+    )
 
-result: MemoryListResponse = client.memories.list(
-    kind="semantic",        # optional: "semantic" | "episodic" | ...
-    type="preference",      # optional: "preference" | "fact" | "event" | ...
-    status="active",        # optional: "active" | "archived" | "decayed"
-    sort="observed_at_desc",# "observed_at_desc" | "strength_desc" | "confidence_desc"
-    search="dark mode",     # optional: full-text search over memory text
-    limit=50,
-    offset=0,
-)
+    print(f"{result.total} total memories")
+    for m in result.items:
+        print(m.memory_id, m.text, m.confidence)
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const result = await client.memories.list({
+      kind: 'semantic',
+      type: 'preference',
+      status: 'active',
+      sort: 'observed_at_desc',
+      search: 'dark mode',
+      limit: 50,
+      offset: 0,
+    });
 
-print(f"{result.total} total memories")
-for m in result.items:
-    print(m.memory_id, m.text, m.confidence)
-```
+    console.log(`${result.total} total memories`);
+    for (const m of result.items) {
+      console.log(m.memoryId, m.text, m.confidence);
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ### Pagination
 
-```python
-page_size = 50
-offset = 0
+<Tabs>
+  <Tab title="Python">
+    ```python
+    page_size = 50
+    offset = 0
 
-while True:
-    page = client.memories.list(limit=page_size, offset=offset)
-    for m in page.items:
-        process(m)
-    offset += page_size
-    if offset >= page.total:
-        break
-```
+    while True:
+        page = client.memories.list(limit=page_size, offset=offset)
+        for m in page.items:
+            process(m)
+        offset += page_size
+        if offset >= page.total:
+            break
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const pageSize = 50;
+    let offset = 0;
+
+    while (true) {
+      const page = await client.memories.list({ limit: pageSize, offset });
+      for (const m of page.items) await process(m);
+      offset += pageSize;
+      if (offset >= page.total) break;
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Get a single memory
 
-```python
-from memsy import MemoryItemResource
-
-memory: MemoryItemResource = client.memories.get("mem_01abc...")
-print(memory.text, memory.strength, memory.tags)
-print(memory.scope.level, memory.scope.actor_id)
-```
+<Tabs>
+  <Tab title="Python">
+    ```python
+    memory = client.memories.get("mem_01abc...")
+    print(memory.text, memory.strength, memory.tags)
+    print(memory.scope.level, memory.scope.actor_id)
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const memory = await client.memories.get('mem_01abc...');
+    console.log(memory.text, memory.strength, memory.tags);
+    console.log(memory.scope.level, memory.scope.actorId);
+    ```
+  </Tab>
+</Tabs>
 
 ## Stats
 
 Aggregate statistics for all memories in the org:
 
-```python
-from memsy import MemoryStatsResponse
-
-stats: MemoryStatsResponse = client.memories.stats()
-print(f"Total: {stats.total_memories}, Active: {stats.active_memories}")
-print(f"Avg confidence: {stats.avg_confidence:.2f}")
-print("By type:", stats.by_type)
-print("By kind:", stats.by_kind)
-print("Top entities:", stats.top_entities[:5])
-```
+<Tabs>
+  <Tab title="Python">
+    ```python
+    stats = client.memories.stats()
+    print(f"Total: {stats.total_memories}, Active: {stats.active_memories}")
+    print(f"Avg confidence: {stats.avg_confidence:.2f}")
+    print("By type:", stats.by_type)
+    print("By kind:", stats.by_kind)
+    print("Top entities:", stats.top_entities[:5])
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const stats = await client.memories.stats();
+    console.log(`Total: ${stats.totalMemories}, Active: ${stats.activeMemories}`);
+    console.log(`Avg confidence: ${stats.avgConfidence.toFixed(2)}`);
+    console.log('By type:', stats.byType);
+    console.log('By kind:', stats.byKind);
+    console.log('Top entities:', stats.topEntities.slice(0, 5));
+    ```
+  </Tab>
+</Tabs>
 
 ---
 
@@ -133,4 +202,4 @@ async with AsyncMemsyClient(base_url="...", api_key="msy_...") as client:
 
 - **[Onboarding](/docs/onboarding)** — set up org/role/team hierarchy to scope memories.
 - **[Searching memory](/docs/searching-memory)** — retrieve memories via semantic search.
-- **[Models](/docs/models)** — full `MemoryItemResource` and `MemoryStatsResponse` definitions.
+- **[Models](/docs/reference/python/models)** — full `MemoryItemResource` and `MemoryStatsResponse` definitions.

@@ -1,7 +1,7 @@
 export const siteConfig = {
-  name: "Memsy Python SDK",
+  name: "Memsy",
   description:
-    "Official Python SDK for Memsy — persistent memory for AI agents and applications.",
+    "Persistent memory for AI agents and applications — official SDKs for Python and Node.js, plus the raw HTTP API.",
   url: "https://docs.memsy.io",
 
   logo: {
@@ -13,7 +13,7 @@ export const siteConfig = {
   },
 
   links: {
-    github: "https://github.com/memsy-io/memsy/sdks/python",
+    github: "https://github.com/memsy-io/memsy",
     discord: "",
     twitter: "",
     support: "mailto:cloudops@memsy.io",
@@ -26,7 +26,7 @@ export const siteConfig = {
       { label: "PyPI", href: "https://pypi.org/project/memsy/" },
       {
         label: "GitHub",
-        href: "https://github.com/memsy-io/memsy/sdks/python",
+        href: "https://github.com/memsy-io/memsy",
       },
     ],
   },

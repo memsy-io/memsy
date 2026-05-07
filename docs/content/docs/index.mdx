@@ -1,15 +1,30 @@
 ---
 title: Memsy Docs
-description: Persistent memory for AI agents and applications. The official Python client.
+description: Persistent memory for AI agents and applications. Official SDKs for Python and Node.js, plus the raw HTTP API.
 ---
 
 **Memsy** turns the raw events your AI app produces — user messages, assistant replies, tool results — into structured, searchable long-term memory.
 
-The `memsy` package is the official Python client for the Memsy API: a thin, typed HTTP client with built-in retries, usage tracking, and a sync/async twin.
+This site documents the **Memsy HTTP API** and the official client libraries. Code examples throughout the docs are tabbed for **Python**, **Node.js**, and **cURL** — pick the language you work in.
 
-```bash
-pip install memsy
-```
+<Tabs>
+  <Tab title="Python">
+    ```bash
+    pip install memsy
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```bash
+    npm install @memsy-io/memsy
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # No install — call the API directly with any HTTP client.
+    curl -H "Authorization: Bearer $MEMSY_API_KEY" "$MEMSY_BASE_URL/health"
+    ```
+  </Tab>
+</Tabs>
 
 <CardGroup cols={2}>
   <Card title="Quickstart" icon="rocket" href="/docs/quickstart">
@@ -18,29 +33,31 @@ pip install memsy
   <Card title="Core Concepts" icon="book" href="/docs/events-and-memories">
     Events, memories, actors, sessions, and the async processing model.
   </Card>
-  <Card title="API Reference" icon="code" href="/docs/memsy-client">
-    Every public class, method, and model — with typed parameter tables.
+  <Card title="Python Reference" icon="code" href="/docs/reference/python/memsy-client">
+    Every public class, method, and model in the Python SDK — with typed parameter tables.
   </Card>
-  <Card title="Async Client" icon="gear" href="/docs/async-client">
-    AsyncMemsyClient mirrors the sync client method-for-method — use it from FastAPI, agent runtimes, and worker pools.
+  <Card title="Node Reference" icon="code" href="/docs/reference/node/memsy-client">
+    The Node.js SDK API surface — `MemsyClient`, error classes, and types.
   </Card>
 </CardGroup>
 
-## What the SDK does
+## What the SDKs do
 
-- Ships events to Memsy with a single `ingest()` call (batched, async on the server).
-- Retrieves semantically relevant memories with `search()`.
-- Surfaces usage, rate-limit, and plan information on every response.
-- Maps HTTP errors to strongly-typed exceptions (`AuthenticationError`, `RateLimitExceeded`, `UsageLimitExceeded`, …).
-- Retries rate-limited requests automatically with exponential backoff.
+- Ship events to Memsy with a single `ingest()` call (batched, async on the server).
+- Retrieve semantically relevant memories with `search()`.
+- Surface usage, rate-limit, and plan information on every response.
+- Map HTTP errors to strongly-typed exceptions (`AuthenticationError`, `RateLimitExceeded`, `MemsyAuthError`, …).
+- Retry rate-limited requests automatically with exponential backoff.
 
-## What it does not do
+## What they do not do
 
-The SDK is a thin HTTP client. It does not run memory extraction, embeddings, or vector search locally — all processing happens on the Memsy platform.
+The SDKs are thin HTTP clients. They do not run memory extraction, embeddings, or vector search locally — all processing happens on the Memsy platform.
 
 ## Links
 
 - Dashboard & sign in — [app.memsy.io](https://app.memsy.io)
-- Package on PyPI — [pypi.org/project/memsy](https://pypi.org/project/memsy/)
+- Python package — [pypi.org/project/memsy](https://pypi.org/project/memsy/)
+- Node package — [npmjs.com/package/@memsy-io/memsy](https://www.npmjs.com/package/@memsy-io/memsy)
+- Source code — [github.com/memsy-io/memsy](https://github.com/memsy-io/memsy)
 
 Ready? Head to the **[Quickstart](/docs/quickstart)**.

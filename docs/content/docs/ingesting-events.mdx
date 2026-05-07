@@ -3,45 +3,106 @@ title: Ingesting Events
 description: Batch size, metadata, timestamps, scoping — everything beyond the quickstart.
 ---
 
-`ingest()` takes a list of `EventPayload` objects and returns their IDs.
+`ingest()` takes a list of events and returns their IDs.
 
 ## Role and team scoping
 
 This is what sets Memsy apart: every event can be scoped to a role and team in your [onboarding hierarchy](/docs/onboarding). Extracted memories are stored at the right level of your org — not just a flat blob per user — so searches respect organizational context automatically.
 
-```python
-from memsy import EventPayload
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import EventPayload
 
-client.ingest([
-    EventPayload(
-        actor_id="user_42",
-        session_id="session_1",
-        kind="user_message",
-        content="I always prefer dark mode in my dev environment.",
-        role_id="role_frontend_dev",
-        team_id="team_platform",
-    )
-])
-```
+    client.ingest([
+        EventPayload(
+            actor_id="user_42",
+            session_id="session_1",
+            kind="user_message",
+            content="I always prefer dark mode in my dev environment.",
+            role_id="role_frontend_dev",
+            team_id="team_platform",
+        )
+    ])
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    await client.ingest([
+      {
+        actorId: 'user_42',
+        sessionId: 'session_1',
+        kind: 'user_message',
+        content: 'I always prefer dark mode in my dev environment.',
+        roleId: 'role_frontend_dev',
+        teamId: 'team_platform',
+      },
+    ]);
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "events": [
+          {
+            "actor_id": "user_42",
+            "session_id": "session_1",
+            "kind": "user_message",
+            "content": "I always prefer dark mode in my dev environment.",
+            "role_id": "role_frontend_dev",
+            "team_id": "team_platform"
+          }
+        ]
+      }'
+    ```
+  </Tab>
+</Tabs>
 
 The memory extractor uses the role's and team's `promotion_prompt` to bias extraction toward what's relevant for that context. Memories then flow up the hierarchy: actor → role → team → org.
 
-`role_id` and `team_id` are optional. Events without them are stored at the actor scope. Both fields are ignored on free-tier orgs that haven't configured a hierarchy.
+`role_id`/`roleId` and `team_id`/`teamId` are optional. Events without them are stored at the actor scope.
 
 ---
 
 ## The minimum viable event
 
-```python
-from memsy import EventPayload
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import EventPayload
 
-EventPayload(
-    actor_id="user_42",
-    session_id="session_1",
-    kind="user_message",
-    content="Remember my flight is on Friday.",
-)
-```
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="user_message",
+        content="Remember my flight is on Friday.",
+    )
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const event = {
+      actorId: 'user_42',
+      sessionId: 'session_1',
+      kind: 'user_message' as const,
+      content: 'Remember my flight is on Friday.',
+    };
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```json
+    {
+      "actor_id": "user_42",
+      "session_id": "session_1",
+      "kind": "user_message",
+      "content": "Remember my flight is on Friday."
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Four fields. Everything else is optional.
 
@@ -49,33 +110,85 @@ Four fields. Everything else is optional.
 
 If your events are live, omit `ts` and the server stamps them. If you're **backfilling** historical data, always pass an ISO-8601 timestamp:
 
-```python
-EventPayload(
-    actor_id="user_42",
-    session_id="session_1",
-    kind="user_message",
-    content="...",
-    ts="2026-03-15T14:22:10Z",
-)
-```
+<Tabs>
+  <Tab title="Python">
+    ```python
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="user_message",
+        content="...",
+        ts="2026-03-15T14:22:10Z",
+    )
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const event = {
+      actorId: 'user_42',
+      sessionId: 'session_1',
+      kind: 'user_message' as const,
+      content: '...',
+      ts: '2026-03-15T14:22:10Z',
+    };
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```json
+    {
+      "actor_id": "user_42",
+      "session_id": "session_1",
+      "kind": "user_message",
+      "content": "...",
+      "ts": "2026-03-15T14:22:10Z"
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Backfilled events with explicit timestamps get the same treatment as live events during extraction, but the timestamp is used for recency weighting in search.
 
 ## Metadata
 
-`metadata` is a **JSON-serialised string** (not a dict). Use it for application-level fields you want back with search results — tags, source identifiers, custom flags:
+`metadata` is a **JSON-serialised string** (not a dict/object). Use it for application-level fields you want back with search results — tags, source identifiers, custom flags:
 
-```python
-import json
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import json
 
-EventPayload(
-    actor_id="user_42",
-    session_id="session_1",
-    kind="app_event",
-    content="User upgraded to pro plan.",
-    metadata=json.dumps({"plan": "pro", "source": "billing-webhook"}),
-)
-```
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="app_event",
+        content="User upgraded to pro plan.",
+        metadata=json.dumps({"plan": "pro", "source": "billing-webhook"}),
+    )
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const event = {
+      actorId: 'user_42',
+      sessionId: 'session_1',
+      kind: 'app_event' as const,
+      content: 'User upgraded to pro plan.',
+      metadata: JSON.stringify({ plan: 'pro', source: 'billing-webhook' }),
+    };
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```json
+    {
+      "actor_id": "user_42",
+      "session_id": "session_1",
+      "kind": "app_event",
+      "content": "User upgraded to pro plan.",
+      "metadata": "{\"plan\":\"pro\",\"source\":\"billing-webhook\"}"
+    }
+    ```
+  </Tab>
+</Tabs>
 
 Memsy echoes the raw metadata string back in each `SearchResult` so you can deserialize it client-side.
 
@@ -83,30 +196,75 @@ Memsy echoes the raw metadata string back in each `SearchResult` so you can dese
 
 `ingest()` is designed for batches. Send many events in one call whenever you can:
 
-```python
-batch: list[EventPayload] = []
+<Tabs>
+  <Tab title="Python">
+    ```python
+    batch: list[EventPayload] = []
 
-for msg in conversation_turns:
-    batch.append(EventPayload(
-        actor_id=user_id,
-        session_id=session_id,
-        kind="user_message" if msg.role == "user" else "assistant_message",
-        content=msg.text,
-    ))
+    for msg in conversation_turns:
+        batch.append(EventPayload(
+            actor_id=user_id,
+            session_id=session_id,
+            kind="user_message" if msg.role == "user" else "assistant_message",
+            content=msg.text,
+        ))
 
-result = client.ingest(batch)
-```
+    result = client.ingest(batch)
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const batch = conversationTurns.map((msg) => ({
+      actorId: userId,
+      sessionId,
+      kind: msg.role === 'user' ? 'user_message' : 'assistant_message',
+      content: msg.text,
+    } as const));
+
+    const result = await client.ingest(batch);
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    # Send all events in one request body — array under "events".
+    curl -X POST "$MEMSY_BASE_URL/ingest" \
+      -H "Authorization: Bearer $MEMSY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d @batch.json
+    ```
+  </Tab>
+</Tabs>
 
 Recommended batch size: tens to low hundreds. Very large batches (thousands) increase tail latency and risk hitting request-size limits.
 
 ## Return value
 
-`IngestResponse.event_ids` gives you the IDs the server assigned, in the **same order** as the input. Pair them up if you need to track processing per event:
+`event_ids` / `eventIds` gives you the IDs the server assigned, in the **same order** as the input. Pair them up if you need to track processing per event:
 
-```python
-result = client.ingest(batch)
-pairs = dict(zip(result.event_ids, batch))
-```
+<Tabs>
+  <Tab title="Python">
+    ```python
+    result = client.ingest(batch)
+    pairs = dict(zip(result.event_ids, batch))
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const result = await client.ingest(batch);
+    const pairs = Object.fromEntries(
+      result.eventIds.map((id, i) => [id, batch[i]])
+    );
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```json
+    // Response body
+    {
+      "event_ids": ["01JK...", "01JL...", "01JM..."]
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Idempotency
 
@@ -115,14 +273,14 @@ pairs = dict(zip(result.event_ids, batch))
 
 ## Failure modes
 
-`ingest()` itself can fail with:
+`ingest()` itself can fail with (Python / Node):
 
-- `AuthenticationError` — bad API key.
-- `UsageLimitExceeded` — you've hit a quota (events, tokens, storage).
-- `RateLimitExceeded` — the SDK retried automatically, but you still exhausted the budget.
+- `AuthenticationError` / `MemsyAuthError` — bad API key.
+- `UsageLimitExceeded` / `MemsyAPIError` (status `403`) — you've hit a quota (events, tokens, storage).
+- `RateLimitExceeded` / `MemsyRateLimitError` — the SDK retried automatically, but you still exhausted the budget.
 - `MemsyConnectionError` — network or timeout.
 
-Individual events can also **fail during extraction** after a successful ingest. Those show up in `status().failed_ids` later. See **[Async Processing](/docs/async-processing)**.
+Individual events can also **fail during extraction** after a successful ingest. Those show up in `status().failed_ids` / `status().failedIds` later. See **[Async Processing](/docs/async-processing)**.
 
 ## Next
 

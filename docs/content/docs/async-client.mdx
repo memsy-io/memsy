@@ -1,9 +1,13 @@
 ---
-title: Async Client
-description: AsyncMemsyClient mirrors the sync client method-for-method.
+title: Async Client (Python)
+description: AsyncMemsyClient mirrors the Python sync client method-for-method.
 ---
 
-`AsyncMemsyClient` mirrors `MemsyClient` method-for-method. If you're building on `asyncio` — FastAPI, agent runtimes, worker pools — use it.
+<Note>
+This page is **Python-specific**. The Node SDK is async-only by design — every method on the Node `MemsyClient` already returns a `Promise<T>`, so there's no separate "async client" to install. If you're using Node, see the [Node MemsyClient reference](/docs/reference/node/memsy-client) instead.
+</Note>
+
+`AsyncMemsyClient` mirrors the Python `MemsyClient` method-for-method. If you're building Python on `asyncio` — FastAPI, agent runtimes, worker pools — use it.
 
 ## Setup
 
@@ -13,7 +17,7 @@ from memsy import AsyncMemsyClient, EventPayload
 
 async def main():
     async with AsyncMemsyClient(
-        base_url="https://api.memsy.io",
+        base_url="https://api.memsy.io/v1",
         api_key="***",
     ) as client:
         health = await client.health()

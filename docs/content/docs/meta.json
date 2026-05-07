@@ -1,5 +1,5 @@
 {
-  "title": "Memsy Python SDK",
+  "title": "Memsy",
   "pages": [
     "index",
     "---Getting Started---",
@@ -11,20 +11,16 @@
     "actors-and-sessions",
     "async-processing",
     "---Guides---",
+    "onboarding",
     "ingesting-events",
     "searching-memory",
-    "onboarding",
     "console-memories",
     "async-client",
     "usage-and-rate-limits",
     "error-handling",
     "retries",
     "---API Reference---",
-    "memsy-client",
-    "async-memsy-client",
-    "control-client",
-    "models",
-    "exceptions",
+    "reference",
     "---Reference---",
     "faq"
   ]

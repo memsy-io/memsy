@@ -1,0 +1,305 @@
+---
+title: Models & Types
+description: Request and response type definitions for the Node SDK.
+---
+
+All public types are exported from the package root:
+
+```ts
+import type {
+  EventPayload,
+  EventKind,
+  IngestResponse,
+  SearchResponse,
+  SearchResult,
+  SourceEvent,
+  StatusResponse,
+  HealthResponse,
+  ClearResponse,
+  UsageInfo,
+  RateLimitInfo,
+} from '@memsy-io/memsy';
+```
+
+The SDK is camelCase end-to-end. The HTTP wire format is snake_case (`actor_id`, `session_id`, `event_ids`); serialization happens automatically inside the client.
+
+## Request types
+
+### `EventPayload`
+
+The shape you pass to [`client.ingest()`](/docs/reference/node/memsy-client#ingestevents).
+
+| Field        | Type         | Required | Description                                                       |
+|--------------|--------------|----------|-------------------------------------------------------------------|
+| `actorId`    | `string`     | yes      | Stable identifier for the entity producing the event.             |
+| `sessionId`  | `string`     | yes      | Session/conversation grouping ID.                                 |
+| `kind`       | `EventKind`  | yes      | One of the literal values below.                                  |
+| `content`    | `string`     | yes      | The event body — message text, tool output, etc.                  |
+| `roleId`     | `string`     | no       | Optional role attribution (e.g. `'admin'`).                       |
+| `teamId`     | `string`     | no       | Optional team scoping.                                            |
+| `ts`         | `string`     | no       | ISO-8601 timestamp. Defaults to server-side now.                  |
+| `metadata`   | `string`     | no       | Free-form JSON-encoded string for app-specific metadata.          |
+
+### `EventKind`
+
+```ts
+type EventKind =
+  | 'user_message'
+  | 'assistant_message'
+  | 'tool_result'
+  | 'app_event';
+```
+
+See [Events & Memories](/docs/events-and-memories) for guidance on which to use.
+
+## Response types
+
+Every successful response carries `usage` and `rateLimit` parsed from response headers — the call returned, but you also know how much of your plan you've burned.
+
+### `IngestResponse`
+
+| Field       | Type                        | Description                                          |
+|-------------|-----------------------------|------------------------------------------------------|
+| `eventIds`  | `string[]`                  | One ID per event, in the order you submitted them.   |
+| `usage`     | `UsageInfo \| null`         | Plan usage snapshot from response headers.           |
+| `rateLimit` | `RateLimitInfo \| null`     | Rate-limit window state.                             |
+
+### `SearchResponse`
+
+| Field       | Type                      | Description                          |
+|-------------|---------------------------|--------------------------------------|
+| `results`   | `SearchResult[]`          | Ranked memory matches.               |
+| `usage`     | `UsageInfo \| null`       | Plan usage snapshot.                 |
+| `rateLimit` | `RateLimitInfo \| null`   | Rate-limit window state.             |
+
+### `SearchResult`
+
+| Field           | Type                                  | Description                                                           |
+|-----------------|---------------------------------------|-----------------------------------------------------------------------|
+| `id`            | `string`                              | Memory ID.                                                            |
+| `content`       | `string`                              | Extracted memory text.                                                |
+| `score`         | `number`                              | Similarity score `0.0` (none) – `1.0` (exact).                        |
+| `metadata`      | `Record<string, unknown> \| null`     | Any metadata captured during extraction.                              |
+| `sourceEvents`  | `SourceEvent[] \| null`               | Originating events — populated when `includeSourceEvents: true`.      |
+
+### `SourceEvent`
+
+A typed view of the events a memory was extracted from. Surfaced on `SearchResult.sourceEvents` whenever `includeSourceEvents: true` is passed to `client.search()`. The wire format embeds these as snake-cased dicts inside `metadata.source_events`; the SDK parses them and converts to camelCase for you.
+
+| Field      | Type             | Description                                |
+|------------|------------------|--------------------------------------------|
+| `eventId`  | `string`         | The ID of the originating event.           |
+| `kind`     | `string`         | `EventKind` value of the originating event.|
+| `content`  | `string`         | Original event body.                       |
+| `ts`       | `string \| null` | ISO-8601 timestamp.                        |
+
+```ts
+const results = await client.search('preferences', {
+  actorId: 'user_42',
+  includeSourceEvents: true,
+});
+
+for (const r of results.results) {
+  console.log(r.content);
+  for (const src of r.sourceEvents ?? []) {
+    console.log(`  ↳ from ${src.kind} at ${src.ts}: ${src.content}`);
+  }
+}
+```
+
+### `StatusResponse`
+
+| Field          | Type                                       | Description                                                 |
+|----------------|--------------------------------------------|-------------------------------------------------------------|
+| `completedIds` | `string[]`                                 | Events whose memories are indexed and searchable.           |
+| `failedIds`    | `string[]`                                 | Events whose extraction failed.                             |
+| `pendingIds`   | `string[]`                                 | Events still being processed.                               |
+| `total`        | `number`                                   | Sum of the three lists (matches your input length).         |
+| `statuses`     | `Record<string, string> \| null`           | Per-event status string when available.                     |
+| `usage`        | `UsageInfo \| null`                        |                                                             |
+| `rateLimit`    | `RateLimitInfo \| null`                    |                                                             |
+
+### `HealthResponse`
+
+| Field            | Type                                    | Description                                       |
+|------------------|-----------------------------------------|---------------------------------------------------|
+| `status`         | `string`                                | `'ok'` when healthy.                              |
+| `version`        | `string`                                | Server version string.                            |
+| `billingEnabled` | `boolean \| null`                       | Whether billing is configured for this org.       |
+| `components`     | `Record<string, string> \| null`        | Per-component health (db, redis, etc.).           |
+| `usage`          | `UsageInfo \| null`                     |                                                   |
+| `rateLimit`      | `RateLimitInfo \| null`                 |                                                   |
+
+### `ClearResponse`
+
+| Field       | Type                       | Description                                 |
+|-------------|----------------------------|---------------------------------------------|
+| `deleted`   | `number`                   | Count of records removed.                   |
+| `usage`     | `UsageInfo \| null`        |                                             |
+| `rateLimit` | `RateLimitInfo \| null`    |                                             |
+
+## Metadata types
+
+### `UsageInfo`
+
+Snapshot of your plan consumption parsed from `X-Usage-*` and `X-Plan` headers.
+
+| Field                  | Type             | Description                                 |
+|------------------------|------------------|---------------------------------------------|
+| `apiCalls`             | `number \| null` | API calls used this period.                 |
+| `apiCallsLimit`        | `number \| null` | API calls allowed this period.              |
+| `eventsIngested`       | `number \| null` | Events ingested this period.                |
+| `eventsIngestedLimit`  | `number \| null` |                                             |
+| `memoryStored`         | `number \| null` | Memories currently stored.                  |
+| `memoryStoredLimit`    | `number \| null` |                                             |
+| `llmTokens`            | `number \| null` | LLM tokens consumed for extraction.         |
+| `llmTokensLimit`       | `number \| null` |                                             |
+| `searchQueries`        | `number \| null` | Search queries issued this period.          |
+| `searchQueriesLimit`   | `number \| null` |                                             |
+| `plan`                 | `string \| null` | Plan name (e.g. `'free'`, `'pro'`).         |
+
+Any field is `null` when the platform hasn't reported it on this response.
+
+### `RateLimitInfo`
+
+Parsed from `X-RateLimit-*` headers.
+
+| Field        | Type             | Description                                                     |
+|--------------|------------------|-----------------------------------------------------------------|
+| `limit`      | `number \| null` | Max requests allowed in the current window.                     |
+| `remaining`  | `number \| null` | Requests remaining.                                             |
+| `reset`      | `number \| null` | Unix timestamp (seconds) when the window resets.                |
+
+```ts
+const { rateLimit } = await client.search('preferences');
+
+if (rateLimit.remaining !== null && rateLimit.remaining < 5) {
+  console.warn(`Only ${rateLimit.remaining} requests left.`);
+}
+```
+
+## Onboarding types
+
+### `Org`, `Role`, `Team`
+
+All three share a common shape and differ only in the ID fields.
+
+| Field             | Type                              | Notes                                              |
+|-------------------|-----------------------------------|----------------------------------------------------|
+| `orgId`           | `string`                          | All three.                                         |
+| `roleId`          | `string`                          | `Role` only.                                       |
+| `teamId`          | `string`                          | `Team` only.                                       |
+| `name`            | `string`                          | Display name.                                      |
+| `focus`           | `string`                          | Description used to generate the promotion prompt. |
+| `promotionPrompt` | `string`                          | Auto-generated extraction prompt.                  |
+| `createdAt`       | `string`                          | ISO-8601 timestamp.                                |
+| `updatedAt`       | `string`                          | ISO-8601 timestamp.                                |
+| `promptMeta`      | `Record<string, unknown> \| null` | Metadata about prompt generation.                  |
+
+## Console memory types
+
+### `MemoryItem`
+
+| Field                | Type                              | Description                                  |
+|----------------------|-----------------------------------|----------------------------------------------|
+| `memoryId`           | `string`                          | Unique memory ID.                            |
+| `orgId`              | `string`                          | Owning org.                                  |
+| `scope`              | `MemoryScope`                     | Scope info (level + actor/team/role IDs).    |
+| `type`               | `string`                          | E.g. `"preference"`, `"fact"`.               |
+| `kind`               | `string`                          | E.g. `"semantic"`, `"episodic"`.             |
+| `memoryKind`         | `string`                          | Low-level kind classification.               |
+| `status`             | `string`                          | `"active"` / `"archived"` / `"decayed"`.     |
+| `text`               | `string`                          | The extracted memory text.                   |
+| `confidence`         | `number`                          | Extraction confidence (0–1).                 |
+| `strength`           | `number`                          | Reinforcement strength (0–1).                |
+| `recallCount`        | `number`                          | Times recalled in search.                    |
+| `decayHalfLifeDays`  | `number`                          | Days until strength halves.                  |
+| `pinned`             | `boolean`                         | Pinned memories never decay.                 |
+| `tags`               | `string[]`                        | Tags from extraction.                        |
+| `entityRefs`         | `Record<string, string>[]`        | Named entity references.                     |
+| `sourceEventIds`     | `string[]`                        | Contributing event IDs.                      |
+| `sourceUrls`         | `string[]`                        | Source URLs if applicable.                   |
+| `summary`            | `string \| null`                  | Auto-generated summary.                      |
+| `payload`            | `Record<string, unknown> \| null` | Raw extraction payload.                      |
+| `lastRecalledAt`     | `string \| null`                  | ISO-8601 timestamp.                          |
+| `effectiveFrom`      | `string \| null`                  | ISO-8601 timestamp.                          |
+| `effectiveTo`        | `string \| null`                  | ISO-8601 timestamp.                          |
+| `observedAt`         | `string \| null`                  | ISO-8601 timestamp.                          |
+| `createdAt`          | `string \| null`                  | ISO-8601 timestamp.                          |
+| `updatedAt`          | `string \| null`                  | ISO-8601 timestamp.                          |
+
+### `MemoryScope`
+
+| Field      | Type             | Description                                          |
+|------------|------------------|------------------------------------------------------|
+| `level`    | `string`         | `"org"` / `"role"` / `"team"` / `"actor"`.           |
+| `actorId`  | `string \| null` |                                                      |
+| `teamId`   | `string \| null` |                                                      |
+| `roleId`   | `string \| null` |                                                      |
+
+### `MemoryListResponse` / `MemoryStatsResponse`
+
+`MemoryListResponse` is `{ items: MemoryItem[]; total: number; limit: number; offset: number }`.
+
+`MemoryStatsResponse` carries aggregate counts: `total`, `totalMemories`, `activeMemories`, `byType`, `byKind`, `byStatus`, `avgConfidence`, `avgStrength`, `topEntities`, `confidenceBuckets`, `dateRange`.
+
+## Control-plane types
+
+### `MeResponse`
+
+| Field            | Type             | Description                              |
+|------------------|------------------|------------------------------------------|
+| `customerId`     | `string`         |                                          |
+| `email`          | `string`         |                                          |
+| `tier`           | `string`         | E.g. `"free"`, `"pro"`.                  |
+| `isSuperadmin`   | `boolean`        |                                          |
+| `orgId`          | `string`         |                                          |
+| `isBillingAdmin` | `boolean`        |                                          |
+| `userId`         | `string \| null` |                                          |
+| `orgRole`        | `string \| null` |                                          |
+
+### `BillingSummary`
+
+`{ tier, purchasedSeats, assignedSeats, availableSeats, stripeCustomerId, paymentMethod, upcomingInvoice, subscriptionStatus, billingContact, stripeSubscriptionId }`.
+
+`PaymentMethod` is `{ brand, last4, expMonth, expYear }`. `UpcomingInvoice` is `{ amountDue, currency, periodEnd }`.
+
+### `Invoice`
+
+`{ id, amountDue, amountPaid, currency, status, created, hostedInvoiceUrl }`.
+
+### `ApiKeyInfo` / `ApiKeyListResponse` / `CreateKeyResponse`
+
+```ts
+ApiKeyInfo:           { keyId, prefix, name, scopes, isActive, createdAt, lastUsedAt, expiresAt }
+ApiKeyListResponse:   { keys: ApiKeyInfo[], maxKeys, activeCount }
+CreateKeyResponse:    { keyId, rawKey, prefix, name, scopes }
+```
+
+`rawKey` is returned **only once** on create — store it securely.
+
+### `UsageSummaryResponse` / `UsageTimeseriesResponse`
+
+```ts
+DimensionUsage:           { dimension, used, limit, overageRate }
+UsageSummaryResponse:     { orgId, tier, periodStart, periodEnd, dimensions: DimensionUsage[] }
+TimeseriesPoint:          { date, dimension, quantity }
+UsageTimeseriesResponse:  { orgId, granularity, data: TimeseriesPoint[] }
+```
+
+### `EventItem` / `EventListResponse`
+
+```ts
+EventItem:           { eventId, orgId, actorId, kind, content, ts, sessionId, metadata, ingestedAt }
+EventListResponse:   { items: EventItem[], total, limit, offset }
+```
+
+### `ProInterestResponse`
+
+`{ message: string }`.
+
+## See also
+
+- [`MemsyClient`](/docs/reference/node/memsy-client) — hot-path client
+- [`MemsyControlClient`](/docs/reference/node/control-client) — control-plane client
+- [Errors](/docs/reference/node/errors) — exception classes

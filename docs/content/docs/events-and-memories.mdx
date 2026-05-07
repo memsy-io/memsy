@@ -9,20 +9,48 @@ Memsy splits your data into two distinct things: **events** (raw input) and **me
 
 An **event** is an immutable record of something that happened in your application. You send events to Memsy; you never edit them after the fact.
 
-In the SDK an event is an `EventPayload`:
+In the SDKs an event is an `EventPayload`:
 
-```python
-from memsy import EventPayload
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import EventPayload
 
-EventPayload(
-    actor_id="user_42",
-    session_id="session_1",
-    kind="user_message",
-    content="I prefer dark mode in all apps.",
-    ts=None,            # optional ISO-8601 timestamp; defaults to "now" server-side
-    metadata=None,      # optional JSON-serialised string
-)
-```
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="user_message",
+        content="I prefer dark mode in all apps.",
+        ts=None,            # optional ISO-8601 timestamp; defaults to "now" server-side
+        metadata=None,      # optional JSON-serialised string
+    )
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import type { EventPayload } from '@memsy-io/memsy';
+
+    const event: EventPayload = {
+      actorId: 'user_42',
+      sessionId: 'session_1',
+      kind: 'user_message',
+      content: 'I prefer dark mode in all apps.',
+      // ts: '2026-03-15T14:22:10Z',  // optional
+      // metadata: JSON.stringify({...}),  // optional, JSON string
+    };
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```json
+    {
+      "actor_id": "user_42",
+      "session_id": "session_1",
+      "kind": "user_message",
+      "content": "I prefer dark mode in all apps."
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ### Event kinds
 
@@ -35,24 +63,50 @@ EventPayload(
 
 ### When do events show up in search?
 
-Never, directly. Search always returns **memories**, not events. If you want the original source events alongside results, pass `include_source_events=True` to `search()`.
+Never, directly. Search always returns **memories**, not events. If you want the original source events alongside results, pass `include_source_events=True` (Python) / `includeSourceEvents: true` (Node) to `search()`.
 
 ## Memories: the extracted output
 
 A **memory** is something Memsy has distilled from one or more events — a stable fact about an actor or session, written in natural language, embedded into a vector space, and indexed for semantic retrieval. You don't create memories directly; Memsy creates them from your events.
 
-In the SDK a memory surfaces as a `SearchResult`:
+In the SDKs a memory surfaces as a `SearchResult`:
 
-```python
-from memsy import SearchResult  # returned from client.search()
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import SearchResult  # returned from client.search()
 
-SearchResult(
-    id="mem_01JK...",
-    content="User prefers dark mode across apps.",
-    score=0.84,
-    metadata={"actor_id": "user_42"},
-)
-```
+    SearchResult(
+        id="mem_01JK...",
+        content="User prefers dark mode across apps.",
+        score=0.84,
+        metadata={"actor_id": "user_42"},
+    )
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import type { SearchResult } from '@memsy-io/memsy';
+
+    const result: SearchResult = {
+      id: 'mem_01JK...',
+      content: 'User prefers dark mode across apps.',
+      score: 0.84,
+      metadata: { actor_id: 'user_42' },
+    };
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```json
+    {
+      "id": "mem_01JK...",
+      "content": "User prefers dark mode across apps.",
+      "score": 0.84,
+      "metadata": { "actor_id": "user_42" }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Typical flow
 

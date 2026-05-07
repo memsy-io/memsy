@@ -5,31 +5,64 @@ description: Auto-retry on 429, how to tune it, and when to back off yourself.
 
 The SDK retries rate-limited (HTTP 429) requests automatically. Everything else is up to you.
 
-## What the SDK retries
+## What the SDKs retry
 
-- **429 responses**, up to `max_retries` times with exponential backoff.
-- If the response includes a `Retry-After` header, the SDK waits exactly that long.
-- Otherwise the SDK waits `retry_backoff * (2 ** attempt)` seconds — `1s, 2s, 4s, …` with the defaults.
+- **429 responses**, up to the `max_retries` / `maxRetries` count with exponential backoff.
+- If the response includes a `Retry-After` header, the SDKs wait exactly that long.
+- Otherwise they wait `1s, 2s, 4s, …` (Node uses `2 ** attempt` seconds with the defaults; Python uses `retry_backoff * 2 ** attempt`).
 
-## What the SDK does not retry
+## What they don't retry
 
-- 4xx responses other than 429. These raise immediately.
+- 4xx responses other than 429. These raise/throw immediately.
 - 5xx responses. These surface as `MemsyAPIError`; retry them yourself if appropriate.
 - Timeouts and connection errors. These raise `MemsyConnectionError`.
 
 ## Tuning retry behaviour
 
-```python
-from memsy import MemsyClient
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import MemsyClient
 
-client = MemsyClient(
-    base_url="https://api.memsy.io",
-    api_key="***",
-    max_retries=5,       # try up to 5 times on 429 (default: 3)
-    retry_backoff=2.0,   # base backoff, doubles per attempt (default: 1.0)
-    timeout=60.0,        # per-request timeout in seconds (default: 30.0)
-)
-```
+    client = MemsyClient(
+        base_url="https://api.memsy.io/v1",
+        api_key="***",
+        max_retries=5,       # try up to 5 times on 429 (default: 3)
+        retry_backoff=2.0,   # base backoff, doubles per attempt (default: 1.0)
+        timeout=60.0,        # per-request timeout in seconds (default: 30.0)
+    )
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import { MemsyClient } from '@memsy-io/memsy';
+
+    const client = new MemsyClient({
+      baseUrl: 'https://api.memsy.io/v1',
+      apiKey: '***',
+      maxRetries: 5,        // try up to 5 times on 429 (default: 3)
+      timeoutMs: 60_000,    // per-request timeout in ms (default: 30_000)
+    });
+    ```
+
+    The Node SDK exposes `maxRetries` and `timeoutMs`. Backoff is `1000 * Math.pow(2, attempt)` ms by default and isn't user-configurable today.
+  </Tab>
+  <Tab title="cURL">
+    cURL itself does no application-level retry. Implement it in your shell loop:
+
+    ```bash
+    for attempt in 1 2 3; do
+      status=$(curl -s -o /tmp/body -w "%{http_code}" -X POST "$MEMSY_BASE_URL/search" \
+        -H "Authorization: Bearer $MEMSY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{"query":"preferences"}')
+
+      if [ "$status" != "429" ]; then break; fi
+      sleep $(( 2 ** attempt ))
+    done
+    ```
+  </Tab>
+</Tabs>
 
 ### When to increase `max_retries`
 
@@ -45,16 +78,42 @@ Tune if you're sharing one API key across many workers and want to spread retrie
 
 ## What happens after retries are exhausted
 
-The SDK raises `RateLimitExceeded` with `retry_after` populated if the server provided one.
+The SDK raises a rate-limit exception with the `Retry-After` value populated if the server provided one.
 
-```python
-from memsy.exceptions import RateLimitExceeded
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy.exceptions import RateLimitExceeded
 
-try:
-    client.search("preferences")
-except RateLimitExceeded as e:
-    print(f"Still rate limited after retries; try again in {e.retry_after}s")
-```
+    try:
+        client.search("preferences")
+    except RateLimitExceeded as e:
+        print(f"Still rate limited after retries; try again in {e.retry_after}s")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import { MemsyRateLimitError } from '@memsy-io/memsy';
+
+    try {
+      await client.search('preferences');
+    } catch (err) {
+      if (err instanceof MemsyRateLimitError) {
+        console.log(`Still rate limited after retries; try again in ${err.retryAfter}s`);
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="cURL">
+    With raw HTTP, you read `Retry-After` directly:
+
+    ```bash
+    curl -i -X POST "$MEMSY_BASE_URL/search" ... \
+      | grep -i "^retry-after:"
+    # Retry-After: 30
+    ```
+  </Tab>
+</Tabs>
 
 ## Idempotency considerations
 
@@ -69,4 +128,4 @@ except RateLimitExceeded as e:
 
 ## Next
 
-- Back to the [API Reference](/docs/memsy-client).
+- Back to the [API Reference](/docs/reference/python/memsy-client).

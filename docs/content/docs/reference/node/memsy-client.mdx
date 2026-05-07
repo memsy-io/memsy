@@ -1,0 +1,199 @@
+---
+title: MemsyClient
+description: The Node.js MemsyClient — constructor, methods, and return shapes. Async-only, Promise-based, ESM + CJS.
+---
+
+`MemsyClient` is the single entry point for the Node SDK. Every method returns a `Promise<T>` — the SDK is async-only by design (the runtime gives you `async/await`, so a sync twin would be redundant).
+
+```ts
+import { MemsyClient } from '@memsy-io/memsy';
+```
+
+## Constructor
+
+```ts
+new MemsyClient(options: MemsyClientOptions)
+```
+
+### `MemsyClientOptions`
+
+| Field         | Type                | Default        | Description                                                         |
+|---------------|---------------------|----------------|---------------------------------------------------------------------|
+| `baseUrl`     | `string` (required) | —              | Base URL of the Memsy API. Trailing slash is stripped automatically.|
+| `apiKey`      | `string` (required) | —              | API key from the dashboard. Sent as `Authorization: Bearer <key>`.  |
+| `timeoutMs`   | `number`            | `30_000`       | Per-request timeout in milliseconds.                                |
+| `maxRetries`  | `number`            | `3`            | Max automatic retries for rate-limited (`429`) responses.           |
+
+```ts
+const client = new MemsyClient({
+  baseUrl: process.env.MEMSY_BASE_URL!,
+  apiKey: process.env.MEMSY_API_KEY!,
+  timeoutMs: 15_000,
+  maxRetries: 5,
+});
+```
+
+## Methods
+
+### `ingest(events)`
+
+Send a batch of events. Returns immediately with the assigned event IDs; processing happens server-side.
+
+```ts
+ingest(events: EventPayload[]): Promise<IngestResponse>
+```
+
+```ts
+const result = await client.ingest([
+  {
+    actorId: 'user_42',
+    sessionId: 'session_1',
+    kind: 'user_message',
+    content: 'I prefer dark mode in all apps.',
+  },
+]);
+
+console.log(result.eventIds);   // ['01JK...', ...]
+console.log(result.usage);       // { apiCalls: 17, apiCallsLimit: 1000, ... }
+console.log(result.rateLimit);   // { limit: 60, remaining: 59, reset: 1730000000 }
+```
+
+See [`EventPayload`](/docs/reference/node/models#eventpayload) for the full event shape.
+
+### `search(query, options?)`
+
+Run a semantic search over your stored memories.
+
+```ts
+search(query: string, options?: SearchOptions): Promise<SearchResponse>
+```
+
+#### `SearchOptions`
+
+| Field                | Type      | Default | Description                                                  |
+|----------------------|-----------|---------|--------------------------------------------------------------|
+| `actorId`            | `string`  | —       | Restrict search to a specific actor.                         |
+| `limit`              | `number`  | `10`    | Max results to return.                                       |
+| `threshold`          | `number`  | `0.3`   | Minimum similarity score (0.0–1.0).                          |
+| `includeSourceEvents`| `boolean` | `false` | Include the originating events alongside each memory.        |
+
+```ts
+const results = await client.search('user preferences', {
+  actorId: 'user_42',
+  limit: 5,
+  threshold: 0.4,
+});
+
+for (const r of results.results) {
+  console.log(`${r.score.toFixed(2)}  ${r.content}`);
+}
+```
+
+### `status(eventIds)`
+
+Check processing status for previously-ingested events. Useful when you want to know whether async extraction has finished.
+
+```ts
+status(eventIds: string[]): Promise<StatusResponse>
+```
+
+```ts
+const ids = ['01JK...', '01JL...'];
+const s = await client.status(ids);
+
+console.log(s.completedIds);   // events whose memories are indexed
+console.log(s.pendingIds);     // still being processed
+console.log(s.failedIds);      // extraction failed
+```
+
+### `health()`
+
+Liveness check for the Memsy API.
+
+```ts
+health(): Promise<HealthResponse>
+```
+
+```ts
+const h = await client.health();
+console.log(h.status);          // 'ok'
+console.log(h.version);         // '0.42.1'
+console.log(h.billingEnabled);  // true | false | null
+```
+
+### `clear(containerTag)`
+
+Reset state for a container tag. Returns the number of records deleted.
+
+```ts
+clear(containerTag: string): Promise<ClearResponse>
+```
+
+```ts
+const result = await client.clear('test-suite');
+console.log(`Deleted ${result.deleted} records`);
+```
+
+<Warning>
+`clear` is destructive — it removes memories permanently. Most apps will never call this; it's primarily useful in tests and dev environments.
+</Warning>
+
+## Common patterns
+
+### Read usage and rate-limit info
+
+Every successful call returns the parsed response headers as `usage` and `rateLimit`:
+
+```ts
+const { usage, rateLimit } = await client.search('preferences');
+
+if (rateLimit.remaining !== null && rateLimit.remaining < 5) {
+  console.warn(`Only ${rateLimit.remaining} requests left this window.`);
+}
+```
+
+### Reuse a single client
+
+The client is cheap to construct but reuse is preferred — it lets the runtime pool HTTP keep-alives. Construct once at module load, share across handlers.
+
+```ts
+// lib/memsy.ts
+import { MemsyClient } from '@memsy-io/memsy';
+
+export const memsy = new MemsyClient({
+  baseUrl: process.env.MEMSY_BASE_URL!,
+  apiKey: process.env.MEMSY_API_KEY!,
+});
+```
+
+### Handle errors
+
+See the [error reference](/docs/reference/node/errors) for the full hierarchy.
+
+```ts
+import {
+  MemsyAuthError,
+  MemsyRateLimitError,
+  MemsyAPIError,
+} from '@memsy-io/memsy';
+
+try {
+  await client.search('preferences');
+} catch (err) {
+  if (err instanceof MemsyAuthError) {
+    /* refresh credentials */
+  } else if (err instanceof MemsyRateLimitError) {
+    /* exponential backoff already done; queue for later */
+  } else if (err instanceof MemsyAPIError) {
+    console.error(err.statusCode, err.detail);
+  } else {
+    throw err;
+  }
+}
+```
+
+## See also
+
+- [Models](/docs/reference/node/models) — request/response type definitions
+- [Errors](/docs/reference/node/errors) — exception hierarchy
+- [Error Handling guide](/docs/error-handling) — patterns for catching the right error

@@ -1,0 +1,99 @@
+---
+title: Sub-resources
+description: orgs, roles, teams, and memories — sub-resources on the Node MemsyClient.
+---
+
+`MemsyClient` exposes four sub-resources for the onboarding hierarchy and console memory browsing. They behave identically to the Python equivalents — same endpoints, same parameter shapes, with camelCased field names and `Promise<T>` returns.
+
+```ts
+import { MemsyClient } from '@memsy-io/memsy';
+
+const client = new MemsyClient({ baseUrl: 'https://api.memsy.io/v1', apiKey: 'msy_...' });
+
+client.orgs;       // OrgsResource
+client.roles;      // RolesResource
+client.teams;      // TeamsResource
+client.memories;   // MemoriesResource
+```
+
+Most onboarding mutation endpoints (create/update/regenerate/delete) are **admin-gated**. Non-admin keys raise [`MemsyAuthorizationError`](/docs/reference/node/errors#memsyauthorizationerror).
+
+## `client.orgs`
+
+```ts
+await client.orgs.list();                                              // Org[]
+await client.orgs.create(orgId, name, focus);                          // Org
+await client.orgs.get(orgId);                                          // Org
+await client.orgs.update(orgId, { name, focus, promotionPrompt });     // Org
+await client.orgs.regeneratePrompt(orgId);                             // Org
+await client.orgs.delete(orgId);                                       // void
+```
+
+| Method | Signature |
+|---|---|
+| `list()` | `Promise<Org[]>` |
+| `create(orgId, name, focus)` | `Promise<Org>` |
+| `get(orgId)` | `Promise<Org>` |
+| `update(orgId, update)` | `Promise<Org>` — `OrgUpdate` |
+| `regeneratePrompt(orgId)` | `Promise<Org>` |
+| `delete(orgId)` | `Promise<void>` |
+
+`OrgUpdate` is `{ name?, focus?, promotionPrompt? }`.
+
+## `client.roles`
+
+Roles always require an `orgId`.
+
+```ts
+await client.roles.list(orgId, { limit, offset });                              // Role[]
+await client.roles.create(orgId, name, focus);                                  // Role
+await client.roles.get(roleId, orgId);                                          // Role
+await client.roles.update(roleId, orgId, { name, focus, promotionPrompt });     // Role
+await client.roles.regeneratePrompt(roleId, orgId);                             // Role
+await client.roles.delete(roleId, orgId);                                       // void
+```
+
+## `client.teams`
+
+Same shape as `roles` — every method takes an `orgId`.
+
+```ts
+await client.teams.list(orgId, { limit, offset });                              // Team[]
+await client.teams.create(orgId, name, focus);                                  // Team
+await client.teams.get(teamId, orgId);                                          // Team
+await client.teams.update(teamId, orgId, { name, focus, promotionPrompt });     // Team
+await client.teams.regeneratePrompt(teamId, orgId);                             // Team
+await client.teams.delete(teamId, orgId);                                       // void
+```
+
+## `client.memories`
+
+Read-only console memory browsing.
+
+```ts
+await client.memories.list({                                  // MemoryListResponse
+  kind: 'semantic',
+  type: 'preference',
+  status: 'active',
+  sort: 'observed_at_desc',
+  search: 'dark mode',
+  limit: 50,
+  offset: 0,
+});
+await client.memories.stats();                                // MemoryStatsResponse
+await client.memories.get(memoryId);                          // MemoryItem
+```
+
+| Method | Signature |
+|---|---|
+| `list(options?)` | `Promise<MemoryListResponse>` — `MemoryListOptions` |
+| `stats()` | `Promise<MemoryStatsResponse>` |
+| `get(memoryId)` | `Promise<MemoryItem>` |
+
+`MemoryListOptions` is `{ kind?, type?, status?, sort?, search?, limit?, offset? }`.
+
+## See also
+
+- [Models reference](/docs/reference/node/models) — full shape of `Org`, `Role`, `Team`, `MemoryItem`, etc.
+- [Onboarding guide](/docs/onboarding) — when and why to set up the hierarchy
+- [Console Memories guide](/docs/console-memories) — patterns for browsing/auditing memories

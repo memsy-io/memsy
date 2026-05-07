@@ -1,32 +1,20 @@
+import { BaseHttpClient, type BaseClientOptions } from "./http.js";
 import {
   type ClearResponse,
   type EventPayload,
   type HealthResponse,
   type IngestResponse,
-  type RateLimitInfo,
   type SearchResponse,
   type StatusResponse,
-  type UsageInfo,
-  parseRateLimitInfo,
-  parseUsageInfo,
+  parseSourceEvents,
   serializeEvent,
 } from "./models.js";
-import {
-  MemsyAPIError,
-  MemsyAuthError,
-  MemsyConnectionError,
-  MemsyRateLimitError,
-} from "./errors.js";
+import { OrgsResource } from "./resources/orgs.js";
+import { RolesResource } from "./resources/roles.js";
+import { TeamsResource } from "./resources/teams.js";
+import { MemoriesResource } from "./resources/memories.js";
 
-const DEFAULT_MAX_RETRIES = 3;
-const DEFAULT_TIMEOUT_MS = 30_000;
-
-export interface MemsyClientOptions {
-  baseUrl: string;
-  apiKey: string;
-  timeoutMs?: number;
-  maxRetries?: number;
-}
+export type MemsyClientOptions = BaseClientOptions;
 
 export interface SearchOptions {
   actorId?: string;
@@ -35,106 +23,39 @@ export interface SearchOptions {
   includeSourceEvents?: boolean;
 }
 
-export class MemsyClient {
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-  private readonly timeoutMs: number;
-  private readonly maxRetries: number;
+/**
+ * Memsy hot-path client (memsy-core).
+ *
+ * Sub-resources mirror the Python SDK's MemsyClient:
+ *   client.orgs       — onboarding org CRUD
+ *   client.roles      — onboarding role CRUD
+ *   client.teams      — onboarding team CRUD
+ *   client.memories   — console memory browsing
+ */
+export class MemsyClient extends BaseHttpClient {
+  readonly orgs: OrgsResource;
+  readonly roles: RolesResource;
+  readonly teams: TeamsResource;
+  readonly memories: MemoriesResource;
 
   constructor(options: MemsyClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/, "");
-    this.apiKey = options.apiKey;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    super(options);
+    this.orgs = new OrgsResource(this);
+    this.roles = new RolesResource(this);
+    this.teams = new TeamsResource(this);
+    this.memories = new MemoriesResource(this);
   }
 
-  private get headers(): Record<string, string> {
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${this.apiKey}`,
-    };
-  }
-
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown
-  ): Promise<{ data: T; usage: UsageInfo; rateLimit: RateLimitInfo }> {
-    const url = `${this.baseUrl}${path}`;
-
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      let response: Response;
-      try {
-        response = await fetch(url, {
-          method,
-          headers: this.headers,
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-          signal: AbortSignal.timeout(this.timeoutMs),
-        });
-      } catch (err) {
-        if (err instanceof Error && err.name === "TimeoutError") {
-          throw new MemsyConnectionError(`Request to Memsy timed out: ${url}`);
-        }
-        throw new MemsyConnectionError(
-          `Could not connect to Memsy at ${this.baseUrl}: ${err}`
-        );
-      }
-
-      const usage = parseUsageInfo(response.headers);
-      const rateLimit = parseRateLimitInfo(response.headers);
-
-      if (response.status === 429 && attempt < this.maxRetries) {
-        const retryAfter = response.headers.get("Retry-After");
-        const waitMs = retryAfter
-          ? parseFloat(retryAfter) * 1000
-          : 1000 * Math.pow(2, attempt);
-        await sleep(waitMs);
-        continue;
-      }
-
-      if (!response.ok) {
-        const detail = await response.text().catch(() => "");
-        if (response.status === 401) throw new MemsyAuthError(detail);
-        if (response.status === 429)
-          throw new MemsyRateLimitError(
-            detail,
-            parseFloat(response.headers.get("Retry-After") ?? "NaN") || null
-          );
-        throw new MemsyAPIError(
-          `Memsy API error ${response.status}`,
-          response.status,
-          detail
-        );
-      }
-
-      if (response.status === 204) {
-        return { data: null as T, usage, rateLimit };
-      }
-
-      const data = (await response.json()) as T;
-      return { data, usage, rateLimit };
-    }
-
-    throw new MemsyRateLimitError("Max retries exceeded");
-  }
-
-  /**
-   * Ingest a batch of events into Memsy.
-   */
   async ingest(events: EventPayload[]): Promise<IngestResponse> {
-    const { data, usage, rateLimit } = await this.request<{
-      event_ids: string[];
-    }>("POST", "/ingest", { events: events.map(serializeEvent) });
+    const { data, usage, rateLimit } = await this.request<{ event_ids: string[] }>(
+      "POST",
+      "/ingest",
+      { body: { events: events.map(serializeEvent) } }
+    );
     return { eventIds: data.event_ids, usage, rateLimit };
   }
 
-  /**
-   * Search memories with a natural language query.
-   */
-  async search(
-    query: string,
-    options: SearchOptions = {}
-  ): Promise<SearchResponse> {
+  async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
     const body: Record<string, unknown> = {
       query,
       limit: options.limit ?? 10,
@@ -150,7 +71,7 @@ export class MemsyClient {
         score: number;
         metadata?: Record<string, unknown>;
       }>;
-    }>("POST", "/search", body);
+    }>("POST", "/search", { body });
 
     return {
       results: data.results.map((r) => ({
@@ -158,15 +79,13 @@ export class MemsyClient {
         content: r.content,
         score: r.score,
         metadata: r.metadata ?? null,
+        sourceEvents: parseSourceEvents(r.metadata),
       })),
       usage,
       rateLimit,
     };
   }
 
-  /**
-   * Check processing status for previously ingested event IDs.
-   */
   async status(eventIds: string[]): Promise<StatusResponse> {
     const { data, usage, rateLimit } = await this.request<{
       completedIds: string[];
@@ -174,22 +93,19 @@ export class MemsyClient {
       pendingIds: string[];
       total: number;
       statuses?: Record<string, string>;
-    }>("POST", "/status", { event_ids: eventIds });
+    }>("POST", "/status", { body: { event_ids: eventIds } });
 
     return {
-      completedIds: data.completedIds,
-      failedIds: data.failedIds,
-      pendingIds: data.pendingIds,
-      total: data.total,
+      completedIds: data.completedIds ?? [],
+      failedIds: data.failedIds ?? [],
+      pendingIds: data.pendingIds ?? [],
+      total: data.total ?? 0,
       statuses: data.statuses ?? null,
       usage,
       rateLimit,
     };
   }
 
-  /**
-   * Check if the Memsy service is healthy.
-   */
   async health(): Promise<HealthResponse> {
     const { data, usage, rateLimit } = await this.request<{
       status: string;
@@ -208,18 +124,11 @@ export class MemsyClient {
     };
   }
 
-  /**
-   * Clear tracking state for a container tag.
-   */
   async clear(containerTag: string): Promise<ClearResponse> {
-    const { data, usage, rateLimit } = await this.request<{ deleted: number }>(
+    const { data, usage, rateLimit } = await this.request<{ deleted?: number } | null>(
       "DELETE",
       `/clear/${encodeURIComponent(containerTag)}`
     );
     return { deleted: data?.deleted ?? 0, usage, rateLimit };
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -23,7 +23,7 @@ MemsyClient(
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `base_url` | `str` | — | Memsy API base URL, e.g. `"https://api.memsy.io"`. Trailing slashes are trimmed. |
+| `base_url` | `str` | — | Memsy API base URL, e.g. `"https://api.memsy.io/v1"`. Trailing slashes are trimmed. |
 | `api_key` | `str` | — | API key of the form `msy_...`. Sent as `Authorization: Bearer <key>`. |
 | `timeout` | `float` | `30.0` | Request timeout in seconds. Covers connect + read + write. |
 | `max_retries` | `int` | `3` | Max automatic retries on HTTP 429. |
@@ -202,7 +202,7 @@ A `MemsyClient` wraps an `httpx.Client`, which is safe to share across threads f
 
 ## See also
 
-- **[`AsyncMemsyClient`](/docs/async-memsy-client)** — same interface, async.
-- **[`MemsyControlClient`](/docs/control-client)** — control-plane client (billing, keys, usage).
-- **[Models](/docs/models)** — every request/response dataclass.
-- **[Exceptions](/docs/exceptions)** — every error class.
+- **[`AsyncMemsyClient`](/docs/reference/python/async-memsy-client)** — same interface, async.
+- **[`MemsyControlClient`](/docs/reference/python/control-client)** — control-plane client (billing, keys, usage).
+- **[Models](/docs/reference/python/models)** — every request/response dataclass.
+- **[Exceptions](/docs/reference/python/exceptions)** — every error class.

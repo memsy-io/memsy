@@ -1,34 +1,112 @@
 ---
 title: Installation
-description: Install the memsy Python package.
+description: Install the Memsy SDK for your language — Python or Node.js — or call the HTTP API directly.
 ---
+
+Memsy ships official clients for **Python** and **Node.js**. Both are thin, typed HTTP clients with built-in retries, usage tracking, and identical method names. If neither matches your stack, the **cURL** tab on every page shows the raw HTTP call so you can wire it up in any language.
 
 ## Requirements
 
-- **Python**: 3.10, 3.11, 3.12 or 3.13.
-- **OS**: macOS, Linux, Windows.
-- **One dependency**: [`httpx`](https://www.python-httpx.org/) `>=0.25`, installed automatically.
+<Tabs>
+  <Tab title="Python">
+    - **Python**: 3.10, 3.11, 3.12, or 3.13
+    - **OS**: macOS, Linux, Windows
+    - **One dependency**: [`httpx`](https://www.python-httpx.org/) `>=0.25`, installed automatically
+  </Tab>
+  <Tab title="Node">
+    - **Node.js**: 18.x or newer (uses the global `fetch` and `AbortSignal.timeout`)
+    - **Module formats**: ESM and CommonJS both supported
+    - **TypeScript**: types ship with the package — no `@types/...` install needed
+    - **Zero runtime dependencies**
+  </Tab>
+  <Tab title="cURL">
+    Any HTTP client works. The examples in these docs use `curl` for clarity, but you can use Postman, Insomnia, or your language's standard `http` library.
+  </Tab>
+</Tabs>
 
-## Install from PyPI
+## Install
 
 <Tabs>
-  <Tab title="pip">```bash pip install memsy ```</Tab>
-  <Tab title="uv">```bash uv add memsy ```</Tab>
-  <Tab title="poetry">```bash poetry add memsy ```</Tab>
-  <Tab title="pipenv">```bash pipenv install memsy ```</Tab>
+  <Tab title="Python">
+    <Tabs>
+      <Tab title="pip">
+        ```bash
+        pip install memsy
+        ```
+      </Tab>
+      <Tab title="uv">
+        ```bash
+        uv add memsy
+        ```
+      </Tab>
+      <Tab title="poetry">
+        ```bash
+        poetry add memsy
+        ```
+      </Tab>
+      <Tab title="pipenv">
+        ```bash
+        pipenv install memsy
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+  <Tab title="Node">
+    <Tabs>
+      <Tab title="npm">
+        ```bash
+        npm install @memsy-io/memsy
+        ```
+      </Tab>
+      <Tab title="pnpm">
+        ```bash
+        pnpm add @memsy-io/memsy
+        ```
+      </Tab>
+      <Tab title="yarn">
+        ```bash
+        yarn add @memsy-io/memsy
+        ```
+      </Tab>
+      <Tab title="bun">
+        ```bash
+        bun add @memsy-io/memsy
+        ```
+      </Tab>
+    </Tabs>
+  </Tab>
+  <Tab title="cURL">
+    Nothing to install — `curl` is preinstalled on macOS and most Linux distros. On Windows, use the bundled `curl.exe` (Windows 10+) or install it via `winget install curl`.
+  </Tab>
 </Tabs>
 
 ## Verify the install
 
-```python
-import memsy
-print(memsy.__name__)          # 'memsy'
-from memsy import MemsyClient  # no ImportError
-```
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import memsy
+    print(memsy.__name__)          # 'memsy'
+    from memsy import MemsyClient  # no ImportError
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    import { MemsyClient } from '@memsy-io/memsy';
+    console.log(typeof MemsyClient); // 'function'
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    curl --version
+    # curl 8.x ...
+    ```
+  </Tab>
+</Tabs>
 
-## Dev extras
+## Dev extras (Python only)
 
-If you're contributing to the SDK or want the test tooling locally:
+If you're contributing to the Python SDK or want the test tooling locally:
 
 ```bash
 pip install "memsy[dev]"
