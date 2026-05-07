@@ -21,12 +21,12 @@ class TestUsageInfoParsing:
     def test_parse_all_usage_headers(self):
         """Test parsing all usage headers correctly."""
         headers = {
-            "X-Usage-ApiCall": "100",
-            "X-Usage-ApiCall-Limit": "500000",
+            "X-Usage-ApiCalls": "100",
+            "X-Usage-ApiCalls-Limit": "500000",
             "X-Usage-EventsIngested": "25000",
             "X-Usage-EventsIngested-Limit": "100000",
-            "X-Usage-MemoryStored": "5000",
-            "X-Usage-MemoryStored-Limit": "50000",
+            "X-Usage-MemoriesStored": "5000",
+            "X-Usage-MemoriesStored-Limit": "50000",
             "X-Usage-LlmTokens": "100000",
             "X-Usage-LlmTokens-Limit": "1000000",
             "X-Usage-SearchQueries": "5000",
@@ -51,7 +51,7 @@ class TestUsageInfoParsing:
     def test_parse_partial_usage_headers(self):
         """Test parsing partial usage headers."""
         headers = {
-            "X-Usage-ApiCall": "100",
+            "X-Usage-ApiCalls": "100",
             "X-Plan": "free",
         }
         
@@ -74,8 +74,8 @@ class TestUsageInfoParsing:
     def test_parse_invalid_int_values(self):
         """Test parsing with invalid integer values."""
         headers = {
-            "X-Usage-ApiCall": "not-a-number",
-            "X-Usage-ApiCall-Limit": "500000",
+            "X-Usage-ApiCalls": "not-a-number",
+            "X-Usage-ApiCalls-Limit": "500000",
         }
         
         usage = UsageInfo.from_headers(headers)
@@ -149,8 +149,8 @@ class TestClientResponseHeaders:
         mock_response.is_success = True
         mock_response.json.return_value = {"status": "ok"}
         mock_response.headers = {
-            "X-Usage-ApiCall": "100",
-            "X-Usage-ApiCall-Limit": "500000",
+            "X-Usage-ApiCalls": "100",
+            "X-Usage-ApiCalls-Limit": "500000",
             "X-Plan": "pro",
             "X-RateLimit-Limit": "1000",
             "X-RateLimit-Remaining": "950",
@@ -174,7 +174,7 @@ class TestClientResponseHeaders:
         mock_response.is_success = True
         mock_response.json.return_value = {"status": "ok"}
         mock_response.headers = {
-            "X-Usage-ApiCall": "100",
+            "X-Usage-ApiCalls": "100",
             "X-Plan": "free",
         }
 
