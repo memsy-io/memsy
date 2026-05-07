@@ -278,6 +278,17 @@ export async function classifyError(response: Response): Promise<MemsyAPIError> 
   }
 
   if (status === 403) {
+    // AWS API Gateway HTTP API v2 returns 403 with body {"message":"Forbidden"}
+    // when the Lambda authorizer denies — semantically that's an auth failure
+    // (invalid/revoked/missing key), not a scope or permission problem. Map it
+    // to MemsyAuthError so `instanceof MemsyAuthError` behaves correctly.
+    if (
+      errorCode === null &&
+      Object.keys(body).length === 1 &&
+      body.message === "Forbidden"
+    ) {
+      return new MemsyAuthError(detail, base);
+    }
     if (errorCode === "feature_not_available") {
       return new MemsyFeatureNotAvailableError(detail, {
         ...base,
