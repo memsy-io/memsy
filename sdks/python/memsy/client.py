@@ -29,7 +29,12 @@ class MemsyClient(HttpCoreMixin):
 
     Usage::
 
-        client = MemsyClient(base_url="https://your-api-gateway-url", api_key="***")
+        import os
+
+        client = MemsyClient(
+            base_url=os.environ["MEMSY_BASE_URL"],
+            api_key=os.environ["MEMSY_API_KEY"],
+        )
 
         # or as a context manager
         with MemsyClient(base_url="...", api_key="***") as client:

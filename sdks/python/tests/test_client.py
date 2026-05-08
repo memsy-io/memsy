@@ -222,8 +222,8 @@ class TestUsageHeaders:
         mock_response.is_success = True
         mock_response.json.return_value = {"status": "ok"}
         mock_response.headers = {
-            "X-Usage-ApiCall": "100",
-            "X-Usage-ApiCall-Limit": "500000",
+            "X-Usage-ApiCalls": "100",
+            "X-Usage-ApiCalls-Limit": "500000",
             "X-Plan": "pro",
         }
         mock_request.return_value = mock_response

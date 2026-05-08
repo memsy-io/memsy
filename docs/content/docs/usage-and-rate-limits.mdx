@@ -44,8 +44,8 @@ Both may be `None` / `null` if the server didn't return the corresponding header
       -d '{"query": "preferences"}' \
       | grep -E "^X-(Usage|Plan|RateLimit)-"
     # X-Plan: pro
-    # X-Usage-ApiCall: 1042
-    # X-Usage-ApiCall-Limit: 100000
+    # X-Usage-ApiCalls: 1042
+    # X-Usage-ApiCalls-Limit: 100000
     # ...
     ```
   </Tab>
@@ -107,12 +107,12 @@ Fields on `RateLimitInfo`:
 
 | Header | Field |
 |---|---|
-| `X-Usage-ApiCall` | `usage.api_calls` |
-| `X-Usage-ApiCall-Limit` | `usage.api_calls_limit` |
+| `X-Usage-ApiCalls` | `usage.api_calls` |
+| `X-Usage-ApiCalls-Limit` | `usage.api_calls_limit` |
 | `X-Usage-EventsIngested` | `usage.events_ingested` |
 | `X-Usage-EventsIngested-Limit` | `usage.events_ingested_limit` |
-| `X-Usage-MemoryStored` | `usage.memory_stored` |
-| `X-Usage-MemoryStored-Limit` | `usage.memory_stored_limit` |
+| `X-Usage-MemoriesStored` | `usage.memory_stored` |
+| `X-Usage-MemoriesStored-Limit` | `usage.memory_stored_limit` |
 | `X-Usage-LlmTokens` | `usage.llm_tokens` |
 | `X-Usage-LlmTokens-Limit` | `usage.llm_tokens_limit` |
 | `X-Usage-SearchQueries` | `usage.search_queries` |

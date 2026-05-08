@@ -9,8 +9,8 @@ description: The Node.js MemsyControlClient — control-plane endpoints (api/) f
 import { MemsyControlClient } from '@memsy-io/memsy';
 
 const control = new MemsyControlClient({
-  baseUrl: 'https://api.memsy.io/api',
-  apiKey: 'msy_...',
+  baseUrl: process.env.MEMSY_CONTROL_URL!,
+  apiKey: process.env.MEMSY_API_KEY!,
 });
 ```
 

@@ -94,6 +94,22 @@ class HttpCoreMixin:
             )
 
         if status_code == 403:
+            # AWS API Gateway HTTP API v2 returns 403 with body {"message":"Forbidden"}
+            # when the Lambda authorizer denies — semantically that's an auth failure
+            # (invalid/revoked/missing key), not a scope or permission problem. Map it to
+            # AuthenticationError so callers' except blocks behave correctly.
+            if (
+                error_code is None
+                and len(body) == 1
+                and body.get("message") == "Forbidden"
+            ):
+                return AuthenticationError(
+                    f"Authentication failed: {detail}",
+                    status_code=status_code,
+                    detail=detail,
+                    error_code=error_code,
+                    response=response,
+                )
             if error_code == "feature_not_available":
                 return FeatureNotAvailable(
                     f"Feature not available: {detail}",

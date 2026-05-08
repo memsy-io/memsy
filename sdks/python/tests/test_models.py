@@ -482,8 +482,8 @@ class TestUsageInfo:
     def test_from_headers_populated(self):
         u = UsageInfo.from_headers(
             {
-                "X-Usage-ApiCall": "100",
-                "X-Usage-ApiCall-Limit": "50000",
+                "X-Usage-ApiCalls": "100",
+                "X-Usage-ApiCalls-Limit": "50000",
                 "X-Plan": "pro",
             }
         )

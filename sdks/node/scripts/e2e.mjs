@@ -3,7 +3,7 @@
  * End-to-end smoke test for @memsy-io/memsy against a live Memsy API.
  *
  * Usage:
- *   MEMSY_BASE_URL=https://api-dev.memsy.io/v1 \
+ *   MEMSY_BASE_URL=https://api.memsy.io/v1 \
  *   MEMSY_API_KEY=msy_xxx \
  *   node sdks/node/scripts/e2e.mjs
  *

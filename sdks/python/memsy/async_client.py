@@ -29,7 +29,12 @@ class AsyncMemsyClient(HttpCoreMixin):
 
     Usage::
 
-        async with AsyncMemsyClient(base_url="https://your-api-gateway-url", api_key="***") as c:
+        import os
+
+        async with AsyncMemsyClient(
+            base_url=os.environ["MEMSY_BASE_URL"],
+            api_key=os.environ["MEMSY_API_KEY"],
+        ) as client:
             health = await client.health()
 
         # or manage lifecycle manually
