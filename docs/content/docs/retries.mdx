@@ -118,10 +118,9 @@ The SDK raises a rate-limit exception with the `Retry-After` value populated if 
 
 ## Idempotency considerations
 
-- `search()` is read-only and always safe to retry.
-- `ingest()` is idempotent within a short rolling window — the server de-duplicates by content hash. Retrying a batch after a 429 is safe.
-- `status()` is read-only.
-- `clear()` is idempotent by definition.
+- `search()` and `status()` are read-only and always safe to retry.
+- `ingest()` is **not** currently idempotent on the server side. Retrying a batch after a 429 will create duplicate events. If you need exactly-once delivery, dedupe on the client before sending — for example, keep a local log of `(actor_id, session_id, kind, content_hash, ts)` tuples and skip rows that have already succeeded. Server-side dedupe may land in a future release; watch the SDK CHANGELOG for the announcement.
+- `clear()` is currently a stub that returns **501 Not Implemented** — it does not delete anything. A real actor-scoped delete is being designed; until then, calling `clear()` will raise `MemsyAPIError` (Python) / `MemsyAPIError` (Node). Avoid calling it in production paths.
 
 ## Timeouts
 

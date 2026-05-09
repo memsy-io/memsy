@@ -38,10 +38,17 @@ await client.ingest([...])
 await client.search("query", actor_id="user_42")
 await client.status(event_ids=[...])
 await client.health()
-await client.clear("container_tag")
+await client.clear("container_tag")  # currently a 501 stub — see note below
 ```
 
 All parameter names, defaults, return types, and exceptions match the sync client.
+
+<Callout type="warn">
+  `clear()` currently returns `501 Not Implemented` and raises
+  `MemsyAPIError` — the underlying server-side delete is not yet wired up.
+  Avoid calling it in production paths; everything else on the async client
+  is fully functional.
+</Callout>
 
 ## Parallel calls
 

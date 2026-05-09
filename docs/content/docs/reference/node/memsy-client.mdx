@@ -123,7 +123,7 @@ console.log(h.billingEnabled);  // true | false | null
 
 ### `clear(containerTag)`
 
-Reset state for a container tag. Returns the number of records deleted.
+Reset state for a container tag. Returns the number of records deleted (when implemented).
 
 ```ts
 clear(containerTag: string): Promise<ClearResponse>
@@ -135,7 +135,10 @@ console.log(`Deleted ${result.deleted} records`);
 ```
 
 <Warning>
-`clear` is destructive — it removes memories permanently. Most apps will never call this; it's primarily useful in tests and dev environments.
+**Currently a stub.** The server returns `501 Not Implemented` until a real
+actor-scoped delete is wired up; calling `clear()` will throw `MemsyAPIError`.
+Avoid calling it in production paths. Track the SDK CHANGELOG for the
+implementation announcement.
 </Warning>
 
 ## Common patterns
