@@ -389,8 +389,6 @@ class MemoryItemResource:
     status: str
     text: str
     confidence: float
-    # `strength` is bounded 0.0–5.0 by the memsy-core policy ceiling
-    # (PolicyConfig.max_strength). Not a probability.
     strength: float
     recall_count: int
     decay_half_life_days: float

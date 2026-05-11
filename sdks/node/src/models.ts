@@ -142,7 +142,11 @@ export function parseSourceMetadata(
   if (!Array.isArray(raw)) return null;
   return raw.map((entry: Record<string, unknown>) => {
     const out: SourceMetadata = { eventId: String(entry.event_id ?? "") };
-    if (entry.metadata && typeof entry.metadata === "object") {
+    if (
+      entry.metadata &&
+      typeof entry.metadata === "object" &&
+      !Array.isArray(entry.metadata)
+    ) {
       out.metadata = entry.metadata as Record<string, unknown>;
     }
     if (typeof entry.raw === "string") {
