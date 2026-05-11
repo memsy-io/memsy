@@ -28,6 +28,7 @@ description: Browse and inspect stored memories via client.memories.
   <Tab title="Python">
     ```python
     result = client.memories.list(
+        actor_id="user_42",     # optional: filter to a single actor's memories
         kind="semantic",        # optional: "semantic" | "episodic" | ...
         type="preference",      # optional: "preference" | "fact" | "event" | ...
         status="active",        # optional: "active" | "archived" | "decayed"
@@ -45,6 +46,7 @@ description: Browse and inspect stored memories via client.memories.
   <Tab title="Node">
     ```ts
     const result = await client.memories.list({
+      actorId: 'user_42',         // optional: filter to a single actor's memories
       kind: 'semantic',
       type: 'preference',
       status: 'active',
@@ -63,6 +65,8 @@ description: Browse and inspect stored memories via client.memories.
 </Tabs>
 
 ### Pagination
+
+Pagination is stable across pages — the server always sorts by your chosen sort key with `memory_id` as a secondary tiebreaker, so iterating `offset` won't return duplicates or skip records even when many memories share the primary sort value (e.g. identical `observed_at`).
 
 <Tabs>
   <Tab title="Python">
@@ -155,7 +159,7 @@ Aggregate statistics for all memories in the org:
 | `status` | `str` | `"active"`, `"archived"`, or `"decayed"`. |
 | `text` | `str` | The extracted memory text. |
 | `confidence` | `float` | Extraction confidence (0–1). |
-| `strength` | `float` | Reinforcement strength (0–1). |
+| `strength` | `float` | Reinforcement strength (0–5.0, default 1.0). Not a probability. |
 | `recall_count` | `int` | Number of times this memory was recalled in search. |
 | `decay_half_life_days` | `float` | Days until strength halves. |
 | `pinned` | `bool` | Pinned memories never decay. |

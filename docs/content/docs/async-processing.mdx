@@ -117,7 +117,7 @@ Failures are rare but not zero. Check `failed_ids` in your pollers if correctnes
 **Don't block your request pipeline on `status()`.** Use it only when your next action requires the memory to be present.
 </Warning>
 
-- **Don't re-ingest the same event to "retry".** Memsy de-duplicates ingestion by content hash within a short window; re-sending can create noise.
+- **Re-ingesting an event is safe within a 60-second window** — Memsy de-duplicates by `(actor_id, session_id, kind, content)` and returns the original `event_id` so `status()` keeps working. Outside the window, identical payloads will create separate events; use `status()` to confirm processing instead of re-sending.
 - **Do batch aggressively.** `ingest()` accepts many events per call; fifty events in one batch is much cheaper than fifty single-event calls.
 
 ## Next

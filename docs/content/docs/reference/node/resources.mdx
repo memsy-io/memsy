@@ -75,6 +75,7 @@ Read-only console memory browsing.
 
 ```ts
 await client.memories.list({                                  // MemoryListResponse
+  actorId: 'user_42',                                         // filter to a single actor
   kind: 'semantic',
   type: 'preference',
   status: 'active',
@@ -86,6 +87,8 @@ await client.memories.list({                                  // MemoryListRespo
 await client.memories.stats();                                // MemoryStatsResponse
 await client.memories.get(memoryId);                          // MemoryItem
 ```
+
+Pagination is stable across pages: the server always sorts with `memory_id` as a secondary tiebreaker, so walking `offset` won't return duplicates or skip records.
 
 | Method | Signature |
 |---|---|

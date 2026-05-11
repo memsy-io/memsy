@@ -186,6 +186,15 @@ class SearchResult:
         return [SourceEvent.from_dict(e) for e in raw]
 
     @property
+    def source_metadata(self) -> list[dict[str, Any]]:
+        """User-supplied metadata from the source event(s) this memory was
+        extracted from. Each entry is `{"event_id": str, "metadata": dict}` for
+        JSON-object payloads, or `{"event_id": str, "raw": str}` for non-JSON
+        strings the caller passed. Capped at 5 entries.
+        """
+        return self._meta("source_metadata") or []
+
+    @property
     def kind(self) -> str | None:
         return self._meta("kind")
 
@@ -195,6 +204,8 @@ class SearchResult:
 
     @property
     def strength(self) -> float | None:
+        """Reinforcement strength. Bounded ``0.0`` to ``5.0`` (policy ceiling
+        on memsy-core); not a probability."""
         return self._meta("strength")
 
     @property
@@ -378,6 +389,8 @@ class MemoryItemResource:
     status: str
     text: str
     confidence: float
+    # `strength` is bounded 0.0–5.0 by the memsy-core policy ceiling
+    # (PolicyConfig.max_strength). Not a probability.
     strength: float
     recall_count: int
     decay_half_life_days: float

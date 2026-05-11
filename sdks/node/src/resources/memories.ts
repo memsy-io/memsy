@@ -9,6 +9,7 @@ import {
 } from "../models.js";
 
 export interface MemoryListOptions {
+  actorId?: string;
   kind?: string;
   type?: string;
   status?: string;
@@ -30,6 +31,7 @@ export class MemoriesResource {
           sort: options.sort ?? "observed_at_desc",
           limit: options.limit ?? 50,
           offset: options.offset ?? 0,
+          actor_id: options.actorId,
           kind: options.kind,
           type: options.type,
           status: options.status,

@@ -79,8 +79,19 @@ Every successful response carries `usage` and `rateLimit` parsed from response h
 | `id`            | `string`                              | Memory ID.                                                            |
 | `content`       | `string`                              | Extracted memory text.                                                |
 | `score`         | `number`                              | Similarity score `0.0` (none) – `1.0` (exact).                        |
-| `metadata`      | `Record<string, unknown> \| null`     | Any metadata captured during extraction.                              |
+| `metadata`      | `Record<string, unknown> \| null`     | Server-attached fields: `type`, `kind`, `strength`, `confidence`, `entities`, `source_metadata`, … |
 | `sourceEvents`  | `SourceEvent[] \| null`               | Originating events — populated when `includeSourceEvents: true`.      |
+| `sourceMetadata`| `SourceMetadata[] \| null`            | User-supplied metadata from source event(s); capped at 5 entries.     |
+
+### `SourceMetadata`
+
+User-supplied event metadata propagated to memories derived from those events. Surfaced on `SearchResult.sourceMetadata`.
+
+| Field      | Type                              | Description                                                                 |
+|------------|-----------------------------------|-----------------------------------------------------------------------------|
+| `eventId`  | `string`                          | The originating event's ID.                                                 |
+| `metadata` | `Record<string, unknown>` (opt.)  | Parsed object when the event's `metadata` string was valid JSON object.     |
+| `raw`      | `string` (opt.)                   | Original string when the event's `metadata` was not a JSON object.          |
 
 ### `SourceEvent`
 
@@ -167,8 +178,10 @@ Parsed from `X-RateLimit-*` headers.
 | Field        | Type             | Description                                                     |
 |--------------|------------------|-----------------------------------------------------------------|
 | `limit`      | `number \| null` | Max requests allowed in the current window.                     |
-| `remaining`  | `number \| null` | Requests remaining.                                             |
-| `reset`      | `number \| null` | Unix timestamp (seconds) when the window resets.                |
+| `remaining`  | `number \| null` | Calls remaining in the current period (clamped at 0).           |
+| `reset`      | `number \| null` | Unix timestamp (seconds) of the next billing-period boundary.   |
+
+Populated on every authenticated response — the rate-limit dimension is `api_calls`.
 
 ```ts
 const { rateLimit } = await client.search('preferences');
@@ -211,7 +224,7 @@ All three share a common shape and differ only in the ID fields.
 | `status`             | `string`                          | `"active"` / `"archived"` / `"decayed"`.     |
 | `text`               | `string`                          | The extracted memory text.                   |
 | `confidence`         | `number`                          | Extraction confidence (0–1).                 |
-| `strength`           | `number`                          | Reinforcement strength (0–1).                |
+| `strength`           | `number`                          | Reinforcement strength (0–5.0, default 1.0). Not a probability. |
 | `recallCount`        | `number`                          | Times recalled in search.                    |
 | `decayHalfLifeDays`  | `number`                          | Days until strength halves.                  |
 | `pinned`             | `boolean`                         | Pinned memories never decay.                 |

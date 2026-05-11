@@ -7,6 +7,7 @@ import {
   type SearchResponse,
   type StatusResponse,
   parseSourceEvents,
+  parseSourceMetadata,
   serializeEvent,
 } from "./models.js";
 import { OrgsResource } from "./resources/orgs.js";
@@ -80,6 +81,7 @@ export class MemsyClient extends BaseHttpClient {
         score: r.score,
         metadata: r.metadata ?? null,
         sourceEvents: parseSourceEvents(r.metadata),
+        sourceMetadata: parseSourceMetadata(r.metadata),
       })),
       usage,
       rateLimit,

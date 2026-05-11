@@ -8,7 +8,7 @@ Every successful response from the Memsy API carries HTTP headers describing you
 - `usage` — a `UsageInfo`, from `X-Usage-*` and `X-Plan` headers.
 - `rate_limit` (Python) / `rateLimit` (Node) — a `RateLimitInfo`, from `X-RateLimit-*` headers.
 
-Both may be `None` / `null` if the server didn't return the corresponding headers.
+The rate-limit triple is **populated on every authenticated response** (its dimension is `api_calls`); `usage` may still be `None` / `null` on routes that don't carry usage headers (e.g. `/health`).
 
 ## Accessing usage
 
@@ -99,9 +99,9 @@ Fields on `RateLimitInfo`:
 
 | Field | Description |
 |---|---|
-| `limit` | Max requests per window. |
-| `remaining` | Requests remaining in the current window. |
-| `reset` | Unix timestamp when the window resets. |
+| `limit` | Plan limit for the `api_calls` dimension this billing period. |
+| `remaining` | Calls remaining in the current period (clamped at `0`). |
+| `reset` | Unix timestamp (UTC) of the next billing-period boundary — the start of the next month. |
 
 ## Underlying headers
 
@@ -190,7 +190,7 @@ Fields on `RateLimitInfo`:
 ## When usage is missing
 
 <Note>
-If `response.usage` is `None`, the server didn't emit usage headers for that response (e.g. `/health` may omit them). That is not an error.
+`response.usage` may be `None` on routes that don't carry usage headers (e.g. `/health`). That is not an error. `rate_limit` / `rateLimit` is populated on every authenticated response.
 </Note>
 
 ## Next

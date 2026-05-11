@@ -18,6 +18,7 @@ class MemoriesResource:
     def list(
         self,
         *,
+        actor_id: str | None = None,
         kind: str | None = None,
         type: str | None = None,
         status: str | None = None,
@@ -29,6 +30,7 @@ class MemoriesResource:
         """
         Browse memories for the authenticated org.
 
+        :param actor_id: Filter to memories scoped to a single actor.
         :param kind: Filter by memory_kind (e.g. ``"semantic"``, ``"episodic"``, ``"procedural"``).
         :param type: Filter by type (e.g. ``"fact"``, ``"preference"``, ``"norm"``).
         :param status: Filter by status. Defaults to ``"active"`` on the server.
@@ -36,9 +38,12 @@ class MemoriesResource:
                      ``"strength_desc"``, ``"confidence_desc"``, ``"created_at_desc"``.
         :param search: Substring text filter applied server-side.
         :param limit: Page size (1–200, default 50).
-        :param offset: Pagination offset.
+        :param offset: Pagination offset. Results are stable across pages — the
+                       sort always includes ``memory_id`` as a tiebreaker.
         """
         params: dict[str, object] = {"sort": sort, "limit": limit, "offset": offset}
+        if actor_id is not None:
+            params["actor_id"] = actor_id
         if kind is not None:
             params["kind"] = kind
         if type is not None:
@@ -70,6 +75,7 @@ class AsyncMemoriesResource:
     async def list(
         self,
         *,
+        actor_id: str | None = None,
         kind: str | None = None,
         type: str | None = None,
         status: str | None = None,
@@ -81,6 +87,7 @@ class AsyncMemoriesResource:
         """
         Browse memories for the authenticated org.
 
+        :param actor_id: Filter to memories scoped to a single actor.
         :param kind: Filter by memory_kind (e.g. ``"semantic"``, ``"episodic"``, ``"procedural"``).
         :param type: Filter by type (e.g. ``"fact"``, ``"preference"``, ``"norm"``).
         :param status: Filter by status. Defaults to ``"active"`` on the server.
@@ -88,9 +95,12 @@ class AsyncMemoriesResource:
                      ``"strength_desc"``, ``"confidence_desc"``, ``"created_at_desc"``.
         :param search: Substring text filter applied server-side.
         :param limit: Page size (1–200, default 50).
-        :param offset: Pagination offset.
+        :param offset: Pagination offset. Results are stable across pages — the
+                       sort always includes ``memory_id`` as a tiebreaker.
         """
         params: dict[str, object] = {"sort": sort, "limit": limit, "offset": offset}
+        if actor_id is not None:
+            params["actor_id"] = actor_id
         if kind is not None:
             params["kind"] = kind
         if type is not None:

@@ -188,6 +188,7 @@ Browse and inspect stored memories. See **[Console Memories](/docs/console-memor
 ```python
 client.memories.list(
     *,
+    actor_id: str | None = None,  # filter to a single actor's memories
     kind: str | None = None,
     type: str | None = None,
     status: str | None = None,
@@ -200,6 +201,8 @@ client.memories.list(
 client.memories.get(memory_id: str) -> MemoryItemResource
 client.memories.stats() -> MemoryStatsResponse
 ```
+
+Pagination is stable across pages: every sort includes `memory_id` as a secondary tiebreaker, so walking `offset` won't return duplicates or skip records.
 
 ---
 

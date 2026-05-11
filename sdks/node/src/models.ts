@@ -99,12 +99,25 @@ export interface SourceEvent {
   ts: string | null;
 }
 
+export interface SourceMetadata {
+  eventId: string;
+  /** Parsed metadata when the originating event's `metadata` was a JSON object. */
+  metadata?: Record<string, unknown>;
+  /** Raw string when the originating event's `metadata` was not a JSON object. */
+  raw?: string;
+}
+
 export interface SearchResult {
   id: string;
   content: string;
   score: number;
   metadata: Record<string, unknown> | null;
   sourceEvents: SourceEvent[] | null;
+  /**
+   * User-supplied metadata propagated from the source event(s) this memory was
+   * extracted from. Capped at 5 entries by the server.
+   */
+  sourceMetadata: SourceMetadata[] | null;
 }
 
 export function parseSourceEvents(
@@ -119,6 +132,24 @@ export function parseSourceEvents(
     content: String(e.content ?? ""),
     ts: typeof e.ts === "string" ? e.ts : null,
   }));
+}
+
+export function parseSourceMetadata(
+  metadata: Record<string, unknown> | null | undefined
+): SourceMetadata[] | null {
+  if (!metadata) return null;
+  const raw = metadata.source_metadata;
+  if (!Array.isArray(raw)) return null;
+  return raw.map((entry: Record<string, unknown>) => {
+    const out: SourceMetadata = { eventId: String(entry.event_id ?? "") };
+    if (entry.metadata && typeof entry.metadata === "object") {
+      out.metadata = entry.metadata as Record<string, unknown>;
+    }
+    if (typeof entry.raw === "string") {
+      out.raw = entry.raw;
+    }
+    return out;
+  });
 }
 
 export interface SearchResponse {
@@ -252,6 +283,10 @@ export interface MemoryItem {
   status: string;
   text: string;
   confidence: number;
+  /**
+   * Reinforcement strength. Bounded 0.0–5.0 by the memsy-core policy ceiling
+   * (PolicyConfig.max_strength). Not a probability.
+   */
   strength: number;
   recallCount: number;
   decayHalfLifeDays: number;
