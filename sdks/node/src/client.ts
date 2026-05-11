@@ -25,7 +25,7 @@ export interface SearchOptions {
 }
 
 /**
- * Memsy hot-path client (memsy-core).
+ * Memsy client — ingest, search, and read back memories.
  *
  * Sub-resources mirror the Python SDK's MemsyClient:
  *   client.orgs       — onboarding org CRUD

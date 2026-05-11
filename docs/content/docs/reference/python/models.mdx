@@ -19,11 +19,11 @@ from memsy import (
     StatusResponse,
     HealthResponse,
     ClearResponse,
-    # Onboarding (memsy-core)
+    # Onboarding
     OrgResource,
     RoleResource,
     TeamResource,
-    # Console memories (memsy-core)
+    # Console memories
     MemoryScopeInfo,
     MemoryItemResource,
     MemoryListResponse,
@@ -181,7 +181,7 @@ class ClearResponse:
 
 ---
 
-## Onboarding models (memsy-core)
+## Onboarding models
 
 Returned by `client.orgs.*`, `client.roles.*`, and `client.teams.*`.
 
@@ -231,7 +231,7 @@ class TeamResource:
 
 ---
 
-## Console memory models (memsy-core)
+## Console memory models
 
 Returned by `client.memories.*`.
 
@@ -262,7 +262,7 @@ class MemoryItemResource:
     status: str
     text: str
     confidence: float
-    strength: float  # bounded 0.0–5.0 by PolicyConfig.max_strength
+    strength: float  # bounded 0.0–5.0 by platform policy
     recall_count: int
     decay_half_life_days: float
     pinned: bool

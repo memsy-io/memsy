@@ -275,7 +275,7 @@ Recommended batch size: tens to low hundreds. Very large batches (thousands) inc
 ## Idempotency
 
 - Memsy de-duplicates within a rolling **60-second window** by `(actor_id, session_id, kind, content)` hash. Identical re-posts within the window are collapsed and the response returns the **original** `event_id` for each duplicate, so SDK retries and `status()` lookups continue to work.
-- The window length is configurable on the platform via `MEMSY_DEDUPE_WINDOW_SEC` (default `60`); dedup is best-effort and degrades to no-dedup if the platform's Redis is unavailable.
+- Dedup is best-effort — under platform degradation you may still see fresh `event_id`s for duplicate submissions. Treat the window as a safety net for transient retries, not a guarantee.
 - If you genuinely need to re-ingest after the window, change any of the four fields — typically by appending `ts` to the content or sending a fresh `session_id`.
 
 ## Validation rules
@@ -286,9 +286,9 @@ Recommended batch size: tens to low hundreds. Very large batches (thousands) inc
 - `actor_id` and `session_id` must be non-empty after trimming whitespace; both are capped at **256 characters**.
 - `role_id` and `team_id` are also capped at **256 characters** and collapse to `null` when only whitespace.
 - `metadata` is capped at **4096 characters**.
-- All string fields silently drop NUL bytes — they would otherwise be rejected by the storage layer.
+- NUL bytes are silently stripped from all string fields before persistence.
 
-Invalid JSON in `metadata` is **not** a validation error: the server stores it under `{"raw": <original_str>}` on the event and exposes it back under `source_metadata` on derived memories.
+Invalid JSON in `metadata` is **not** a validation error: the original string is preserved as `{"raw": <original_str>}` on the event and surfaces back under `source_metadata` on derived memories.
 
 ## Failure modes
 

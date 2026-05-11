@@ -114,8 +114,8 @@ export interface SearchResult {
   metadata: Record<string, unknown> | null;
   sourceEvents: SourceEvent[] | null;
   /**
-   * User-supplied metadata propagated from the source event(s) this memory was
-   * extracted from. Capped at 5 entries by the server.
+   * User-supplied metadata propagated from the source event(s) this memory
+   * was extracted from. Capped at 5 entries.
    */
   sourceMetadata: SourceMetadata[] | null;
 }
@@ -288,8 +288,9 @@ export interface MemoryItem {
   text: string;
   confidence: number;
   /**
-   * Reinforcement strength. Bounded 0.0–5.0 by the memsy-core policy ceiling
-   * (PolicyConfig.max_strength). Not a probability.
+   * Reinforcement strength, bounded 0.0–5.0 by platform policy. Starts at
+   * 1.0 and grows with search hits; not a probability — don't normalise
+   * to [0, 1].
    */
   strength: number;
   recallCount: number;

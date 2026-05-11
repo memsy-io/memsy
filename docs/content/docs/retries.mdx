@@ -119,7 +119,7 @@ The SDK raises a rate-limit exception with the `Retry-After` value populated if 
 ## Idempotency considerations
 
 - `search()` and `status()` are read-only and always safe to retry.
-- `ingest()` is **safe to retry within a rolling 60-second window**. The server hashes `(actor_id, session_id, kind, content)` and collapses identical tuples to a single stored event, returning the **original** `event_id` for duplicates so subsequent `status()` calls still work. The window length is configurable on the platform via `MEMSY_DEDUPE_WINDOW_SEC` (default 60s). Dedup is best-effort — if the platform's Redis is unavailable the path degrades to no-dedup and you'll see fresh event IDs. For retries outside the window or cross-process exactly-once needs, keep a client-side log of submitted hashes.
+- `ingest()` is **safe to retry within a rolling 60-second window**. The platform hashes `(actor_id, session_id, kind, content)` and collapses identical tuples to a single stored event, returning the **original** `event_id` for duplicates so subsequent `status()` calls still work. Dedup is best-effort — under platform degradation you may still see fresh `event_id`s for duplicate submissions, so for retries outside the window or cross-process exactly-once needs, keep a client-side log of submitted hashes.
 - `clear()` is currently a stub that returns **501 Not Implemented** — it does not delete anything. A real actor-scoped delete is being designed; until then, calling `clear()` will raise `MemsyAPIError` (Python) / `MemsyAPIError` (Node). Avoid calling it in production paths.
 
 ## Timeouts

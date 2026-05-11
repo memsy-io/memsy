@@ -25,7 +25,7 @@ from memsy.resources.teams import AsyncTeamsResource
 
 class AsyncMemsyClient(HttpCoreMixin):
     """
-    Asynchronous Memsy SDK client for the hot-path memory engine (memsy-core).
+    Asynchronous Memsy SDK client.
 
     Usage::
 
