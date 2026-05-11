@@ -27,12 +27,12 @@ class UsageInfo:
     def from_headers(cls, headers: Mapping[str, str]) -> UsageInfo:
         """Parse usage info from response headers."""
         return cls(
-            api_calls=_parse_int_header(headers, "X-Usage-ApiCall"),
-            api_calls_limit=_parse_int_header(headers, "X-Usage-ApiCall-Limit"),
+            api_calls=_parse_int_header(headers, "X-Usage-ApiCalls"),
+            api_calls_limit=_parse_int_header(headers, "X-Usage-ApiCalls-Limit"),
             events_ingested=_parse_int_header(headers, "X-Usage-EventsIngested"),
             events_ingested_limit=_parse_int_header(headers, "X-Usage-EventsIngested-Limit"),
-            memory_stored=_parse_int_header(headers, "X-Usage-MemoryStored"),
-            memory_stored_limit=_parse_int_header(headers, "X-Usage-MemoryStored-Limit"),
+            memory_stored=_parse_int_header(headers, "X-Usage-MemoriesStored"),
+            memory_stored_limit=_parse_int_header(headers, "X-Usage-MemoriesStored-Limit"),
             llm_tokens=_parse_int_header(headers, "X-Usage-LlmTokens"),
             llm_tokens_limit=_parse_int_header(headers, "X-Usage-LlmTokens-Limit"),
             search_queries=_parse_int_header(headers, "X-Usage-SearchQueries"),
