@@ -117,12 +117,12 @@ clear(container_tag: str) -> ClearResponse
 |---|---|---|
 | `container_tag` | `str` | Container/conversation tag to clear. |
 
-<Callout type="warn">
+<Warning>
   **Currently a stub.** The server returns `501 Not Implemented` until a real
   actor-scoped delete is wired up; calling `clear()` will raise
   `MemsyAPIError`. Avoid calling it in production paths. Track the SDK
   CHANGELOG for the implementation announcement.
-</Callout>
+</Warning>
 
 **Returns** (when implemented): `ClearResponse` with `deleted` (count of cleared items).
 
