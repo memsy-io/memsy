@@ -100,20 +100,23 @@ When `true`, each result additionally includes the source events the memory was 
     ```python
     results.results  # list[SearchResult]
 
-    r.id        # stable memory ID
-    r.content   # natural-language memory, e.g. "User prefers dark mode"
-    r.score     # float; higher = closer match
-    r.metadata  # dict | None — whatever app-level data was attached
+    r.id                # stable memory ID
+    r.content           # natural-language memory, e.g. "User prefers dark mode"
+    r.score             # float; higher = closer match
+    r.metadata          # dict | None — server-attached fields (type, kind, …)
+    r.strength          # float — reinforcement strength, bounded 0.0–5.0
+    r.source_metadata   # list[dict] — user metadata from the originating event(s)
     ```
   </Tab>
   <Tab title="Node">
     ```ts
     results.results;  // SearchResult[]
 
-    r.id;        // stable memory ID
-    r.content;   // natural-language memory, e.g. "User prefers dark mode"
-    r.score;     // number; higher = closer match
-    r.metadata;  // Record<string, unknown> | null
+    r.id;              // stable memory ID
+    r.content;         // natural-language memory
+    r.score;           // number; higher = closer match
+    r.metadata;        // Record<string, unknown> | null
+    r.sourceMetadata;  // SourceMetadata[] | null — user metadata from source events
     ```
   </Tab>
   <Tab title="cURL">
@@ -124,13 +127,23 @@ When `true`, each result additionally includes the source events the memory was 
           "id": "01JK...",
           "content": "User prefers dark mode across apps.",
           "score": 0.84,
-          "metadata": null
+          "metadata": {
+            "type": "preference",
+            "strength": 1.5,
+            "source_metadata": [
+              { "event_id": "01JK...", "metadata": { "plan": "pro" } }
+            ]
+          }
         }
       ]
     }
     ```
   </Tab>
 </Tabs>
+
+`strength` is a reinforcement signal bounded `0.0`–`5.0` by the platform's policy ceiling; it rises by a small amount each time a memory is returned by `search()` and decays slowly when unused. **Not** a probability — don't normalise it into the `[0, 1]` range.
+
+`source_metadata` carries the JSON metadata you passed at ingest, attached to the originating event(s) the memory was derived from. Up to 5 entries; each entry is `{event_id, metadata: {...}}` for valid JSON-object payloads or `{event_id, raw: "..."}` otherwise. Use it for tagging, filtering, or correlating back to your application's own records.
 
 ## Reading usage and rate-limit info
 

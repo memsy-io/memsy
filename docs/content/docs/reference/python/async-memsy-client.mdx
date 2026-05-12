@@ -3,7 +3,7 @@ title: AsyncMemsyClient
 description: Async HTTP client — mirrors MemsyClient method-for-method.
 ---
 
-Asynchronous HTTP client for the Memsy hot-path API. Mirrors **[`MemsyClient`](/docs/reference/python/memsy-client)** method-for-method.
+Asynchronous HTTP client for the Memsy API. Mirrors **[`MemsyClient`](/docs/reference/python/memsy-client)** method-for-method.
 
 ```python
 from memsy import AsyncMemsyClient
@@ -42,7 +42,7 @@ Each method has the same signature as the sync client but returns a coroutine.
 | `await search(query, *, actor_id, limit, threshold, include_source_events)` | `SearchResponse` |
 | `await status(event_ids)` | `StatusResponse` |
 | `await health()` | `HealthResponse` |
-| `await clear(container_tag)` | `ClearResponse` |
+| `await clear(container_tag)` | `ClearResponse` (currently a `501 Not Implemented` stub — see [retries notes](/docs/retries#idempotency-considerations)) |
 | `await close()` | `None` |
 
 All raise the same exceptions as the sync client.

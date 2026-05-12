@@ -19,11 +19,11 @@ from memsy import (
     StatusResponse,
     HealthResponse,
     ClearResponse,
-    # Onboarding (memsy-core)
+    # Onboarding
     OrgResource,
     RoleResource,
     TeamResource,
-    # Console memories (memsy-core)
+    # Console memories
     MemoryScopeInfo,
     MemoryItemResource,
     MemoryListResponse,
@@ -120,11 +120,12 @@ class SearchResult:
 | `.entities` | `list[dict]` | Named entities extracted during processing. |
 | `.kind` | `str \| None` | Memory kind (e.g. `"semantic"`, `"episodic"`). |
 | `.type` | `str \| None` | Memory type (e.g. `"preference"`, `"fact"`). |
-| `.strength` | `float \| None` | Reinforcement strength (0–1). |
+| `.strength` | `float \| None` | Reinforcement strength (0–5.0). Not a probability. |
 | `.confidence` | `float \| None` | Extraction confidence (0–1). |
 | `.observed_at` | `str \| None` | ISO-8601 timestamp when memory was observed. |
 | `.source_event_ids` | `list[str]` | IDs of the source events. |
 | `.source_events` | `list[SourceEvent]` | Hydrated source events (requires `include_source_events=True`). |
+| `.source_metadata` | `list[dict]` | User-supplied metadata from source event(s). Each entry is `{event_id, metadata: dict}` for JSON-object payloads or `{event_id, raw: str}` for non-JSON. Capped at 5. |
 
 ### `SourceEvent`
 
@@ -180,7 +181,7 @@ class ClearResponse:
 
 ---
 
-## Onboarding models (memsy-core)
+## Onboarding models
 
 Returned by `client.orgs.*`, `client.roles.*`, and `client.teams.*`.
 
@@ -230,7 +231,7 @@ class TeamResource:
 
 ---
 
-## Console memory models (memsy-core)
+## Console memory models
 
 Returned by `client.memories.*`.
 
@@ -261,7 +262,7 @@ class MemoryItemResource:
     status: str
     text: str
     confidence: float
-    strength: float
+    strength: float  # bounded 0.0–5.0 by platform policy
     recall_count: int
     decay_half_life_days: float
     pinned: bool

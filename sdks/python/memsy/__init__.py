@@ -1,11 +1,11 @@
 """
 Memsy Python SDK — official client for the Memsy memory service.
 
-Quick start (hot-path memory)::
+Quick start::
 
     from memsy import MemsyClient, EventPayload
 
-    client = MemsyClient(base_url="https://your-memsy-core-url", api_key="msy_...")
+    client = MemsyClient(base_url="https://api.memsy.io/v1", api_key="msy_...")
     health = client.health()
 
     # Ingest events

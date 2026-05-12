@@ -198,7 +198,7 @@ In three calls you:
 
 And as a bonus:
 
-- Every response has `usage` populated from `X-Usage-*` response headers — you already know how much of your plan you've used. `rateLimit` / `rate_limit` is populated from `X-RateLimit-*` headers when the server returns them.
+- Every authenticated response has `usage` (`X-Usage-*`) and `rateLimit` / `rate_limit` (`X-RateLimit-Limit`/`-Remaining`/`-Reset`) populated — you already know how much of your plan you've used and how many calls remain.
 - Rate-limited calls (HTTP 429) are retried automatically with exponential backoff. No code to write.
 - HTTP errors come back as typed exceptions in both SDKs (`AuthenticationError`/`MemsyAuthError`, `UsageLimitExceeded`, `MemsyRateLimitError`, …).
 

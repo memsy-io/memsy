@@ -3,7 +3,7 @@ title: MemsyClient
 description: Synchronous HTTP client — constructor, methods, parameters, exceptions.
 ---
 
-Synchronous HTTP client for the Memsy hot-path API (memsy-core).
+Synchronous HTTP client for the Memsy API.
 
 ```python
 from memsy import MemsyClient
@@ -117,7 +117,14 @@ clear(container_tag: str) -> ClearResponse
 |---|---|---|
 | `container_tag` | `str` | Container/conversation tag to clear. |
 
-**Returns**: `ClearResponse` with `deleted` (count of cleared items).
+<Warning>
+  **Currently a stub.** The server returns `501 Not Implemented` until a real
+  actor-scoped delete is wired up; calling `clear()` will raise
+  `MemsyAPIError`. Avoid calling it in production paths. Track the SDK
+  CHANGELOG for the implementation announcement.
+</Warning>
+
+**Returns** (when implemented): `ClearResponse` with `deleted` (count of cleared items).
 
 ---
 
@@ -181,6 +188,7 @@ Browse and inspect stored memories. See **[Console Memories](/docs/console-memor
 ```python
 client.memories.list(
     *,
+    actor_id: str | None = None,  # filter to a single actor's memories
     kind: str | None = None,
     type: str | None = None,
     status: str | None = None,
@@ -193,6 +201,8 @@ client.memories.list(
 client.memories.get(memory_id: str) -> MemoryItemResource
 client.memories.stats() -> MemoryStatsResponse
 ```
+
+Pagination is stable across pages: every sort includes `memory_id` as a secondary tiebreaker, so walking `offset` won't return duplicates or skip records.
 
 ---
 

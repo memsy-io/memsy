@@ -216,6 +216,8 @@ Backfilled events with explicit timestamps get the same treatment as live events
 
 Memsy echoes the raw metadata string back in each `SearchResult` so you can deserialize it client-side.
 
+Extracted memories carry the metadata of the source event(s) they were derived from under `metadata.source_metadata` on each search result — up to 5 entries per memory. Each entry is `{event_id, metadata: <parsed dict>}` when the original string parsed as a JSON object, or `{event_id, raw: <original string>}` otherwise. **You will not lose the metadata you sent**, even if it wasn't valid JSON: the server preserves the original under `raw` instead of rejecting the ingest.
+
 ## Batching
 
 `ingest()` is designed for batches. Send many events in one call whenever you can:
@@ -292,8 +294,21 @@ Recommended batch size: tens to low hundreds. Very large batches (thousands) inc
 
 ## Idempotency
 
-- Memsy de-duplicates within a short rolling window by `(actor_id, session_id, kind, content)` hash. Re-sending the same event back-to-back won't double-count.
-- If you genuinely need to re-ingest, change any of the four fields — typically by appending `ts` to the content or sending a fresh `session_id`.
+- Memsy de-duplicates within a rolling **60-second window** by `(actor_id, session_id, kind, content)` hash. Identical re-posts within the window are collapsed and the response returns the **original** `event_id` for each duplicate, so SDK retries and `status()` lookups continue to work.
+- Dedup is best-effort — under platform degradation you may still see fresh `event_id`s for duplicate submissions. Treat the window as a safety net for transient retries, not a guarantee.
+- If you genuinely need to re-ingest after the window, change any of the four fields — typically by appending `ts` to the content or sending a fresh `session_id`.
+
+## Validation rules
+
+`POST /v1/ingest` returns `422` if any event fails validation:
+
+- `content` must contain at least one non-whitespace character and stay under **8000 characters**.
+- `actor_id` and `session_id` must be non-empty after trimming whitespace; both are capped at **256 characters**.
+- `role_id` and `team_id` are also capped at **256 characters** and collapse to `null` when only whitespace.
+- `metadata` is capped at **4096 characters**.
+- NUL bytes are silently stripped from all string fields before persistence.
+
+Invalid JSON in `metadata` is **not** a validation error: the original string is preserved as `{"raw": <original_str>}` on the event and surfaces back under `source_metadata` on derived memories.
 
 ## Failure modes
 

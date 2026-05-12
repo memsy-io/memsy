@@ -186,6 +186,15 @@ class SearchResult:
         return [SourceEvent.from_dict(e) for e in raw]
 
     @property
+    def source_metadata(self) -> list[dict[str, Any]]:
+        """User-supplied metadata from the source event(s) this memory was
+        extracted from. Each entry is `{"event_id": str, "metadata": dict}` for
+        JSON-object payloads, or `{"event_id": str, "raw": str}` for non-JSON
+        strings the caller passed. Capped at 5 entries.
+        """
+        return self._meta("source_metadata") or []
+
+    @property
     def kind(self) -> str | None:
         return self._meta("kind")
 
@@ -195,6 +204,9 @@ class SearchResult:
 
     @property
     def strength(self) -> float | None:
+        """Reinforcement strength, bounded ``0.0``–``5.0`` by platform policy.
+        Starts at 1.0 and grows with search hits; not a probability —
+        don't normalise to [0, 1]."""
         return self._meta("strength")
 
     @property
@@ -276,7 +288,7 @@ class ClearResponse:
         return cls(deleted=data.get("deleted", 0))
 
 
-# ============== Onboarding Models (memsy-core) ==============
+# ============== Onboarding Models ==============
 
 
 def _onboarding_base(data: dict[str, Any]) -> dict[str, Any]:
@@ -292,7 +304,7 @@ def _onboarding_base(data: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass
 class OrgResource:
-    """An org customization record from the memsy-core onboarding API."""
+    """An org customization record from the onboarding API."""
 
     org_id: str
     name: str
@@ -309,7 +321,7 @@ class OrgResource:
 
 @dataclass
 class RoleResource:
-    """A role customization record from the memsy-core onboarding API."""
+    """A role customization record from the onboarding API."""
 
     role_id: str
     org_id: str
@@ -327,7 +339,7 @@ class RoleResource:
 
 @dataclass
 class TeamResource:
-    """A team customization record from the memsy-core onboarding API."""
+    """A team customization record from the onboarding API."""
 
     team_id: str
     org_id: str
@@ -343,7 +355,7 @@ class TeamResource:
         return cls(team_id=data["team_id"], org_id=data["org_id"], **_onboarding_base(data))
 
 
-# ============== Console Memory Models (memsy-core) ==============
+# ============== Console Memory Models ==============
 
 
 @dataclass

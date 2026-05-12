@@ -25,7 +25,7 @@ from memsy.resources.teams import TeamsResource
 
 class MemsyClient(HttpCoreMixin):
     """
-    Synchronous Memsy SDK client for the hot-path memory engine (memsy-core).
+    Synchronous Memsy SDK client.
 
     Usage::
 
