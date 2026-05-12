@@ -29,12 +29,12 @@ function parseIntHeader(headers: Headers, name: string): number | null {
 
 export function parseUsageInfo(headers: Headers): UsageInfo {
   return {
-    apiCalls: parseIntHeader(headers, "X-Usage-ApiCall"),
-    apiCallsLimit: parseIntHeader(headers, "X-Usage-ApiCall-Limit"),
+    apiCalls: parseIntHeader(headers, "X-Usage-ApiCalls"),
+    apiCallsLimit: parseIntHeader(headers, "X-Usage-ApiCalls-Limit"),
     eventsIngested: parseIntHeader(headers, "X-Usage-EventsIngested"),
     eventsIngestedLimit: parseIntHeader(headers, "X-Usage-EventsIngested-Limit"),
-    memoryStored: parseIntHeader(headers, "X-Usage-MemoryStored"),
-    memoryStoredLimit: parseIntHeader(headers, "X-Usage-MemoryStored-Limit"),
+    memoryStored: parseIntHeader(headers, "X-Usage-MemoriesStored"),
+    memoryStoredLimit: parseIntHeader(headers, "X-Usage-MemoriesStored-Limit"),
     llmTokens: parseIntHeader(headers, "X-Usage-LlmTokens"),
     llmTokensLimit: parseIntHeader(headers, "X-Usage-LlmTokens-Limit"),
     searchQueries: parseIntHeader(headers, "X-Usage-SearchQueries"),
