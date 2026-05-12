@@ -110,6 +110,26 @@ The memory extractor uses the role's and team's `promotion_prompt` to bias extra
 
 Four fields. Everything else is optional.
 
+## Event kinds
+
+`kind` is a closed enum. The API returns `422 Unprocessable Entity` for any other value.
+
+| Value | Use for |
+|---|---|
+| `user_message` | Something the user said or typed. Most common. |
+| `assistant_message` | Something the assistant said back. Useful so the model can recall its own past statements. |
+| `tool_result` | The output of a tool/function call (search result, calculator answer, API response). |
+| `app_event` | App-level signals that aren't a chat turn — e.g. "user changed plan to Pro", "deployment finished". |
+
+If you have a generic CRM event or a webhook payload, `app_event` is almost always the right answer. The extractor still pulls facts and preferences from it, just without conversational framing.
+
+There are no `chat_turn`, `tool_call`, `system`, or `note` kinds. Mapping notes:
+
+- **OpenAI/Anthropic message role `user`** → `user_message`
+- **role `assistant`** → `assistant_message`
+- **role `tool`** (or tool/function response) → `tool_result`
+- **system messages** → don't ingest them; they're rarely worth storing as memory
+
 ## Timestamps
 
 If your events are live, omit `ts` and the server stamps them. If you're **backfilling** historical data, always pass an ISO-8601 timestamp:
