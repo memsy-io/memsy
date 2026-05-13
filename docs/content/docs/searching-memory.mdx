@@ -87,7 +87,15 @@ How many results to return. Memsy may return fewer if not enough pass the thresh
 
 ### `threshold`
 
-A floor on the similarity score. The default `0.3` is a practical starting point — lower to get more results, raise to cut noise. A very high threshold (e.g. `0.8`) returns only near-exact matches.
+A floor on the similarity score — results scoring below it are dropped.
+
+<Warning>
+The SDK default `threshold=0.3` is calibrated for the `0.0`–`1.0` score range you get with reranking on (Growth and above). **On Free tier, reranking is off and raw scores typically sit in the `0.0`–`0.1` range even for strong matches** — so the default `0.3` will return an empty list. Start with `threshold=0.0` (no filtering — rely on `limit` and ranking order) on Free; on Growth+ you can raise it to `0.3`–`0.5` to cut noise.
+</Warning>
+
+The HTTP API itself defaults to `threshold=0.0` (fail-open). The `0.3` default is applied by the Python and Node SDKs.
+
+Scores are not comparable across queries — `0.6` for query A is not the same thing as `0.6` for query B. Treat `threshold` as a relative tuning knob, not an absolute quality bar.
 
 ### `include_source_events` / `includeSourceEvents`
 
@@ -240,10 +248,6 @@ Leave `actor_id`/`actorId` unset and you'll search every actor in the org. Good 
 `search()` always returns a response object. If nothing passed the threshold, `results.results` is `[]`. Handle that case in your UI.
 
 ## Limitations
-
-<Note>
-Scores are not comparable across queries — `0.6` for query A is not the same thing as `0.6` for query B. Use `threshold` relative to the domain, not as an absolute quality bar.
-</Note>
 
 Search only returns memories that have finished processing. Very recent events may still be in the queue — see **[Async Processing](/docs/async-processing)**.
 
