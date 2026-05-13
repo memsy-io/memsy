@@ -113,7 +113,7 @@ results = client.search(
     query="what does the user prefer?",
     actor_id="user_1",            # optional — scope to a specific user
     limit=10,                     # default: 10
-    threshold=0.3,                # minimum relevance score, default: 0.3
+    threshold=0.0,                # minimum relevance score, default: 0.0 (no filter)
     include_source_events=True,   # attach source events to each result
 )
 

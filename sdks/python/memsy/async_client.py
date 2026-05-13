@@ -137,7 +137,7 @@ class AsyncMemsyClient(HttpCoreMixin):
         *,
         actor_id: str | None = None,
         limit: int = 10,
-        threshold: float = 0.3,
+        threshold: float = 0.0,
         include_source_events: bool = False,
     ) -> SearchResponse:
         """
@@ -146,7 +146,12 @@ class AsyncMemsyClient(HttpCoreMixin):
         :param query: Natural language query string.
         :param actor_id: Optional actor/user ID to further scope the search.
         :param limit: Maximum number of results to return (default 10).
-        :param threshold: Minimum relevance score threshold (default 0.3).
+        :param threshold: Minimum relevance score (default 0.0 — no filter).
+            Raw retrieval scores cluster in 0.0–0.1 on tiers without
+            reranking; with reranking enabled (Pro and above) scores
+            are normalised to 0.0–1.0 and a threshold around 0.3 becomes
+            meaningful. Scores are also not comparable across queries —
+            treat this as a relative tuning knob.
         :param include_source_events: Include source events in result metadata.
         :returns: SearchResponse containing ranked memory results.
         """

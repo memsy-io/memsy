@@ -66,7 +66,7 @@ search(
     *,
     actor_id: str | None = None,
     limit: int = 10,
-    threshold: float = 0.3,
+    threshold: float = 0.0,
     include_source_events: bool = False,
 ) -> SearchResponse
 ```
@@ -76,7 +76,7 @@ search(
 | `query` | `str` | — | Natural-language query. |
 | `actor_id` | `str \| None` | `None` | Filter results to a single actor. |
 | `limit` | `int` | `10` | Maximum number of results. |
-| `threshold` | `float` | `0.3` | Minimum similarity score. |
+| `threshold` | `float` | `0.0` | Minimum similarity score. `0.0` = no filter (rely on `limit`). Raw scores cluster in `0.0`–`0.1` without reranking; with reranking enabled (Pro and above) scores are normalised to `0.0`–`1.0` and `0.3` becomes meaningful. |
 | `include_source_events` | `bool` | `False` | Include source events in each result. |
 
 **Returns**: `SearchResponse` with `results: list[SearchResult]`, plus optional `usage` / `rate_limit`.

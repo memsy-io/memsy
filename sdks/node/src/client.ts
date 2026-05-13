@@ -57,10 +57,14 @@ export class MemsyClient extends BaseHttpClient {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+    // threshold defaults to 0.0 (no filter). Raw retrieval scores cluster
+    // in 0.0–0.1 on tiers without reranking; with reranking on (Pro+)
+    // scores are normalised to 0.0–1.0 and a threshold around 0.3 becomes
+    // meaningful. Scores are not comparable across queries.
     const body: Record<string, unknown> = {
       query,
       limit: options.limit ?? 10,
-      threshold: options.threshold ?? 0.3,
+      threshold: options.threshold ?? 0.0,
       include_source_events: options.includeSourceEvents ?? false,
     };
     if (options.actorId !== undefined) body.actor_id = options.actorId;
