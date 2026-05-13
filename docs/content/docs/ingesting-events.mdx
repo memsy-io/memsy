@@ -300,7 +300,7 @@ Recommended batch size: tens to low hundreds. Very large batches (thousands) inc
 
 ## Validation rules
 
-`POST /v1/ingest` returns `422` if any event fails validation:
+`POST /ingest` returns `422` if any event fails validation:
 
 - `content` must contain at least one non-whitespace character and stay under **8000 characters**.
 - `actor_id` and `session_id` must be non-empty after trimming whitespace; both are capped at **256 characters**.

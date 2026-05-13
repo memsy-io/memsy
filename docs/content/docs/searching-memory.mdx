@@ -45,7 +45,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
         *,
         actor_id=None,                      # optional — filter to one actor
         limit=10,                           # max results (default 10)
-        threshold=0.3,                      # minimum similarity (0.0–1.0)
+        threshold=0.0,                      # minimum similarity (default 0.0)
         include_source_events=False,        # attach source events to results
     )
     ```
@@ -55,7 +55,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
     client.search(query, {
       actorId,                  // optional — filter to one actor
       limit: 10,                // max results (default 10)
-      threshold: 0.3,           // minimum similarity (0.0–1.0)
+      threshold: 0.0,           // minimum similarity (default 0.0)
       includeSourceEvents: false,
     });
     ```
@@ -66,7 +66,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
       "query": "natural language",
       "actor_id": "user_42",
       "limit": 10,
-      "threshold": 0.3,
+      "threshold": 0.0,
       "include_source_events": false
     }
     ```
@@ -87,7 +87,14 @@ How many results to return. Memsy may return fewer if not enough pass the thresh
 
 ### `threshold`
 
-A floor on the similarity score. The default `0.3` is a practical starting point — lower to get more results, raise to cut noise. A very high threshold (e.g. `0.8`) returns only near-exact matches.
+A floor on the similarity score — results scoring below it are dropped. **The SDK default is `0.0` (no filter)**, so out of the box you get the top `limit` results ranked by relevance.
+
+Raise the threshold to cut noise. The right value depends on tier:
+
+- **Free (no reranking)**: raw retrieval scores cluster in `0.0`–`0.1` even for strong matches. Stay near `0.0`–`0.05`.
+- **Pro and above (with Cohere reranking)**: scores are normalised to `0.0`–`1.0`. A threshold around `0.3`–`0.5` becomes a meaningful "good match" floor; `0.8`+ returns only near-exact matches.
+
+Scores are not comparable across queries — `0.6` for query A is not the same thing as `0.6` for query B. Treat `threshold` as a relative tuning knob, not an absolute quality bar.
 
 ### `include_source_events` / `includeSourceEvents`
 
@@ -240,10 +247,6 @@ Leave `actor_id`/`actorId` unset and you'll search every actor in the org. Good 
 `search()` always returns a response object. If nothing passed the threshold, `results.results` is `[]`. Handle that case in your UI.
 
 ## Limitations
-
-<Note>
-Scores are not comparable across queries — `0.6` for query A is not the same thing as `0.6` for query B. Use `threshold` relative to the domain, not as an absolute quality bar.
-</Note>
 
 Search only returns memories that have finished processing. Very recent events may still be in the queue — see **[Async Processing](/docs/async-processing)**.
 

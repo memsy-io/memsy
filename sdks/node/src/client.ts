@@ -20,6 +20,10 @@ export type MemsyClientOptions = BaseClientOptions;
 export interface SearchOptions {
   actorId?: string;
   limit?: number;
+  /**
+   * Minimum relevance score. Default `0.0` (no filter).
+   * See https://docs.memsy.io/docs/searching-memory#threshold for tier-specific guidance.
+   */
   threshold?: number;
   includeSourceEvents?: boolean;
 }
@@ -60,7 +64,7 @@ export class MemsyClient extends BaseHttpClient {
     const body: Record<string, unknown> = {
       query,
       limit: options.limit ?? 10,
-      threshold: options.threshold ?? 0.3,
+      threshold: options.threshold ?? 0.0,
       include_source_events: options.includeSourceEvents ?? false,
     };
     if (options.actorId !== undefined) body.actor_id = options.actorId;
