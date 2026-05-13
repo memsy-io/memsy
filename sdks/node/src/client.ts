@@ -20,6 +20,10 @@ export type MemsyClientOptions = BaseClientOptions;
 export interface SearchOptions {
   actorId?: string;
   limit?: number;
+  /**
+   * Minimum relevance score. Default `0.0` (no filter).
+   * See https://docs.memsy.io/docs/searching-memory#threshold for tier-specific guidance.
+   */
   threshold?: number;
   includeSourceEvents?: boolean;
 }
@@ -57,10 +61,6 @@ export class MemsyClient extends BaseHttpClient {
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
-    // threshold defaults to 0.0 (no filter). Raw retrieval scores cluster
-    // in 0.0–0.1 on tiers without reranking; with reranking on (Pro+)
-    // scores are normalised to 0.0–1.0 and a threshold around 0.3 becomes
-    // meaningful. Scores are not comparable across queries.
     const body: Record<string, unknown> = {
       query,
       limit: options.limit ?? 10,

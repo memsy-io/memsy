@@ -147,11 +147,8 @@ class AsyncMemsyClient(HttpCoreMixin):
         :param actor_id: Optional actor/user ID to further scope the search.
         :param limit: Maximum number of results to return (default 10).
         :param threshold: Minimum relevance score (default 0.0 — no filter).
-            Raw retrieval scores cluster in 0.0–0.1 on tiers without
-            reranking; with reranking enabled (Pro and above) scores
-            are normalised to 0.0–1.0 and a threshold around 0.3 becomes
-            meaningful. Scores are also not comparable across queries —
-            treat this as a relative tuning knob.
+            See https://docs.memsy.io/docs/searching-memory#threshold for
+            tier-specific guidance.
         :param include_source_events: Include source events in result metadata.
         :returns: SearchResponse containing ranked memory results.
         """
