@@ -8,7 +8,6 @@ import httpx
 from memsy._http import DEFAULT_MAX_RETRIES, DEFAULT_RETRY_BACKOFF, HttpCoreMixin
 from memsy.exceptions import MemsyAPIError, MemsyConnectionError
 from memsy.models import (
-    ClearResponse,
     EventPayload,
     HealthResponse,
     IngestResponse,
@@ -187,19 +186,6 @@ class MemsyClient(HttpCoreMixin):
         """
         data, usage, rate_limit = self._request("GET", "/health")
         response = HealthResponse.from_dict(data)
-        response.usage = usage
-        response.rate_limit = rate_limit
-        return response
-
-    def clear(self, container_tag: str) -> ClearResponse:
-        """
-        Clear tracking state for a container/conversation tag.
-
-        :param container_tag: The container tag to clear.
-        :returns: ClearResponse with count of deleted items.
-        """
-        data, usage, rate_limit = self._request("DELETE", f"/clear/{container_tag}")
-        response = ClearResponse.from_dict(data)
         response.usage = usage
         response.rate_limit = rate_limit
         return response

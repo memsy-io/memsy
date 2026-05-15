@@ -64,7 +64,6 @@ from memsy.models import (
     ApiKeyInfo,
     ApiKeyListResponse,
     BillingSummary,
-    ClearResponse,
     CreateKeyResponse,
     DimensionUsage,
     EventItemResponse,
@@ -113,7 +112,6 @@ __all__ = [
     "SearchResult",
     "StatusResponse",
     "HealthResponse",
-    "ClearResponse",
     # Onboarding models
     "OrgResource",
     "RoleResource",

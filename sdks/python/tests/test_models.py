@@ -1,10 +1,10 @@
 """Tests for model from_dict/to_dict round-trips and typed properties."""
+
 from __future__ import annotations
 
 from memsy.models import (
     ApiKeyInfo,
     BillingSummary,
-    ClearResponse,
     EventItemResponse,
     EventPayload,
     HealthResponse,
@@ -192,12 +192,6 @@ class TestStatusResponse:
         assert r.completed_ids == ["a"]
         assert r.pending_ids == ["b"]
         assert r.total == 2
-
-
-class TestClearResponse:
-    def test_from_dict(self):
-        r = ClearResponse.from_dict({"deleted": 3})
-        assert r.deleted == 3
 
 
 class TestOrgResource:

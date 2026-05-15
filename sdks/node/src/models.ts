@@ -181,12 +181,6 @@ export interface HealthResponse {
   rateLimit: RateLimitInfo | null;
 }
 
-export interface ClearResponse {
-  deleted: number;
-  usage: UsageInfo | null;
-  rateLimit: RateLimitInfo | null;
-}
-
 // ── Onboarding (orgs / roles / teams) ────────────────────────────────────────
 
 export interface Org {

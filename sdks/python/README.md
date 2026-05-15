@@ -149,15 +149,6 @@ print(h.billing_enabled) # True | False | None
 print(h.components)      # {"async_memsy": "ok", "sync_memsy": "ok", ...}
 ```
 
-### `clear(container_tag)`
-
-Clear tracking state for a container tag (e.g. a conversation ID).
-
-```python
-resp = client.clear("conv_abc")
-print(resp.deleted)  # number of items cleared
-```
-
 ---
 
 ## Onboarding Hierarchy

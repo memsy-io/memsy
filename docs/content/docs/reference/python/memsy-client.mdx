@@ -107,27 +107,6 @@ health() -> HealthResponse
 
 ---
 
-### `clear(container_tag)`
-
-```python
-clear(container_tag: str) -> ClearResponse
-```
-
-| Parameter | Type | Description |
-|---|---|---|
-| `container_tag` | `str` | Container/conversation tag to clear. |
-
-<Warning>
-  **Currently a stub.** The server returns `501 Not Implemented` until a real
-  actor-scoped delete is wired up; calling `clear()` will raise
-  `MemsyAPIError`. Avoid calling it in production paths. Track the SDK
-  CHANGELOG for the implementation announcement.
-</Warning>
-
-**Returns** (when implemented): `ClearResponse` with `deleted` (count of cleared items).
-
----
-
 ### `close()`
 
 Close the underlying HTTP connection pool. Called automatically by the context manager.

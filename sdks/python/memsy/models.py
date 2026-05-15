@@ -275,19 +275,6 @@ class HealthResponse:
         )
 
 
-@dataclass
-class ClearResponse:
-    """Response from a clear call."""
-
-    deleted: int
-    usage: UsageInfo | None = None
-    rate_limit: RateLimitInfo | None = None
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ClearResponse:
-        return cls(deleted=data.get("deleted", 0))
-
-
 # ============== Onboarding Models ==============
 
 

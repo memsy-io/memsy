@@ -15,7 +15,6 @@ import type {
   SourceEvent,
   StatusResponse,
   HealthResponse,
-  ClearResponse,
   UsageInfo,
   RateLimitInfo,
 } from '@memsy-io/memsy';
@@ -140,14 +139,6 @@ for (const r of results.results) {
 | `components`     | `Record<string, string> \| null`        | Per-component health (db, redis, etc.).           |
 | `usage`          | `UsageInfo \| null`                     |                                                   |
 | `rateLimit`      | `RateLimitInfo \| null`                 |                                                   |
-
-### `ClearResponse`
-
-| Field       | Type                       | Description                                 |
-|-------------|----------------------------|---------------------------------------------|
-| `deleted`   | `number`                   | Count of records removed.                   |
-| `usage`     | `UsageInfo \| null`        |                                             |
-| `rateLimit` | `RateLimitInfo \| null`    |                                             |
 
 ## Metadata types
 

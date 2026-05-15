@@ -18,7 +18,6 @@ from memsy import (
     SourceEvent,
     StatusResponse,
     HealthResponse,
-    ClearResponse,
     # Onboarding
     OrgResource,
     RoleResource,
@@ -165,16 +164,6 @@ class HealthResponse:
     version: str = ""
     billing_enabled: bool | None = None       # present on control-plane /health
     components: dict[str, str] | None = None  # component → status map
-    usage: UsageInfo | None = None
-    rate_limit: RateLimitInfo | None = None
-```
-
-### `ClearResponse`
-
-```python
-@dataclass
-class ClearResponse:
-    deleted: int
     usage: UsageInfo | None = None
     rate_limit: RateLimitInfo | None = None
 ```

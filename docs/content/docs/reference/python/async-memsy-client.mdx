@@ -42,7 +42,6 @@ Each method has the same signature as the sync client but returns a coroutine.
 | `await search(query, *, actor_id, limit, threshold, include_source_events)` | `SearchResponse` |
 | `await status(event_ids)` | `StatusResponse` |
 | `await health()` | `HealthResponse` |
-| `await clear(container_tag)` | `ClearResponse` (currently a `501 Not Implemented` stub — see [retries notes](/docs/retries#idempotency-considerations)) |
 | `await close()` | `None` |
 
 All raise the same exceptions as the sync client.
