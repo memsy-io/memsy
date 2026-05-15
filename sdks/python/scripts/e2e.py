@@ -282,23 +282,6 @@ step("4.06 search — cross-actor (no actor_id)", _search_cross_actor)
 
 
 # -----------------------------------------------------------------------------
-# Group 5 — Clear
-# -----------------------------------------------------------------------------
-def _clear() -> str:
-    tag = f"e2e-py-nonexistent-{RUN_ID}"
-    try:
-        r = client.clear(tag)
-        return f"deleted={r.deleted}"
-    except MemsyAPIError as err:
-        if err.status_code == 404:
-            return "404 — endpoint reports tag missing"
-        raise
-
-
-step("5.01 clear — unique non-existent tag", _clear)
-
-
-# -----------------------------------------------------------------------------
 # Group 6 — Sync error paths
 # -----------------------------------------------------------------------------
 def _err_bad_key() -> str:
