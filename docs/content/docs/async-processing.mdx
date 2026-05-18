@@ -103,6 +103,10 @@ The status response partitions the IDs you sent into three buckets (Python / Nod
 - `pending_ids` / `pendingIds` — still in the queue or mid-processing.
 - `failed_ids` / `failedIds` — something went wrong during extraction. These won't become memories.
 
+<Note>
+**Request limits.** Each `status()` call accepts up to **500 `event_ids`** per request. Requests over the cap return HTTP 422. For larger fan-outs, page through the list in client-side chunks of 500.
+</Note>
+
 ## What causes an event to fail?
 
 - Content rejected by a content filter.
