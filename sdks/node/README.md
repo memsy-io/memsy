@@ -175,12 +175,12 @@ Browse and inspect the memories produced from your ingested events.
 
 ```ts
 const page = await client.memories.list({
-  actorId: "user_1",  // optional filter
-  kind: "semantic",   // optional filter
+  actorId: "user_1",                  // optional filter
+  kind: "semantic",                   // optional — "episodic" | "semantic" | "procedural"
   limit: 50,
   offset: 0,
 });
-for (const m of page.results) console.log(m.memoryId, m.text);
+for (const m of page.items) console.log(m.memoryId, m.text);
 
 const stats = await client.memories.stats();
 const item  = await client.memories.get(memoryId);
@@ -218,19 +218,19 @@ The SDK raises typed errors so you can branch on them without parsing strings:
 import {
   MemsyAPIError,
   MemsyConnectionError,
-  AuthenticationError,
-  AuthorizationError,
-  RateLimitExceeded,
-  UsageLimitExceeded,
-  FeatureNotAvailable,
+  MemsyAuthError,
+  MemsyAuthorizationError,
+  MemsyRateLimitError,
+  MemsyUsageLimitExceededError,
+  MemsyFeatureNotAvailableError,
 } from "@memsy-io/memsy";
 
 try {
   await client.ingest([event]);
 } catch (err) {
-  if (err instanceof RateLimitExceeded) {
+  if (err instanceof MemsyRateLimitError) {
     // 429 — exponential backoff already exhausted; retry later
-  } else if (err instanceof AuthenticationError) {
+  } else if (err instanceof MemsyAuthError) {
     // 401 — invalid or missing API key
   } else if (err instanceof MemsyConnectionError) {
     // network / timeout
