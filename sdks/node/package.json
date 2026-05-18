@@ -37,6 +37,10 @@
     "url": "https://github.com/memsy-io/memsy",
     "directory": "sdks/node"
   },
+  "homepage": "https://docs.memsy.io",
+  "bugs": {
+    "url": "https://github.com/memsy-io/memsy/issues"
+  },
   "dependencies": {},
   "devDependencies": {
     "tsup": "^8.0.0",
