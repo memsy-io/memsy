@@ -56,6 +56,16 @@ export class MemsyClient extends BaseHttpClient {
   }
 
   async ingest(events: EventPayload[]): Promise<IngestResponse> {
+    // Reject a single object passed where an array is required. Without this
+    // guard, `events.map(...)` throws an opaque "events.map is not a function"
+    // from deep inside the SDK; the typed TypeError below tells callers
+    // exactly what to fix.
+    if (!Array.isArray(events)) {
+      throw new TypeError(
+        "ingest() requires an array of EventPayload; received a single object. " +
+          "Wrap it in an array: client.ingest([event])."
+      );
+    }
     const { data, usage, rateLimit } = await this.request<{ event_ids: string[] }>(
       "POST",
       "/ingest",
