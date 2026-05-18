@@ -34,6 +34,7 @@ export type {
   SearchResponse,
   SearchResult,
   SourceEvent,
+  SourceMetadata,
   StatusResponse,
   HealthResponse,
   UsageInfo,

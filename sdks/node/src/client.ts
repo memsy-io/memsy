@@ -30,6 +30,8 @@ export interface SearchOptions {
    */
   threshold?: number;
   includeSourceEvents?: boolean;
+  roleIds?: string[];
+  teamIds?: string[];
 }
 
 /**
@@ -72,6 +74,8 @@ export class MemsyClient extends BaseHttpClient {
       include_source_events: options.includeSourceEvents ?? false,
     };
     if (options.actorId !== undefined) body.actor_id = options.actorId;
+    if (options.roleIds?.length) body.role_ids = options.roleIds;
+    if (options.teamIds?.length) body.team_ids = options.teamIds;
 
     const { data, usage, rateLimit } = await this.request<{
       results: Array<{

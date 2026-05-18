@@ -140,6 +140,8 @@ class MemsyClient(HttpCoreMixin):
         limit: int = 10,
         threshold: float = 0.0,
         include_source_events: bool = False,
+        role_ids: list[str] | None = None,
+        team_ids: list[str] | None = None,
     ) -> SearchResponse:
         """
         Search memories.
@@ -149,6 +151,8 @@ class MemsyClient(HttpCoreMixin):
             actor's memories. When omitted (``None``), the search runs org-wide
             across every actor — useful for admin tools and analytics, rarely
             what you want in an end-user-facing agent loop.
+        :param role_ids: Role IDs the actor belongs to — enables role-promoted memories.
+        :param team_ids: Team IDs the actor belongs to — enables team-promoted memories.
         :param limit: Maximum number of results to return (default 10).
         :param threshold: Minimum relevance score (default 0.0 — no filter).
             See https://docs.memsy.io/docs/searching-memory#threshold for
@@ -164,6 +168,10 @@ class MemsyClient(HttpCoreMixin):
         }
         if actor_id is not None:
             body["actor_id"] = actor_id
+        if role_ids:
+            body["role_ids"] = role_ids
+        if team_ids:
+            body["team_ids"] = team_ids
         data, usage, rate_limit = self._request("POST", "/search", json=body)
         response = SearchResponse.from_dict(data)
         response.usage = usage
