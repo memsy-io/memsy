@@ -121,26 +121,6 @@ console.log(h.version);         // '0.42.1'
 console.log(h.billingEnabled);  // true | false | null
 ```
 
-### `clear(containerTag)`
-
-Reset state for a container tag. Returns the number of records deleted (when implemented).
-
-```ts
-clear(containerTag: string): Promise<ClearResponse>
-```
-
-```ts
-const result = await client.clear('test-suite');
-console.log(`Deleted ${result.deleted} records`);
-```
-
-<Warning>
-**Currently a stub.** The server returns `501 Not Implemented` until a real
-actor-scoped delete is wired up; calling `clear()` will throw `MemsyAPIError`.
-Avoid calling it in production paths. Track the SDK CHANGELOG for the
-implementation announcement.
-</Warning>
-
 ## Common patterns
 
 ### Read usage and rate-limit info

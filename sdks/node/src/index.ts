@@ -36,7 +36,6 @@ export type {
   SourceEvent,
   StatusResponse,
   HealthResponse,
-  ClearResponse,
   UsageInfo,
   RateLimitInfo,
   // Onboarding

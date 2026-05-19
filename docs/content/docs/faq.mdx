@@ -23,7 +23,7 @@ description: Answers to questions we hear most often.
   <Accordion title="How do I delete data?">
     Use **Dashboard → Data** for actor-level deletion and export. It gives you a confirmation receipt and logs the deletion, which is what you want for GDPR / DSAR requests.
 
-    `client.clear(container_tag)` (Python) and `client.clear(containerTag)` (Node) are currently stubs — the server returns `501 Not Implemented`, calling either raises `MemsyAPIError`, and nothing is deleted server-side. A real actor-scoped delete is being designed; until then, use the dashboard for any deletion need.
+    There is no SDK method for server-side deletion today — a programmatic actor-scoped delete is being designed and will land in a future release. Until then, use the dashboard for any deletion need.
   </Accordion>
 
   <Accordion title="Are the SDKs thread/concurrency safe?">

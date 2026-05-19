@@ -1,6 +1,5 @@
 import { BaseHttpClient, type BaseClientOptions } from "./http.js";
 import {
-  type ClearResponse,
   type EventPayload,
   type HealthResponse,
   type IngestResponse,
@@ -128,13 +127,5 @@ export class MemsyClient extends BaseHttpClient {
       usage,
       rateLimit,
     };
-  }
-
-  async clear(containerTag: string): Promise<ClearResponse> {
-    const { data, usage, rateLimit } = await this.request<{ deleted?: number } | null>(
-      "DELETE",
-      `/clear/${encodeURIComponent(containerTag)}`
-    );
-    return { deleted: data?.deleted ?? 0, usage, rateLimit };
   }
 }

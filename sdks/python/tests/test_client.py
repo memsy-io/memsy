@@ -1,4 +1,5 @@
 """Tests for the synchronous MemsyClient."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -121,9 +122,7 @@ class TestMemsyClientMethods:
         mock_response.status_code = 200
         mock_response.is_success = True
         mock_response.json.return_value = {
-            "results": [
-                {"id": "mem_1", "content": "test memory", "score": 0.9, "metadata": None}
-            ]
+            "results": [{"id": "mem_1", "content": "test memory", "score": 0.9, "metadata": None}]
         }
         mock_response.headers = {}
         mock_request.return_value = mock_response
@@ -169,19 +168,6 @@ class TestMemsyClientMethods:
         client.search("test query", include_source_events=True)
         call_kwargs = mock_request.call_args[1]
         assert call_kwargs["json"]["include_source_events"] is True
-
-    @patch("httpx.Client.request")
-    def test_clear_returns_deleted_count(self, mock_request, client):
-        """Test clear() returns deleted count."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.is_success = True
-        mock_response.json.return_value = {"deleted": 5}
-        mock_response.headers = {}
-        mock_request.return_value = mock_response
-
-        result = client.clear("conv_abc")
-        assert result.deleted == 5
 
     @patch("httpx.Client.request")
     def test_health_with_components(self, mock_request, client):
