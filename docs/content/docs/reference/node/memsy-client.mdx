@@ -72,7 +72,7 @@ search(query: string, options?: SearchOptions): Promise<SearchResponse>
 
 | Field                | Type      | Default | Description                                                  |
 |----------------------|-----------|---------|--------------------------------------------------------------|
-| `actorId`            | `string`  | —       | Restrict search to a specific actor.                         |
+| `actorId`            | `string`  | —       | Restrict search to a specific actor. Omit to search org-wide across every actor. See [Actor scoping](/docs/searching-memory#actor_id--actorid). |
 | `limit`              | `number`  | `10`    | Max results to return.                                       |
 | `threshold`          | `number`  | `0.0`   | Minimum similarity score. `0.0` = no filter. See [Threshold guidance](/docs/searching-memory#threshold). |
 | `includeSourceEvents`| `boolean` | `false` | Include the originating events alongside each memory.        |

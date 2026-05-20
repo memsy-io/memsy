@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`search(actor_id=...)` docstring clarified**: omitting `actor_id` now explicitly
+  documents as an org-wide search across every actor (matches the server behaviour
+  shipped alongside this release). No SDK API change — the parameter has always been
+  optional; only the documented meaning of "omitted" is sharper.
+
 ## [0.3.0] - 2026-04-29
 
 ### Breaking Changes

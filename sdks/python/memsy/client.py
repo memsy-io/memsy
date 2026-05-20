@@ -145,7 +145,10 @@ class MemsyClient(HttpCoreMixin):
         Search memories.
 
         :param query: Natural language query string.
-        :param actor_id: Optional actor/user ID to further scope the search.
+        :param actor_id: Actor/user ID. When set, results are restricted to that
+            actor's memories. When omitted (``None``), the search runs org-wide
+            across every actor — useful for admin tools and analytics, rarely
+            what you want in an end-user-facing agent loop.
         :param limit: Maximum number of results to return (default 10).
         :param threshold: Minimum relevance score (default 0.0 — no filter).
             See https://docs.memsy.io/docs/searching-memory#threshold for

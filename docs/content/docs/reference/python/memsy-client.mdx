@@ -74,7 +74,7 @@ search(
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `query` | `str` | — | Natural-language query. |
-| `actor_id` | `str \| None` | `None` | Filter results to a single actor. |
+| `actor_id` | `str \| None` | `None` | Restrict results to a single actor. Omit (`None`) to search org-wide across every actor. See [Actor scoping](/docs/searching-memory#actor_id--actorid). |
 | `limit` | `int` | `10` | Maximum number of results. |
 | `threshold` | `float` | `0.0` | Minimum similarity score. `0.0` = no filter. See [Threshold guidance](/docs/searching-memory#threshold). |
 | `include_source_events` | `bool` | `False` | Include source events in each result. |
