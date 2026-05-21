@@ -80,16 +80,7 @@ memsy/
 
 ## Contributing
 
-We welcome contributions to any SDK or connector in this repo.
-
-1. Fork this repository
-2. Create a branch: `git checkout -b feat/your-feature`
-3. Make your changes inside the relevant `sdks/` or `connectors/` folder
-4. Open a pull request with a clear description of what you changed and why
-
-**SDK-specific guidelines:**
-- `sdks/python/` — run `uv run pytest tests/ -v` before submitting
-- `sdks/node/` — run `npm test` and `npm run build` before submitting
+We welcome contributions to any SDK or connector in this repo. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide — repo layout, per-SDK setup, and PR conventions.
 
 For bugs or feature requests, [open an issue](https://github.com/memsy-io/memsy/issues).
 
