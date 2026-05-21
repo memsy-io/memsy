@@ -110,7 +110,7 @@ Retrieve relevant memories using natural language.
 
 ```ts
 const { results } = await client.search("what does the user prefer?", {
-  actorId: "user_1",            // optional — scope to a single actor
+  actorId: "user_1",            // optional — restrict to one actor; omit for org-wide search
   limit: 10,                    // default: 10
   threshold: 0.0,               // default: 0.0 — minimum relevance score (no filter)
   includeSourceEvents: true,    // attach source events to each result
