@@ -17,6 +17,11 @@ import { MemoriesResource } from "./resources/memories.js";
 export type MemsyClientOptions = BaseClientOptions;
 
 export interface SearchOptions {
+  /**
+   * Restrict results to a single actor's memories. Omit to search org-wide
+   * across every actor — useful for admin tools and analytics, rarely what
+   * you want in an end-user-facing agent loop.
+   */
   actorId?: string;
   limit?: number;
   /**
