@@ -28,6 +28,12 @@ dependencies = [
     "httpx>=0.25.0",
 ]
 
+[project.urls]
+Homepage = "https://app.memsy.io"
+Documentation = "https://docs.memsy.io"
+Source = "https://github.com/memsy-io/memsy"
+"Bug Tracker" = "https://github.com/memsy-io/memsy/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
