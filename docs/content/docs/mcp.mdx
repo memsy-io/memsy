@@ -38,7 +38,7 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
   <Step title="Add the MCP server to your host">
     Paste this into your host's MCP config, replacing the placeholder key.
 
-    <Tabs>
+    <Tabs groupId="mcp-host" persist>
       <Tab title="Claude Code">
         Add to `~/.claude.json` (user-level) or `.claude/settings.json` (per-project):
 
@@ -131,7 +131,7 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
   </Step>
 
   <Step title="Verify it's connected">
-    <Tabs>
+    <Tabs groupId="mcp-host" persist>
       <Tab title="Claude Code">
         Type `/mcp` — `memsy` should appear with 8 tools.
       </Tab>
