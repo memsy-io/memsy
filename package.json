@@ -2,7 +2,8 @@
   "name": "memsy-monorepo",
   "private": true,
   "workspaces": [
-    "sdks/node"
+    "sdks/node",
+    "mcp"
   ],
   "scripts": {
     "build": "npm run build --workspaces",

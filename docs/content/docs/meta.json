@@ -21,6 +21,7 @@
     "retries",
     "---Integrations---",
     "langchain",
+    "mcp",
     "---API Reference---",
     "reference",
     "---Reference---",

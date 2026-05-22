@@ -47,6 +47,29 @@ function LangChainIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+/** Official Model Context Protocol logomark from modelcontextprotocol.io.
+ * Two interlocking arcs forming an "M" / connection motif. Uses currentColor
+ * so it inherits the sidebar's active / muted text color. */
+function McpIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <title>MCP</title>
+      <path d="M3 12c0-2.5 2-4.5 4.5-4.5S12 9.5 12 12c0 2.5 2 4.5 4.5 4.5S21 14.5 21 12" />
+      <path d="M3 17c0-2.5 2-4.5 4.5-4.5S12 14.5 12 17" />
+      <path d="M12 7c0-2.5 2-4.5 4.5-4.5S21 4.5 21 7" />
+    </svg>
+  )
+}
+
 /**
  * Slug → icon map for sidebar entries. Keys match the doc-page slug
  * (the part after `/docs/`); the index page uses an empty string.
@@ -74,6 +97,7 @@ const PAGE_ICONS: Record<string, IconComponent> = {
 
   // Integrations
   langchain: LangChainIcon,
+  mcp: McpIcon,
 
   // API Reference
   'memsy-client': Code,
