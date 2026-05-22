@@ -99,14 +99,22 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
     async (uri) => {
       const ctx = profiles.current();
       const limitParam = uri.searchParams.get("limit");
-      const limit = Math.min(
-        RECENT_MAX_LIMIT,
-        Math.max(1, limitParam ? parseInt(limitParam, 10) : RECENT_DEFAULT_LIMIT),
-      );
+      const parsedLimit = limitParam ? parseInt(limitParam, 10) : RECENT_DEFAULT_LIMIT;
+      // Math.max(1, NaN) returns NaN — coerce non-numeric ?limit= to the default
+      // rather than letting NaN propagate into the request body.
+      const safeLimit = Number.isFinite(parsedLimit) ? parsedLimit : RECENT_DEFAULT_LIMIT;
+      const limit = Math.min(RECENT_MAX_LIMIT, Math.max(1, safeLimit));
 
-      // Org-wide by default — matches memsy_search behavior so the recent
-      // list and the searchable corpus agree about what "exists".
+      // Scope to the active actor by default. Unlike memsy_search (which
+      // requires an explicit query), this resource can be auto-pulled by
+      // hosts at session start — defaulting to org-wide here would leak
+      // cross-actor memories on shared org keys with zero user intent.
+      // Pass `?actor=<id>` to scope to a specific other actor.
+      const actorOverride = uri.searchParams.get("actor");
+      const actorFilter = actorOverride ?? ctx.identity.actorId;
+
       const res = await ctx.client.memories.list({
+        actorId: actorFilter,
         sort: "observed_at_desc",
         limit,
         offset: 0,
@@ -120,6 +128,7 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
             text: JSON.stringify(
               {
                 profile: ctx.profileName,
+                actor_id_filter: actorFilter,
                 count: res.items.length,
                 items: res.items.map((m) => ({
                   memory_id: m.memoryId,

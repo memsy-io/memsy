@@ -159,27 +159,30 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
     };
   }
 
-  // CLI flag --api-key creates / overrides the active profile in memory.
+  // Resolve the active profile name first so CLI --api-key applies to it.
+  // (Earlier this block applied the flag to `profiles[flags.profile ?? "default"]`,
+  // which silently dropped the override when the config's active_profile was
+  // something other than "default" and no --profile was passed.)
+  const activeName =
+    flags.profile ?? envProfile ?? fileCfg?.activeProfile ?? DEFAULT_PROFILE_NAME;
+
+  // CLI flag --api-key overrides the resolved active profile's key.
   if (flags.apiKey) {
     cliFlagsUsed.push("--api-key");
-    const name = flags.profile ?? DEFAULT_PROFILE_NAME;
-    profiles[name] = {
+    const existing = profiles[activeName];
+    profiles[activeName] = {
       apiKey: flags.apiKey,
-      baseUrl: flags.baseUrl ?? profiles[name]?.baseUrl ?? envBaseUrl ?? DEFAULT_BASE_URL,
-      actorId: profiles[name]?.actorId ?? envActorId,
-      defaultRoleIds: profiles[name]?.defaultRoleIds ?? envDefaultRoles,
-      defaultTeamIds: profiles[name]?.defaultTeamIds ?? envDefaultTeams,
-      orgLabel: profiles[name]?.orgLabel ?? "default (cli)",
+      baseUrl: flags.baseUrl ?? existing?.baseUrl ?? envBaseUrl ?? DEFAULT_BASE_URL,
+      actorId: existing?.actorId ?? envActorId,
+      defaultRoleIds: existing?.defaultRoleIds ?? envDefaultRoles,
+      defaultTeamIds: existing?.defaultTeamIds ?? envDefaultTeams,
+      orgLabel: existing?.orgLabel ?? `${activeName} (cli)`,
     };
   }
 
   if (flags.baseUrl) cliFlagsUsed.push("--base-url");
   if (flags.profile) cliFlagsUsed.push("--profile");
   if (flags.configPath) cliFlagsUsed.push("--config");
-
-  // Resolve active profile name.
-  const activeName =
-    flags.profile ?? envProfile ?? fileCfg?.activeProfile ?? DEFAULT_PROFILE_NAME;
 
   const active = profiles[activeName];
   if (!active) {

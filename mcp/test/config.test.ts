@@ -97,6 +97,49 @@ describe("loadConfig", () => {
   it("throws a helpful error when no profile can be resolved", () => {
     expect(() => loadConfig()).toThrow(/No Memsy profile resolved/);
   });
+
+  it("--api-key overrides the resolved active profile, not a separate 'default'", () => {
+    // Regression for code-review finding #3: previously --api-key wrote to
+    // profiles[flags.profile ?? 'default'] but activeName was resolved from
+    // config.active_profile, so the override was silently dropped when the
+    // file's active_profile was something other than 'default'.
+    const configPath = join(tmpDir, "c.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        active_profile: "work",
+        profiles: {
+          personal: { api_key: "msy_p_old" },
+          work: { api_key: "msy_w_old" },
+        },
+      }),
+    );
+
+    const cfg = loadConfig({ configPath, apiKey: "msy_NEW" });
+    expect(cfg.activeProfileName).toBe("work");
+    expect(cfg.activeProfile.apiKey).toBe("msy_NEW");
+    // The 'personal' profile's key must be untouched.
+    expect(cfg.profiles.personal.apiKey).toBe("msy_p_old");
+  });
+
+  it("--api-key + --profile applies to the explicitly chosen profile", () => {
+    const configPath = join(tmpDir, "c.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        active_profile: "personal",
+        profiles: {
+          personal: { api_key: "msy_p_old" },
+          work: { api_key: "msy_w_old" },
+        },
+      }),
+    );
+
+    const cfg = loadConfig({ configPath, apiKey: "msy_NEW", profile: "work" });
+    expect(cfg.activeProfileName).toBe("work");
+    expect(cfg.activeProfile.apiKey).toBe("msy_NEW");
+    expect(cfg.profiles.personal.apiKey).toBe("msy_p_old");
+  });
 });
 
 describe("parseCliFlags", () => {
