@@ -1,0 +1,581 @@
+---
+title: LangChain
+description: Wire Memsy into a LangChain LCEL chain so your AI app recalls playbooks, decisions, and patterns from prior work — not just the last prompt.
+---
+
+LangChain agents are great at reasoning, but on their own they forget the moment a session ends. This guide drops Memsy into a LangChain LCEL chain so an agent **remembers what worked and how** — across sessions, scoped to a real org structure (role / team / actor). Code blocks below are tabbed for **Python** and **Node** — pick your stack.
+
+The scenario: a sales rep debriefs after closing a deal in session 1. In session 2, a brand-new conversation about a different prospect, Memsy resurfaces the playbook automatically.
+
+<Steps>
+  <Step title="Install dependencies">
+    <Tabs>
+      <Tab title="Python">
+        ```bash
+        pip install memsy langchain-openai langchain-core
+        ```
+        Python 3.10 or later required. `langchain-openai` bundles `ChatOpenAI`; `langchain-core` provides the LCEL primitives.
+      </Tab>
+      <Tab title="Node">
+        ```bash
+        npm install @memsy-io/memsy @langchain/openai @langchain/core
+        npm install -D typescript tsx @types/node
+        ```
+        Node 18 or later required (uses the global `fetch`). `@langchain/openai` bundles `ChatOpenAI`; `@langchain/core` provides the LCEL primitives. The dev dependencies (`typescript`, `tsx`, `@types/node`) are needed to run the TypeScript example directly with `tsx` and to resolve Node globals (`console`, `process`, `setTimeout`) in your editor — skip them if you're using plain JavaScript.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Set your credentials">
+    ```bash
+    export MEMSY_BASE_URL="https://api.memsy.io/v1"
+    export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    export OPENAI_API_KEY="sk-..."
+    ```
+
+    <Tip>
+    Put these in a `.env` file for local dev — and keep `.env` in `.gitignore`. Load them with `python-dotenv` / `direnv` (Python) or `dotenv` (Node).
+    </Tip>
+  </Step>
+
+  <Step title="Build the chain">
+    The `recall` step fetches Memsy memories before the LLM runs; the `chat` helper writes each turn back, tagged with the rep's role and team so the org dimension is captured at ingest time.
+
+    <Tabs>
+      <Tab title="Python">
+        ```python
+        import os
+        import time
+
+        from memsy import MemsyClient, EventPayload
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.runnables import RunnablePassthrough
+        from langchain_core.output_parsers import StrOutputParser
+
+        memsy = MemsyClient(
+            base_url=os.environ["MEMSY_BASE_URL"],
+            api_key=os.environ["MEMSY_API_KEY"],
+        )
+        llm = ChatOpenAI(model="gpt-4o-mini")
+
+        # Org structure for this rep. Memsy uses these to organize memories at
+        # the role and team level — not just per-user.
+        ROLE_ID = "role_account_executive"
+        TEAM_ID = "team_enterprise"
+
+
+        def recall(inputs: dict) -> str:
+            """Pull the top-5 memories relevant to the current question."""
+            hits = memsy.search(inputs["question"], actor_id=inputs["actor_id"], limit=5)
+            if not hits.results:
+                return "(no prior context yet)"
+            return "\n".join(f"- {r.content}" for r in hits.results)
+
+
+        prompt = ChatPromptTemplate.from_messages([
+            (
+                "system",
+                "You are a sales copilot. Ground every answer in the rep's prior "
+                "deals and team playbooks. If the context below is relevant, cite "
+                "it concretely — the objection, what worked, what didn't.\n\n"
+                "Relevant memory:\n{memories}",
+            ),
+            ("human", "{question}"),
+        ])
+
+        chain = (
+            RunnablePassthrough.assign(memories=recall)
+            | prompt
+            | llm
+            | StrOutputParser()
+        )
+
+
+        def chat(actor_id: str, session_id: str, question: str) -> str:
+            """One turn: recall relevant memory → answer → ingest the turn."""
+            answer = chain.invoke({"actor_id": actor_id, "question": question})
+            memsy.ingest([
+                EventPayload(
+                    actor_id=actor_id,
+                    session_id=session_id,
+                    role_id=ROLE_ID,
+                    team_id=TEAM_ID,
+                    kind="user_message",
+                    content=question,
+                ),
+                EventPayload(
+                    actor_id=actor_id,
+                    session_id=session_id,
+                    role_id=ROLE_ID,
+                    team_id=TEAM_ID,
+                    kind="assistant_message",
+                    content=answer,
+                ),
+            ])
+            return answer
+        ```
+
+        `recall` is just a Python callable — `RunnablePassthrough.assign` lifts it into the LCEL pipe so you can drop it into any chain, agent, or LangGraph node.
+      </Tab>
+      <Tab title="Node">
+        ```ts
+        import { MemsyClient } from "@memsy-io/memsy";
+        import { ChatOpenAI } from "@langchain/openai";
+        import { ChatPromptTemplate } from "@langchain/core/prompts";
+        import { RunnablePassthrough } from "@langchain/core/runnables";
+        import { StringOutputParser } from "@langchain/core/output_parsers";
+
+        const memsy = new MemsyClient({
+          baseUrl: process.env.MEMSY_BASE_URL!,
+          apiKey: process.env.MEMSY_API_KEY!,
+        });
+        const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+
+        // Org structure for this rep. Memsy uses these to organize memories at
+        // the role and team level — not just per-user.
+        const ROLE_ID = "role_account_executive";
+        const TEAM_ID = "team_enterprise";
+
+        async function recall(inputs: {
+          actorId: string;
+          question: string;
+        }): Promise<string> {
+          const hits = await memsy.search(inputs.question, {
+            actorId: inputs.actorId,
+            limit: 5,
+          });
+          if (hits.results.length === 0) return "(no prior context yet)";
+          return hits.results.map((r) => `- ${r.content}`).join("\n");
+        }
+
+        const prompt = ChatPromptTemplate.fromMessages([
+          [
+            "system",
+            "You are a sales copilot. Ground every answer in the rep's prior " +
+              "deals and team playbooks. If the context below is relevant, cite " +
+              "it concretely — the objection, what worked, what didn't.\n\n" +
+              "Relevant memory:\n{memories}",
+          ],
+          ["human", "{question}"],
+        ]);
+
+        const chain = RunnablePassthrough.assign({ memories: recall })
+          .pipe(prompt)
+          .pipe(llm)
+          .pipe(new StringOutputParser());
+
+        async function chat(
+          actorId: string,
+          sessionId: string,
+          question: string,
+        ): Promise<string> {
+          const answer = await chain.invoke({ actorId, question });
+          await memsy.ingest([
+            {
+              actorId,
+              sessionId,
+              roleId: ROLE_ID,
+              teamId: TEAM_ID,
+              kind: "user_message",
+              content: question,
+            },
+            {
+              actorId,
+              sessionId,
+              roleId: ROLE_ID,
+              teamId: TEAM_ID,
+              kind: "assistant_message",
+              content: answer,
+            },
+          ]);
+          return answer;
+        }
+        ```
+
+        `recall` is a plain async function — `RunnablePassthrough.assign` auto-wraps it into a `RunnableLambda` so it slots into the LCEL pipe alongside any other chain or agent node.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Session 1 — debrief after a win">
+    The rep walks through how they closed the deal. Memsy extracts the procurement objection and the TCO playbook in the background.
+
+    <Tabs>
+      <Tab title="Python">
+        ```python
+        debrief = [
+            "Just closed an enterprise deal. Procurement pushed back hard on price — "
+            "said our list pricing was about 30% above their internal benchmark.",
+            "What worked: I dropped the feature-by-feature pricing comparison and led "
+            "with a 3-year TCO model — onboarding, support, integration costs included. "
+            "That reframed the conversation around total value, not sticker price.",
+            "Procurement explicitly called out the TCO model as what got them to sign "
+            "off. Worth tracking the pattern for future deals.",
+        ]
+
+        print("=== Session 1: deal debrief ===")
+        for note in debrief:
+            reply = chat("rep_001", "session_deal_debrief", note)
+            print(f"Rep:       {note}")
+            print(f"Copilot:   {reply}\n")
+        ```
+      </Tab>
+      <Tab title="Node">
+        ```ts
+        const debrief = [
+          "Just closed an enterprise deal. Procurement pushed back hard on price — " +
+            "said our list pricing was about 30% above their internal benchmark.",
+          "What worked: I dropped the feature-by-feature pricing comparison and led " +
+            "with a 3-year TCO model — onboarding, support, integration costs included. " +
+            "That reframed the conversation around total value, not sticker price.",
+          "Procurement explicitly called out the TCO model as what got them to sign " +
+            "off. Worth tracking the pattern for future deals.",
+        ];
+
+        console.log("=== Session 1: deal debrief ===");
+        for (const note of debrief) {
+          const reply = await chat("rep_001", "session_deal_debrief", note);
+          console.log(`Rep:       ${note}`);
+          console.log(`Copilot:   ${reply}\n`);
+        }
+        ```
+      </Tab>
+    </Tabs>
+
+    ```
+    === Session 1: deal debrief ===
+    Rep:       Just closed an enterprise deal. Procurement pushed back hard on price...
+    Copilot:   Strong save. Capturing this — list-price pushback countered with a TCO reframe is a pattern worth reusing.
+    ...
+    ```
+  </Step>
+
+  <Step title="Wait for indexing">
+    Memsy ingests events asynchronously: extraction, embedding, and indexing all run after `ingest()` returns. Pause briefly before the next session.
+
+    <Tabs>
+      <Tab title="Python">
+        ```python
+        print("Waiting for Memsy to index the debrief...")
+        time.sleep(5)
+        ```
+      </Tab>
+      <Tab title="Node">
+        ```ts
+        console.log("Waiting for Memsy to index the debrief...");
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        ```
+      </Tab>
+    </Tabs>
+
+    <Info>
+    In production, replace the sleep with a poll on `memsy.status(event_ids)` — the `ingest()` call returns the event IDs and `status()` tells you when each one is fully indexed. See [Async processing](/docs/async-processing).
+    </Info>
+  </Step>
+
+  <Step title="Session 2 — new deal, same playbook">
+    Brand-new session, same rep. A different prospect with a similar objection. The chain doesn't pass any conversation history — but Memsy surfaces the prior playbook automatically.
+
+    <Tabs>
+      <Tab title="Python">
+        ```python
+        print("=== Session 2: new prospect ===")
+        question = (
+            "A new enterprise prospect's procurement just pushed back on our pricing "
+            "for the renewal expansion — they say it's well above their benchmark. "
+            "How should I approach the next call?"
+        )
+        reply = chat("rep_001", "session_new_prospect", question)
+        print(f"Rep:       {question}")
+        print(f"Copilot:   {reply}")
+        ```
+      </Tab>
+      <Tab title="Node">
+        ```ts
+        console.log("=== Session 2: new prospect ===");
+        const question =
+          "A new enterprise prospect's procurement just pushed back on our pricing " +
+          "for the renewal expansion — they say it's well above their benchmark. " +
+          "How should I approach the next call?";
+        const reply = await chat("rep_001", "session_new_prospect", question);
+        console.log(`Rep:       ${question}`);
+        console.log(`Copilot:   ${reply}`);
+        ```
+      </Tab>
+    </Tabs>
+
+    ```
+    === Session 2: new prospect ===
+    Rep:       A new enterprise prospect's procurement just pushed back on our pricing...
+    Copilot:   You've handled this exact pattern before — list-price pushback from
+               procurement, closed by reframing around a 3-year TCO model (onboarding
+               + support + integration costs), and procurement explicitly cited the
+               TCO model as what got them to sign off. I'd lead the next call with
+               the same TCO comparison instead of defending line-item pricing. Want
+               me to pull the structure of the prior reframe as a template?
+    ```
+
+    The copilot referenced the **prior deal's TCO reframe** — none of which was in this session's prompt. Memsy retrieved it from the rep's earlier turns and the LCEL chain injected it into the system prompt before the LLM ever ran.
+  </Step>
+</Steps>
+
+## Complete example
+
+Drop-in, copy-paste runnable. Make sure `MEMSY_BASE_URL`, `MEMSY_API_KEY`, and `OPENAI_API_KEY` are set in your environment first.
+
+<Tabs>
+  <Tab title="Python">
+    Save as `sales_copilot.py` and run with `python sales_copilot.py`.
+
+    ```python
+    """sales_copilot.py — Memsy + LangChain LCEL example."""
+    import os
+    import time
+
+    from memsy import MemsyClient, EventPayload
+    from langchain_openai import ChatOpenAI
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.runnables import RunnablePassthrough
+    from langchain_core.output_parsers import StrOutputParser
+
+    memsy = MemsyClient(
+        base_url=os.environ["MEMSY_BASE_URL"],
+        api_key=os.environ["MEMSY_API_KEY"],
+    )
+    llm = ChatOpenAI(model="gpt-4o-mini")
+
+    # Org structure for this rep. Memsy uses these to organize memories at
+    # the role and team level — not just per-user.
+    ROLE_ID = "role_account_executive"
+    TEAM_ID = "team_enterprise"
+
+
+    def recall(inputs: dict) -> str:
+        """Pull the top-5 memories relevant to the current question."""
+        hits = memsy.search(inputs["question"], actor_id=inputs["actor_id"], limit=5)
+        if not hits.results:
+            return "(no prior context yet)"
+        return "\n".join(f"- {r.content}" for r in hits.results)
+
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a sales copilot. Ground every answer in the rep's prior "
+            "deals and team playbooks. If the context below is relevant, cite "
+            "it concretely — the objection, what worked, what didn't.\n\n"
+            "Relevant memory:\n{memories}",
+        ),
+        ("human", "{question}"),
+    ])
+
+    chain = (
+        RunnablePassthrough.assign(memories=recall)
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+
+    def chat(actor_id: str, session_id: str, question: str) -> str:
+        """One turn: recall relevant memory → answer → ingest the turn."""
+        answer = chain.invoke({"actor_id": actor_id, "question": question})
+        memsy.ingest([
+            EventPayload(
+                actor_id=actor_id,
+                session_id=session_id,
+                role_id=ROLE_ID,
+                team_id=TEAM_ID,
+                kind="user_message",
+                content=question,
+            ),
+            EventPayload(
+                actor_id=actor_id,
+                session_id=session_id,
+                role_id=ROLE_ID,
+                team_id=TEAM_ID,
+                kind="assistant_message",
+                content=answer,
+            ),
+        ])
+        return answer
+
+
+    def main() -> None:
+        debrief = [
+            "Just closed an enterprise deal. Procurement pushed back hard on price — "
+            "said our list pricing was about 30% above their internal benchmark.",
+            "What worked: I dropped the feature-by-feature pricing comparison and led "
+            "with a 3-year TCO model — onboarding, support, integration costs included. "
+            "That reframed the conversation around total value, not sticker price.",
+            "Procurement explicitly called out the TCO model as what got them to sign "
+            "off. Worth tracking the pattern for future deals.",
+        ]
+
+        print("=== Session 1: deal debrief ===")
+        for note in debrief:
+            reply = chat("rep_001", "session_deal_debrief", note)
+            print(f"Rep:       {note}")
+            print(f"Copilot:   {reply}\n")
+
+        print("Waiting for Memsy to index the debrief...")
+        time.sleep(5)
+
+        print("=== Session 2: new prospect ===")
+        question = (
+            "A new enterprise prospect's procurement just pushed back on our pricing "
+            "for the renewal expansion — they say it's well above their benchmark. "
+            "How should I approach the next call?"
+        )
+        reply = chat("rep_001", "session_new_prospect", question)
+        print(f"Rep:       {question}")
+        print(f"Copilot:   {reply}")
+
+
+    if __name__ == "__main__":
+        main()
+    ```
+  </Tab>
+  <Tab title="Node">
+    Save as `sales_copilot.ts` and run with `npx tsx sales_copilot.ts` (or `bun sales_copilot.ts`).
+
+    ```ts
+    // sales_copilot.ts — Memsy + LangChain LCEL example.
+    import { MemsyClient } from "@memsy-io/memsy";
+    import { ChatOpenAI } from "@langchain/openai";
+    import { ChatPromptTemplate } from "@langchain/core/prompts";
+    import { RunnablePassthrough } from "@langchain/core/runnables";
+    import { StringOutputParser } from "@langchain/core/output_parsers";
+
+    const memsy = new MemsyClient({
+      baseUrl: process.env.MEMSY_BASE_URL!,
+      apiKey: process.env.MEMSY_API_KEY!,
+    });
+    const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+
+    // Org structure for this rep. Memsy uses these to organize memories at
+    // the role and team level — not just per-user.
+    const ROLE_ID = "role_account_executive";
+    const TEAM_ID = "team_enterprise";
+
+    async function recall(inputs: {
+      actorId: string;
+      question: string;
+    }): Promise<string> {
+      const hits = await memsy.search(inputs.question, {
+        actorId: inputs.actorId,
+        limit: 5,
+      });
+      if (hits.results.length === 0) return "(no prior context yet)";
+      return hits.results.map((r) => `- ${r.content}`).join("\n");
+    }
+
+    const prompt = ChatPromptTemplate.fromMessages([
+      [
+        "system",
+        "You are a sales copilot. Ground every answer in the rep's prior " +
+          "deals and team playbooks. If the context below is relevant, cite " +
+          "it concretely — the objection, what worked, what didn't.\n\n" +
+          "Relevant memory:\n{memories}",
+      ],
+      ["human", "{question}"],
+    ]);
+
+    const chain = RunnablePassthrough.assign({ memories: recall })
+      .pipe(prompt)
+      .pipe(llm)
+      .pipe(new StringOutputParser());
+
+    async function chat(
+      actorId: string,
+      sessionId: string,
+      question: string,
+    ): Promise<string> {
+      const answer = await chain.invoke({ actorId, question });
+      await memsy.ingest([
+        {
+          actorId,
+          sessionId,
+          roleId: ROLE_ID,
+          teamId: TEAM_ID,
+          kind: "user_message",
+          content: question,
+        },
+        {
+          actorId,
+          sessionId,
+          roleId: ROLE_ID,
+          teamId: TEAM_ID,
+          kind: "assistant_message",
+          content: answer,
+        },
+      ]);
+      return answer;
+    }
+
+    async function main(): Promise<void> {
+      const debrief = [
+        "Just closed an enterprise deal. Procurement pushed back hard on price — " +
+          "said our list pricing was about 30% above their internal benchmark.",
+        "What worked: I dropped the feature-by-feature pricing comparison and led " +
+          "with a 3-year TCO model — onboarding, support, integration costs included. " +
+          "That reframed the conversation around total value, not sticker price.",
+        "Procurement explicitly called out the TCO model as what got them to sign " +
+          "off. Worth tracking the pattern for future deals.",
+      ];
+
+      console.log("=== Session 1: deal debrief ===");
+      for (const note of debrief) {
+        const reply = await chat("rep_001", "session_deal_debrief", note);
+        console.log(`Rep:       ${note}`);
+        console.log(`Copilot:   ${reply}\n`);
+      }
+
+      console.log("Waiting for Memsy to index the debrief...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      console.log("=== Session 2: new prospect ===");
+      const question =
+        "A new enterprise prospect's procurement just pushed back on our pricing " +
+        "for the renewal expansion — they say it's well above their benchmark. " +
+        "How should I approach the next call?";
+      const reply = await chat("rep_001", "session_new_prospect", question);
+      console.log(`Rep:       ${question}`);
+      console.log(`Copilot:   ${reply}`);
+    }
+
+    main().catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## What just happened?
+
+Every call to `chat()` does three things:
+
+- **Before the LLM** — `recall` calls `memsy.search()` with the user's question. Memsy runs hybrid dense + sparse retrieval, ranked and scoped to the actor.
+- **LLM call** — `ChatOpenAI` receives the retrieved memories injected into the system prompt alongside the new question.
+- **After the LLM** — `memsy.ingest()` stores the user message and the assistant reply, tagged with `role_id` / `roleId` and `team_id` / `teamId`. Memsy's workers extract structured memories — episodic ("closed an enterprise deal via TCO reframe"), procedural ("when procurement objects on price, lead with TCO"), and semantic ("3-year TCO model includes onboarding, support, integration") — and index them for future recall.
+
+Because role and team are set on every event, the same memories can be promoted to team or role scope downstream — so a new rep joining the **Enterprise** team inherits the playbook patterns the team has accumulated, not just their own short history. See [Actors and sessions](/docs/actors-and-sessions) for the full scoping model.
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Events vs. memories" icon="book" href="/docs/events-and-memories">
+    What you ingest versus what Memsy stores — and how extraction works.
+  </Card>
+  <Card title="Searching memory" icon="magnifying-glass" href="/docs/searching-memory">
+    Thresholds, limits, actor scoping, and reading result scores.
+  </Card>
+  <Card title="Actors and sessions" icon="users" href="/docs/actors-and-sessions">
+    How actor, role, team, and org IDs scope memory in a multi-user app.
+  </Card>
+  <Card title="Async processing" icon="gear" href="/docs/async-processing">
+    Poll `status()` instead of sleeping — and understand the extraction pipeline.
+  </Card>
+</CardGroup>

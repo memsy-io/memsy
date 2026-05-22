@@ -19,6 +19,8 @@
     "usage-and-rate-limits",
     "error-handling",
     "retries",
+    "---Integrations---",
+    "langchain",
     "---API Reference---",
     "reference",
     "---Reference---",

@@ -8,8 +8,8 @@ export const siteConfig = {
     srcLight: "/logo_light.jpeg",
     srcDark: "/logo_dark.jpeg",
     alt: "Memsy",
-    width: 32,
-    height: 32,
+    width: 72,
+    height: 72,
   },
 
   links: {
