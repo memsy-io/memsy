@@ -38,7 +38,7 @@
     "url": "https://github.com/memsy-io/memsy/issues"
   },
   "dependencies": {
-    "@memsy-io/memsy": "*",
+    "@memsy-io/memsy": "^0.3.2",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.0"
   },
