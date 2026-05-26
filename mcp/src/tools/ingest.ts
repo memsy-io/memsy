@@ -48,7 +48,7 @@ const EventSchema = z.object({
 export function registerIngest(server: McpServer, profiles: ProfileManager): void {
   server.tool(
     "memsy_ingest",
-    "Store one or more events in Memsy for future recall. The memory engine extracts facts/decisions/preferences asynchronously — use memsy_status to confirm processing. Prefer batching (up to 100 events).",
+    "Store one or more events in Memsy for future recall. The memory engine extracts facts/decisions/preferences asynchronously — use memsy_status to confirm processing. Prefer batching (up to 100 events). If the active profile has a single default role_id / team_id, events are auto-tagged with them so promotion (user→role→team→org) works without per-call args.",
     {
       events: z
         .array(EventSchema)
@@ -62,13 +62,23 @@ export function registerIngest(server: McpServer, profiles: ProfileManager): voi
         const fallbackActor = ctx.identity.actorId;
         const fallbackSession = ctx.identity.sessionId;
 
+        // Auto-tag with the profile's default role/team when (and only when)
+        // exactly one is configured. EventPayload.role_id / team_id are
+        // singular at the API boundary, so we can't sensibly pick from a
+        // multi-value default — those callers must pass role_id / team_id
+        // per event explicitly. Per-event override always wins.
+        const singleOrUndef = (arr: string[] | undefined): string | undefined =>
+          arr && arr.length === 1 ? arr[0] : undefined;
+        const fallbackRoleId = singleOrUndef(ctx.profile.defaultRoleIds);
+        const fallbackTeamId = singleOrUndef(ctx.profile.defaultTeamIds);
+
         const payload: EventPayload[] = args.events.map((e) => ({
           actorId: e.actor_id ?? fallbackActor,
           sessionId: e.session_id ?? fallbackSession,
           kind: e.kind,
           content: e.content,
-          roleId: e.role_id,
-          teamId: e.team_id,
+          roleId: e.role_id ?? fallbackRoleId,
+          teamId: e.team_id ?? fallbackTeamId,
           ts: e.ts,
           metadata: e.metadata,
         }));
@@ -78,6 +88,8 @@ export function registerIngest(server: McpServer, profiles: ProfileManager): voi
           profile: ctx.profileName,
           actor_id: fallbackActor,
           session_id: fallbackSession,
+          applied_default_role_id: fallbackRoleId ?? null,
+          applied_default_team_id: fallbackTeamId ?? null,
           event_ids: res.eventIds,
           ingested: res.eventIds.length,
           usage: res.usage,
