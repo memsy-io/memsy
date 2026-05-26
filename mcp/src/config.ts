@@ -46,6 +46,17 @@ function parseList(raw: string | undefined): string[] | undefined {
   return items.length ? items : undefined;
 }
 
+/**
+ * Re-read the on-disk config and return its profile map. Used by
+ * ProfileManager.reloadIfMissing to pick up profiles added after startup
+ * (e.g. a hand-edit during a long-lived MCP session) without forcing the
+ * user to restart the host.
+ */
+export function reloadProfilesFromDisk(path: string): Record<string, Profile> {
+  const fileCfg = readConfigFile(path);
+  return fileCfg?.profiles ?? {};
+}
+
 function readConfigFile(path: string): ConfigFile | null {
   if (!existsSync(path)) return null;
   try {

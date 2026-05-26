@@ -10,9 +10,9 @@ export interface Identity {
   source: "tool-arg" | "env" | "profile" | "derived-git" | "derived-os";
 }
 
-function safeGitEmail(): string | null {
+function gitConfig(args: string[]): string | null {
   try {
-    const out = execFileSync("git", ["config", "--get", "user.email"], {
+    const out = execFileSync("git", args, {
       stdio: ["ignore", "pipe", "ignore"],
       encoding: "utf8",
       timeout: 1500,
@@ -22,6 +22,29 @@ function safeGitEmail(): string | null {
   } catch {
     return null;
   }
+}
+
+// Module-level cache so we only fork git once per process. Without this,
+// every memsy_use_org call would re-exec git (sync, blocks the event loop),
+// stalling stdio JSON-RPC for up to 1.5s on slow setups.
+//   undefined → unresolved; null → resolved-to-no-email
+let _cachedGitEmail: string | null | undefined = undefined;
+
+function safeGitEmail(): string | null {
+  if (_cachedGitEmail !== undefined) return _cachedGitEmail;
+  // Prefer --global so actor_id is stable across cwds (a per-repo
+  // user.email override on the host's cwd would otherwise silently
+  // fragment identity per project). Fall back to default scope if no
+  // global is set, so users without ~/.gitconfig aren't unidentified.
+  _cachedGitEmail =
+    gitConfig(["config", "--global", "--get", "user.email"]) ??
+    gitConfig(["config", "--get", "user.email"]);
+  return _cachedGitEmail;
+}
+
+/** Test-only — reset the cached git email so resolveActorId re-probes. */
+export function _resetGitEmailCache(): void {
+  _cachedGitEmail = undefined;
 }
 
 function hashId(...parts: string[]): string {
