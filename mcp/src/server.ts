@@ -41,14 +41,32 @@ Examples:
   memsy-mcp --config ./custom-config.json
 `;
 
+// Flags that consume the following argv token as their value. We have to
+// skip past those values when scanning for --help / --version, otherwise
+// `memsy-mcp --profile -h` (where '-h' is an unusual but legal profile
+// name) would silently print help instead of activating the profile.
+const FLAGS_WITH_VALUE: ReadonlySet<string> = new Set([
+  "--api-key",
+  "--base-url",
+  "--profile",
+  "--config",
+]);
+
 function handleStandaloneFlags(argv: string[]): boolean {
-  if (argv.includes("--help") || argv.includes("-h")) {
-    process.stdout.write(HELP_TEXT);
-    return true;
-  }
-  if (argv.includes("--version") || argv.includes("-V")) {
-    process.stdout.write(`${VERSION}\n`);
-    return true;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (FLAGS_WITH_VALUE.has(arg)) {
+      i++; // skip the value
+      continue;
+    }
+    if (arg === "--help" || arg === "-h") {
+      process.stdout.write(HELP_TEXT);
+      return true;
+    }
+    if (arg === "--version" || arg === "-V") {
+      process.stdout.write(`${VERSION}\n`);
+      return true;
+    }
   }
   return false;
 }
