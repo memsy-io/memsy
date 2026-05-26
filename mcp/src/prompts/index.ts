@@ -76,6 +76,38 @@ export function registerAllPrompts(server: McpServer): void {
   );
 
   server.prompt(
+    "proactive-mode",
+    "Switch this conversation into proactive Memsy mode: Claude recalls context before answering and stores decisions after they're made, for the rest of the session.",
+    {},
+    () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "For the rest of this conversation, treat Memsy as your long-term memory. Follow these two rules:\n\n" +
+              "1. **Recall before answering** — when I mention any of the following, call `memsy_search` FIRST and weave the results into your answer:\n" +
+              "   - A project, component, file, person, or feature by name\n" +
+              "   - A past decision or design choice ('how did we…', 'why does X…')\n" +
+              "   - A technical concept this codebase or org uses\n" +
+              "   - Anything I'm asking you to recall, compare, or build on\n" +
+              "   Cite the memories inline (memory id + a sentence summary) so I know you grounded in memory.\n\n" +
+              "2. **Store after decisions** — call `memsy_ingest` with a 1-3 sentence summary AFTER any of:\n" +
+              "   - An explicit decision I state or confirm ('we'll use X', 'going with Y')\n" +
+              "   - A preference or constraint I state ('I prefer Z', 'never use W')\n" +
+              "   - A multi-turn investigation reaching a conclusion (root cause, chosen design, agreed plan)\n" +
+              "   - A fix I confirm worked\n" +
+              "   Do NOT store: typos, aborted experiments, raw code, transient state ('currently debugging X').\n\n" +
+              "After each `memsy_ingest`, mention briefly that you stored it so I can correct false-positive stores. " +
+              "If you're uncertain whether something is worth storing, ASK ME ('worth remembering?') instead of guessing.",
+          },
+        },
+      ],
+    }),
+  );
+
+  server.prompt(
     "summarize-and-store",
     "Summarize the recent conversation as a single fact / decision and store it in Memsy.",
     {

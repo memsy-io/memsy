@@ -180,6 +180,18 @@ If a profile default role/team is set, each ingest is auto-tagged with it. The r
 "What's my Memsy actor_id?"   → reads memsy://actor/current
 ```
 
+### Always-on proactive mode
+
+By default Memsy fires when you ask. For **decision-triggered store** + **context-aware recall** for the rest of the session, invoke the `proactive-mode` prompt once:
+
+```
+"Enable proactive Memsy mode."     ← or pick the proactive-mode prompt from your host's prompt picker
+```
+
+After invocation, Claude searches Memsy BEFORE answering when you mention a project/decision/component, and ingests AFTER explicit decisions / preferences / confirmed fixes. Anti-noise rules (skip typos, aborted experiments, raw code, transient state) are baked into the instruction.
+
+This is the closest to always-on Memsy from inside the MCP alone. True session-wide automation requires a Claude Code skill (roadmap).
+
 ### Power patterns
 
 Chain tools in one turn:

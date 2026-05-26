@@ -48,7 +48,15 @@ const EventSchema = z.object({
 export function registerIngest(server: McpServer, profiles: ProfileManager): void {
   server.tool(
     "memsy_ingest",
-    "Store one or more events in Memsy for future recall. The memory engine extracts facts/decisions/preferences asynchronously — use memsy_status to confirm processing. Prefer batching (up to 100 events). If the active profile has a single default role_id / team_id, events are auto-tagged with them so promotion (user→role→team→org) works without per-call args.",
+    "Store one or more events in Memsy for future recall. The memory engine extracts facts/decisions/preferences asynchronously — use memsy_status to confirm processing. " +
+      "INVOKE AFTER any of these *decision triggers*: " +
+      "(a) the user makes an explicit decision ('we'll use X', 'going with Y'); " +
+      "(b) the user states a preference or constraint ('I prefer Z', 'never use W'); " +
+      "(c) a multi-turn investigation reaches a conclusion (root cause found, design picked, plan agreed); " +
+      "(d) the user confirms a fix worked ('that did it', 'works now'). " +
+      "DO NOT INVOKE for: typos or corrections, aborted experiments, raw code (it's already in git — store the *decision* about the code instead), or transient state ('currently debugging X'). " +
+      "Prefer batching (up to 100 events) and prefer concise 1-3 sentence content over wall-of-text. " +
+      "If the active profile has a single default role_id / team_id, events are auto-tagged so promotion (user→role→team→org) works without per-call args.",
     {
       events: z
         .array(EventSchema)

@@ -252,6 +252,19 @@ If you have multiple Memsy profiles configured:
 | *"Why isn't Memsy finding my memory about X?"* | Claude usually responds with: try `memsy_list_memories` first, then broaden the query, then check the threshold. |
 | *"What's my Memsy actor_id?"* | Reads `memsy://actor/current`. |
 
+### Always-on proactive mode
+
+By default, Memsy fires only when you ask. If you want **decision-triggered store** + **context-aware recall** for the rest of the session, invoke the `proactive-mode` prompt once:
+
+> *"Enable proactive Memsy mode."* (or type `/` and pick the `proactive-mode` prompt directly)
+
+After invocation, Claude will:
+- Call `memsy_search` BEFORE answering whenever you mention a project / decision / component / past topic — and cite the results inline.
+- Call `memsy_ingest` AFTER explicit decisions, stated preferences, multi-turn conclusions, or confirmed fixes — and tell you it stored.
+- Skip storing typos, aborted experiments, raw code, and transient state.
+
+This is the closest you can get to always-on Memsy from inside the MCP alone. (True session-wide automation needs a Claude Code skill — see roadmap.)
+
 ### Power patterns
 
 Combine tools in one turn for richer flows:

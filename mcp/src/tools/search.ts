@@ -7,7 +7,14 @@ import { formatError, jsonResult } from "./_shared.js";
 export function registerSearch(server: McpServer, profiles: ProfileManager): void {
   server.tool(
     "memsy_search",
-    "Search Memsy for memories relevant to a query. Returns ranked results with relevance scores and metadata. Use this to recall facts, decisions, or context from prior sessions.",
+    "Search Memsy for memories relevant to a query. Returns ranked results with relevance scores and metadata. " +
+      "USE PROACTIVELY — invoke this BEFORE answering when the user mentions: " +
+      "(a) a project, component, person, or feature by name; " +
+      "(b) a past decision or design choice ('how did we', 'why does X'); " +
+      "(c) a technical concept this codebase / org uses; " +
+      "(d) anything they're asking you to recall, compare, or build on. " +
+      "Calling once per topic to load context is usually cheaper than answering blind and being wrong. " +
+      "Cite the results inline when they inform your answer so the user knows you grounded in memory.",
     {
       query: z
         .string()
