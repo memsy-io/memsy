@@ -113,37 +113,64 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
       const actorOverride = uri.searchParams.get("actor");
       const actorFilter = actorOverride ?? ctx.identity.actorId;
 
-      const res = await ctx.client.memories.list({
-        actorId: actorFilter,
-        sort: "observed_at_desc",
-        limit,
-        offset: 0,
-      });
+      // Wrap the network call so auth/rate-limit/connection errors surface
+      // as a structured payload rather than a raw JSON-RPC protocol error.
+      // Hosts that auto-pull this resource at session start can then show
+      // a useful message instead of a transport blip.
+      try {
+        const res = await ctx.client.memories.list({
+          actorId: actorFilter,
+          sort: "observed_at_desc",
+          limit,
+          offset: 0,
+        });
 
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            mimeType: "application/json",
-            text: JSON.stringify(
-              {
-                profile: ctx.profileName,
-                actor_id_filter: actorFilter,
-                count: res.items.length,
-                items: res.items.map((m) => ({
-                  memory_id: m.memoryId,
-                  text: m.text,
-                  kind: m.memoryKind || m.kind,
-                  type: m.type,
-                  observed_at: m.observedAt,
-                })),
-              },
-              null,
-              2,
-            ),
-          },
-        ],
-      };
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "application/json",
+              text: JSON.stringify(
+                {
+                  profile: ctx.profileName,
+                  actor_id_filter: actorFilter,
+                  count: res.items.length,
+                  items: res.items.map((m) => ({
+                    memory_id: m.memoryId,
+                    text: m.text,
+                    kind: m.memoryKind || m.kind,
+                    type: m.type,
+                    observed_at: m.observedAt,
+                  })),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        const errName = err instanceof Error ? err.constructor.name : "Error";
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: "application/json",
+              text: JSON.stringify(
+                {
+                  profile: ctx.profileName,
+                  actor_id_filter: actorFilter,
+                  error: errName,
+                  message,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
     },
   );
 }

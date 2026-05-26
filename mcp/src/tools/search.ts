@@ -77,6 +77,9 @@ export function registerSearch(server: McpServer, profiles: ProfileManager): voi
             content: r.content,
             metadata: r.metadata,
             source_events: r.sourceEvents,
+            // User-supplied metadata propagated from the originating events
+            // (URLs, doc_ids, tags, etc.). Capped at 5 entries by the API.
+            source_metadata: r.sourceMetadata,
           })),
           usage: res.usage,
           rate_limit: res.rateLimit,
