@@ -1,6 +1,14 @@
-import { readFileSync, existsSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export interface Profile {
   apiKey: string;
@@ -55,6 +63,107 @@ function parseList(raw: string | undefined): string[] | undefined {
 export function reloadProfilesFromDisk(path: string): Record<string, Profile> {
   const fileCfg = readConfigFile(path);
   return fileCfg?.profiles ?? {};
+}
+
+export type PersistScope = "global" | "project";
+
+export function configPathForScope(scope: PersistScope): string {
+  return scope === "global"
+    ? join(homedir(), ".memsy", "config.json")
+    : resolve(process.cwd(), ".memsy", "config.json");
+}
+
+function serializeProfile(p: Profile): Record<string, unknown> {
+  // Round-trip back into the snake_case wire format used by readConfigFile,
+  // so values written by the MCP look identical to hand-edited ones.
+  const out: Record<string, unknown> = { api_key: p.apiKey };
+  if (p.baseUrl) out.base_url = p.baseUrl;
+  if (p.actorId !== undefined) out.actor_id = p.actorId;
+  if (p.defaultRoleIds !== undefined) out.default_role_ids = p.defaultRoleIds;
+  if (p.defaultTeamIds !== undefined) out.default_team_ids = p.defaultTeamIds;
+  if (p.orgLabel !== undefined) out.org_label = p.orgLabel;
+  return out;
+}
+
+export interface ProfileUpdate {
+  defaultRoleIds?: string[];
+  defaultTeamIds?: string[];
+}
+
+export interface PersistResult {
+  path: string;
+  created: boolean;
+}
+
+/**
+ * Atomically write the active profile's defaults to the chosen scope's
+ * config file, preserving every other field on the profile (api_key,
+ * base_url, etc.) and every sibling profile. Creates the file (with the
+ * full active-profile contents) if it doesn't exist.
+ *
+ * The caller is expected to pass the in-memory active profile so we can
+ * fill in api_key etc. when a brand-new file is created (e.g. a user who
+ * has been running with MEMSY_API_KEY env-only decides to persist their
+ * defaults — the file gets created with the env-derived contents plus the
+ * new defaults).
+ *
+ * File is chmod 0600 after write.
+ */
+export function persistProfileDefaults(
+  scope: PersistScope,
+  profileName: string,
+  activeProfileInMemory: Profile,
+  updates: ProfileUpdate,
+): PersistResult {
+  const path = configPathForScope(scope);
+  mkdirSync(dirname(path), { recursive: true });
+
+  let existing: ConfigFile = { profiles: {} };
+  let created = false;
+  if (existsSync(path)) {
+    const text = readFileSync(path, "utf8");
+    try {
+      existing = normalizeConfigFile(JSON.parse(text) as Record<string, unknown>);
+    } catch {
+      // Corrupt file — refuse to clobber. Caller surfaces the error.
+      throw new Error(
+        `Refusing to overwrite ${path}: existing file is not valid JSON. ` +
+          `Inspect and fix it, then retry.`,
+      );
+    }
+  } else {
+    created = true;
+  }
+
+  // Preserve any existing profile contents at this name (api_key, base_url,
+  // other fields); fall back to the in-memory active profile when the file
+  // doesn't yet have this profile. This is what lets env-only users persist
+  // — the api_key from env synthesis flows into the new file.
+  const existingProfile = existing.profiles[profileName] ?? activeProfileInMemory;
+  const merged: Profile = {
+    ...existingProfile,
+    ...(updates.defaultRoleIds !== undefined && { defaultRoleIds: updates.defaultRoleIds }),
+    ...(updates.defaultTeamIds !== undefined && { defaultTeamIds: updates.defaultTeamIds }),
+  };
+
+  existing.profiles[profileName] = merged;
+
+  // Always preserve any active_profile pointer the file already had — never
+  // clobber the user's existing default. Newly-created files seed with the
+  // profile we just persisted to.
+  const serialized: Record<string, unknown> = {
+    active_profile: existing.activeProfile ?? profileName,
+    profiles: Object.fromEntries(
+      Object.entries(existing.profiles).map(([k, v]) => [k, serializeProfile(v)]),
+    ),
+  };
+
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(serialized, null, 2)}\n`);
+  if (process.platform !== "win32") chmodSync(tmp, 0o600);
+  renameSync(tmp, path);
+
+  return { path, created };
 }
 
 function readConfigFile(path: string): ConfigFile | null {

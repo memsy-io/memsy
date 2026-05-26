@@ -7,6 +7,7 @@ import { registerIngest } from "./ingest.js";
 import { registerListMemories } from "./list_memories.js";
 import { registerListOrgs } from "./list_orgs.js";
 import { registerSearch } from "./search.js";
+import { registerSetDefaults } from "./set_defaults.js";
 import { registerStatus } from "./status.js";
 import { registerUseOrg } from "./use_org.js";
 
@@ -24,4 +25,7 @@ export function registerAllTools(server: McpServer, profiles: ProfileManager): v
   // Multi-org
   registerListOrgs(server, profiles);
   registerUseOrg(server, profiles);
+
+  // Onboarding
+  registerSetDefaults(server, profiles);
 }

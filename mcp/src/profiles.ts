@@ -72,6 +72,35 @@ export class ProfileManager {
     return this.hasProfile(name);
   }
 
+  /**
+   * Update the cached defaultRoleIds / defaultTeamIds on a profile and (if
+   * it's the active one) refresh the live ActiveContext.profile so subsequent
+   * tool calls see the new values without re-instantiating the HTTP client.
+   * Only the fields explicitly passed are touched.
+   */
+  updateDefaults(
+    name: string,
+    update: { defaultRoleIds?: string[]; defaultTeamIds?: string[] },
+  ): Profile {
+    if (!this.hasProfile(name)) {
+      throw new Error(`Unknown profile "${name}".`);
+    }
+    const next: Profile = {
+      ...this.profiles[name],
+      ...(update.defaultRoleIds !== undefined && { defaultRoleIds: update.defaultRoleIds }),
+      ...(update.defaultTeamIds !== undefined && { defaultTeamIds: update.defaultTeamIds }),
+    };
+    this.profiles[name] = next;
+    if (this.active.profileName === name) {
+      // Mutate the live context's `profile` reference so existing search.ts /
+      // ingest.ts code that reads ctx.profile.defaultRoleIds picks up the
+      // change. Identity + client stay the same — only the filter defaults
+      // moved.
+      this.active = { ...this.active, profile: next };
+    }
+    return next;
+  }
+
   activate(name: string): ActiveContext {
     // If the requested name isn't in the cached map, try re-reading the
     // config file once before failing. Lets `memsy_use_org work` succeed

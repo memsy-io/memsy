@@ -45,6 +45,31 @@ describe("ProfileManager", () => {
     const mgr = new ProfileManager(fixture());
     expect(() => mgr.activate("nope")).toThrow(/Unknown profile/);
   });
+
+  it("updateDefaults mutates the live active context's profile reference", () => {
+    const mgr = new ProfileManager(fixture());
+    expect(mgr.current().profile.defaultRoleIds).toBeUndefined();
+
+    mgr.updateDefaults("personal", { defaultRoleIds: ["ic"], defaultTeamIds: ["platform"] });
+
+    // Active context reflects the change without re-activate()
+    expect(mgr.current().profile.defaultRoleIds).toEqual(["ic"]);
+    expect(mgr.current().profile.defaultTeamIds).toEqual(["platform"]);
+    // Identity + client are the same instance (no reconnect)
+    expect(mgr.current().profileName).toBe("personal");
+  });
+
+  it("updateDefaults on a non-active profile updates the cache, not the live context", () => {
+    const mgr = new ProfileManager(fixture()); // active = personal
+    mgr.updateDefaults("work", { defaultRoleIds: ["senior"] });
+
+    // Active context (still personal) is untouched
+    expect(mgr.current().profile.defaultRoleIds).toBeUndefined();
+
+    // Switching to work picks up the new defaults
+    mgr.activate("work");
+    expect(mgr.current().profile.defaultRoleIds).toEqual(["senior"]);
+  });
 });
 
 describe("ProfileManager — reload on miss (review follow-up #5)", () => {
