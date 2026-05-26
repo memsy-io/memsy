@@ -64,7 +64,19 @@ function normalizeConfigFile(raw: Record<string, unknown>): ConfigFile {
     const profilesRaw = raw.profiles as Record<string, Record<string, unknown>>;
     const profiles: Record<string, Profile> = {};
     for (const [name, p] of Object.entries(profilesRaw)) {
-      profiles[name] = profileFromRaw(p);
+      // Skip + warn on malformed profiles instead of failing the entire load.
+      // A half-edited file (e.g. a `work` profile that hasn't gotten its
+      // api_key yet) would otherwise make the server unbootable even when
+      // the user explicitly --profile's into a valid sibling.
+      try {
+        profiles[name] = profileFromRaw(p);
+      } catch (err) {
+        process.stderr.write(
+          `[memsy-mcp] warning: skipping invalid profile "${name}": ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        );
+      }
     }
     return {
       activeProfile: typeof raw.active_profile === "string" ? raw.active_profile : undefined,
@@ -146,25 +158,25 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
   const envDefaultRoles = parseList(process.env.MEMSY_DEFAULT_ROLE_IDS);
   const envDefaultTeams = parseList(process.env.MEMSY_DEFAULT_TEAM_IDS);
 
-  // Synthesize an env-backed profile so a user can run with just MEMSY_API_KEY
-  // and no config file at all.
+  // Resolve the active profile name FIRST so env synthesis and CLI --api-key
+  // both land on the right slot. (Synthesizing under DEFAULT_PROFILE_NAME and
+  // then resolving to envProfile silently produced "profile not found" for
+  // the common case of `MEMSY_PROFILE=work MEMSY_API_KEY=msy_...`.)
+  const activeName =
+    flags.profile ?? envProfile ?? fileCfg?.activeProfile ?? DEFAULT_PROFILE_NAME;
+
+  // Synthesize an env-backed profile under the resolved active name so users
+  // can run with just MEMSY_API_KEY (+ optional MEMSY_PROFILE) and no file.
   if (envKey) {
-    profiles[DEFAULT_PROFILE_NAME] = profiles[DEFAULT_PROFILE_NAME] ?? {
+    profiles[activeName] = profiles[activeName] ?? {
       apiKey: envKey,
       baseUrl: envBaseUrl ?? DEFAULT_BASE_URL,
       actorId: envActorId,
       defaultRoleIds: envDefaultRoles,
       defaultTeamIds: envDefaultTeams,
-      orgLabel: "default (env)",
+      orgLabel: `${activeName} (env)`,
     };
   }
-
-  // Resolve the active profile name first so CLI --api-key applies to it.
-  // (Earlier this block applied the flag to `profiles[flags.profile ?? "default"]`,
-  // which silently dropped the override when the config's active_profile was
-  // something other than "default" and no --profile was passed.)
-  const activeName =
-    flags.profile ?? envProfile ?? fileCfg?.activeProfile ?? DEFAULT_PROFILE_NAME;
 
   // CLI flag --api-key overrides the resolved active profile's key.
   if (flags.apiKey) {
@@ -177,6 +189,21 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
       defaultRoleIds: existing?.defaultRoleIds ?? envDefaultRoles,
       defaultTeamIds: existing?.defaultTeamIds ?? envDefaultTeams,
       orgLabel: existing?.orgLabel ?? `${activeName} (cli)`,
+    };
+  }
+
+  // Merge env-derived defaults into the active profile if the profile (file-
+  // loaded, env-synthesized, or CLI-overridden) didn't already specify them.
+  // Without this, MEMSY_DEFAULT_ROLE_IDS / MEMSY_DEFAULT_TEAM_IDS / MEMSY_ACTOR_ID
+  // are silently dropped whenever a file profile is active — contradicting
+  // the env-var table in the README.
+  const activeBeforeMerge = profiles[activeName];
+  if (activeBeforeMerge) {
+    profiles[activeName] = {
+      ...activeBeforeMerge,
+      actorId: activeBeforeMerge.actorId ?? envActorId,
+      defaultRoleIds: activeBeforeMerge.defaultRoleIds ?? envDefaultRoles,
+      defaultTeamIds: activeBeforeMerge.defaultTeamIds ?? envDefaultTeams,
     };
   }
 
@@ -208,6 +235,19 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
   };
 }
 
+function takeFlagValue(flag: string, value: string | undefined): string {
+  // Reject values that look like another flag — the user almost certainly
+  // forgot to supply the real value. Without this, `--api-key --profile work`
+  // silently sets apiKey to the literal "--profile" and the real --profile
+  // gets dropped.
+  if (value === undefined || value.startsWith("-")) {
+    throw new Error(
+      `Missing value for ${flag} (got ${value === undefined ? "end of arguments" : `"${value}"`})`,
+    );
+  }
+  return value;
+}
+
 export function parseCliFlags(argv: string[]): CliFlags {
   const flags: CliFlags = {};
   for (let i = 0; i < argv.length; i++) {
@@ -215,19 +255,19 @@ export function parseCliFlags(argv: string[]): CliFlags {
     const next = argv[i + 1];
     switch (arg) {
       case "--api-key":
-        flags.apiKey = next;
+        flags.apiKey = takeFlagValue(arg, next);
         i++;
         break;
       case "--base-url":
-        flags.baseUrl = next;
+        flags.baseUrl = takeFlagValue(arg, next);
         i++;
         break;
       case "--profile":
-        flags.profile = next;
+        flags.profile = takeFlagValue(arg, next);
         i++;
         break;
       case "--config":
-        flags.configPath = next;
+        flags.configPath = takeFlagValue(arg, next);
         i++;
         break;
     }
