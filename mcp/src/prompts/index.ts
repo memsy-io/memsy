@@ -57,9 +57,13 @@ export function registerAllPrompts(server: McpServer): void {
               text:
                 "Walk me through picking my default Memsy role(s) and team(s).\n\n" +
                 "Steps:\n" +
-                "1. Call memsy_list_roles to fetch the org's roles. Show me each role's name + role_id + focus as a numbered list.\n" +
+                "1. Call memsy_list_roles to fetch the org's roles. If the list is empty OR " +
+                "I name a role that's not in it, call memsy_create_role for each missing one " +
+                "(generate a one-sentence focus from the role name if I didn't supply one). " +
+                "Then show me the final role list as a numbered list of name + role_id + focus.\n" +
                 "2. Ask me which role(s) I want as my defaults. Multi-select is fine.\n" +
-                "3. Call memsy_list_teams to fetch the org's teams. Show me each team's name + team_id + focus the same way.\n" +
+                "3. Call memsy_list_teams. Same pattern — if empty or any name is missing, " +
+                "call memsy_create_team for each missing one. Then show the numbered list.\n" +
                 "4. Ask me which team(s) I want as my defaults.\n" +
                 "5. Confirm the selections back to me.\n" +
                 `6. Call memsy_set_defaults with the chosen role_ids and team_ids and persist="${scope}".\n` +

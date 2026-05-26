@@ -7,7 +7,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible
 
 ## What you get
 
-11 tools your AI agent can call:
+13 tools your AI agent can call:
 
 | Tool | Purpose |
 |---|---|
@@ -21,6 +21,8 @@ The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible
 | `memsy_use_org` | Switch which Memsy org subsequent calls hit. |
 | `memsy_list_roles` | List roles defined in the active org (for onboarding pickers). |
 | `memsy_list_teams` | List teams defined in the active org (for onboarding pickers). |
+| `memsy_create_role` | Create a new role in the active org during onboarding. |
+| `memsy_create_team` | Create a new team in the active org during onboarding. |
 | `memsy_set_defaults` | Set the default role_ids / team_ids for the active profile, optionally persisted to `~/.memsy` or `./.memsy`. |
 
 Plus 4 resources — `memsy://memories/recent`, `actor/current`, `session/current`, `profile/current` — and 3 prompts — `recall-context`, `setup-defaults`, `summarize-and-store`.

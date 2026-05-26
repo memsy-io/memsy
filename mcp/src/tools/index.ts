@@ -5,6 +5,8 @@ import { registerGetMemory } from "./get_memory.js";
 import { registerHealth } from "./health.js";
 import { registerIngest } from "./ingest.js";
 import { registerListMemories } from "./list_memories.js";
+import { registerCreateRole } from "./create_role.js";
+import { registerCreateTeam } from "./create_team.js";
 import { registerListOrgs } from "./list_orgs.js";
 import { registerListRoles } from "./list_roles.js";
 import { registerListTeams } from "./list_teams.js";
@@ -31,5 +33,7 @@ export function registerAllTools(server: McpServer, profiles: ProfileManager): v
   // Onboarding
   registerListRoles(server, profiles);
   registerListTeams(server, profiles);
+  registerCreateRole(server, profiles);
+  registerCreateTeam(server, profiles);
   registerSetDefaults(server, profiles);
 }
