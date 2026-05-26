@@ -103,6 +103,95 @@ You're done.
 
 ---
 
+## Example prompts
+
+Talk to your agent naturally — it picks the tool. Phrasing patterns the tool descriptions are tuned for:
+
+### First-time setup
+
+```
+"Set up my Memsy."                    → setup-defaults prompt; lists/creates roles + teams, persists picks.
+"Create a role: Software Engineer."   → memsy_create_role (drafts a focus if you omit one).
+"Create teams: Platform, Growth."     → memsy_create_team × 2.
+"Default team = Platform, save it."   → memsy_set_defaults { persist: "global" }.
+"For this project, team = Coding."    → memsy_set_defaults { persist: "project" } — writes ./.memsy/config.json.
+```
+
+### Recall
+
+```
+"What did we decide about authentication last week?"
+"Search memsy for billing migration context."
+"Have we discussed Postgres vs Mongo before?"
+"What's our convention for password hashing?"
+"Before answering, check memsy for context on src/lib/auth.ts."
+```
+
+Tips: use the same words you used when storing; if a search returns nothing, *shorten* the query, don't lengthen it; *"show me everything about X"* hits `memsy_list_memories` instead of semantic search.
+
+### Store
+
+Trigger verbs the agent watches for: **remember**, **note**, **save**, **store**.
+
+```
+"Remember that we use bcrypt for password hashing."
+"Save this decision: shipping freemium before team plan."
+"Note: SSO migration blocked on Clerk webhook fix."
+"Summarize what we just discussed about caching and store it."   ← summarize-and-store prompt
+```
+
+If a profile default role/team is set, each ingest is auto-tagged with it. The response shows `applied_default_role_id` / `applied_default_team_id` so you can confirm.
+
+**Avoid** — these waste memory:
+- *"Remember everything we just talked about."* (too vague — produces low-quality "context" memories)
+- *"Remember this code: <200 lines>."* (code is in git; store the decision *about* it)
+- Transient state (*"I'm currently debugging the login flow"*)
+
+### Browse and inspect
+
+```
+"List my 10 most recent memories."
+"Show me memories tagged as a decision."
+"Fetch memory mem_abc123."
+"How many memories do I have?"
+"What roles exist in this org?"
+```
+
+### Multi-org / context switching
+
+```
+"What Memsy profiles do I have?"          → memsy_list_orgs
+"Switch to my work profile."              → memsy_use_org { profile: "work" }
+"Which Memsy am I on right now?"          → reads memsy://profile/current
+```
+
+### Adjusting defaults mid-session
+
+```
+"Change my default team to Architect, save it."   → memsy_set_defaults { team_ids: [...], persist: "global" }
+"Clear my role default."                          → memsy_set_defaults { role_ids: [], persist: "global" }
+"For this session only, drop the team scope."     → ... { persist: "none" }
+```
+
+### Diagnostics
+
+```
+"Check Memsy connection."     → memsy_health
+"What's my Memsy actor_id?"   → reads memsy://actor/current
+```
+
+### Power patterns
+
+Chain tools in one turn:
+
+```
+"Search memsy for Q3 launch, summarize the top 5, store the summary."
+"Before suggesting a fix, check if we already discussed this bug. Cite prior memories if so."
+"Switch to the work profile, find the launch checklist, then switch back."
+```
+
+---
+
 ## Multi-org setup (optional)
 
 If you work across multiple Memsy orgs (personal + work, multiple clients, etc.), create a config file with named profiles instead of putting the key in `env`.

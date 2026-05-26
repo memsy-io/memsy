@@ -163,27 +163,103 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
 
 ## Using it day-to-day
 
-Talk to your agent naturally — it picks which tool to call.
+Talk to your agent naturally — it picks which tool to call. The phrasing patterns below are the ones the tool descriptions are tuned for. You don't need to remember tool names.
 
-**Recall**:
-- *"What did we decide about billing storage?"*
-- *"Search memsy for context on the auth migration."*
-- *"Did we discuss why we use Postgres over Mongo?"*
+### First-time setup
 
-**Store**:
-- *"Remember that we use bcrypt for password hashing, not argon2."*
-- *"Note: the SSO migration is blocked on the Clerk webhook fix."*
-- *"Save this decision: we're shipping the freemium tier before the team plan."*
+Run these once when you start a new Memsy account or want to configure a fresh project.
 
-**Browse / manage**:
-- *"List my recent memories."*
-- *"Show me memory mem_abc123."*
+| You say | What the agent does |
+|---|---|
+| *"Set up my Memsy."* | Invokes the `setup-defaults` prompt: lists roles and teams (or creates them if missing), asks you to pick, persists the choice. |
+| *"Create a role: Software Engineer."* | `memsy_create_role`. Drafts a focus sentence if you don't supply one. |
+| *"Create teams: Platform, Growth, Data."* | `memsy_create_team` × 3. |
+| *"Set my default team to Platform, save globally."* | `memsy_set_defaults` with `persist: "global"`. |
+| *"Make this project's default team 'Coding'."* | `memsy_set_defaults` with `persist: "project"` — writes `./.memsy/config.json` in the cwd. |
 
-**Onboarding** (recommended first interaction):
-- *"Set up my Memsy defaults."* — agent invokes the `setup-defaults` prompt, lists roles and teams, asks you to pick, and persists the choice to `~/.memsy/config.json`.
-- *"Set my default role to senior-eng and team to platform, save it."* — direct path if you already know the IDs.
+### Recalling — getting context back
 
-The agent translates these into the right `memsy_search` / `memsy_ingest` / `memsy_list_memories` / `memsy_set_defaults` calls.
+The wider the question, the more results. Be specific when you want precision.
+
+| You say | What the agent does |
+|---|---|
+| *"What did we decide about authentication last week?"* | `memsy_search` with the query + recency hint. |
+| *"Search memsy for billing migration context."* | Topic-focused search. |
+| *"Have we discussed Postgres vs Mongo before?"* | Search with comparison framing. |
+| *"What's our convention for password hashing?"* | Direct fact-recall search. |
+| *"Find anything about the Q3 launch."* | Broad date-anchored search. |
+| *"Before you answer, check memsy for context on `src/lib/auth.ts`."* | Pre-answer recall pattern — Claude searches before responding. |
+
+**Tips for better recall**:
+- Use the same nouns and verbs you used when you originally stored the memory. Memsy is semantic, but lexical overlap helps.
+- If a search returns nothing, try a shorter / simpler query before assuming the memory isn't there.
+- *"Show me everything I've stored about X"* triggers `memsy_list_memories` (paginated browse) instead of `memsy_search` — useful when semantic search is too narrow.
+
+### Storing — committing things to long-term memory
+
+Use trigger verbs: **remember**, **note**, **save**, **store**.
+
+| You say | What the agent does |
+|---|---|
+| *"Remember that we use bcrypt for password hashing, not argon2."* | `memsy_ingest` with a single event, `kind: "app_event"`. |
+| *"Save this decision: we're shipping the freemium tier before the team plan."* | Same — decisions are first-class. |
+| *"Note: the SSO migration is blocked on the Clerk webhook fix."* | Same, captures a blocker. |
+| *"Remember my preference — I want dark mode in the dev environment."* | Personal preference stored at the actor scope. |
+| *"Summarize what we just discussed about caching and store it."* | Invokes the `summarize-and-store` prompt — Claude condenses the conversation, then ingests. |
+
+**What gets auto-tagged**: if you've set a default role/team, every ingest is automatically attributed to it. You see `applied_default_role_id` / `applied_default_team_id` in the response so you know.
+
+**What NOT to do** — these usually waste memory:
+- ❌ *"Remember everything we just talked about."* — too vague; the extractor will store low-quality "context" memories.
+- ❌ *"Remember this code: `<paste 200 lines>`."* — code lives in git. Store the decision *about* the code, not the code itself.
+- ❌ Storing transient state (*"Remember I'm currently debugging the login flow"*) — by the time you need it, it's stale.
+
+### Browsing and inspecting
+
+| You say | What the agent does |
+|---|---|
+| *"List my 10 most recent memories."* | `memsy_list_memories` sorted by observed_at. |
+| *"Show me everything tagged as a decision."* | `memsy_list_memories` filtered by kind. |
+| *"Fetch memory `mem_abc123`."* | `memsy_get_memory` — full record with provenance. |
+| *"How many memories do I have?"* | Reads `memsy_list_memories.total`. |
+| *"What's my Memsy session id?"* | Reads `memsy://session/current`. |
+| *"What roles exist in this org?"* | `memsy_list_roles`. |
+
+### Switching contexts (multi-org)
+
+If you have multiple Memsy profiles configured:
+
+| You say | What the agent does |
+|---|---|
+| *"What Memsy profiles do I have?"* | `memsy_list_orgs`. |
+| *"Switch to my work profile."* | `memsy_use_org { profile: "work" }`. |
+| *"Which Memsy am I on right now?"* | Reads `memsy://profile/current`. |
+| *"Switch to personal and search for what we said about pricing."* | Sequential — switch, then search in the new context. |
+
+### Adjusting defaults mid-session
+
+| You say | What the agent does |
+|---|---|
+| *"Change my default team to Architect, save it."* | `memsy_set_defaults { team_ids: ["architect-id"], persist: "global" }`. |
+| *"Clear my role default."* | `memsy_set_defaults { role_ids: [], persist: "global" }` (empty array = explicit clear). |
+| *"Stop scoping my searches to one team for the rest of this session."* | Same as above but `persist: "none"` — in-memory only. |
+
+### Diagnostics
+
+| You say | What the agent does |
+|---|---|
+| *"Check Memsy connection."* | `memsy_health`. |
+| *"Why isn't Memsy finding my memory about X?"* | Claude usually responds with: try `memsy_list_memories` first, then broaden the query, then check the threshold. |
+| *"What's my Memsy actor_id?"* | Reads `memsy://actor/current`. |
+
+### Power patterns
+
+Combine tools in one turn for richer flows:
+
+- *"Search memsy for everything about Q3, then summarize the top 5 findings and store the summary."* — search → analyze → store.
+- *"Before suggesting a new fix, check if we already discussed this bug. If so, cite the prior memory."* — recall-first pattern.
+- *"List my last 20 ingests and tell me which ones look low-quality."* — periodic memory hygiene.
+- *"Switch to the work profile, search for the launch checklist, then switch back."* — multi-context lookup.
 
 ## Multi-org setup
 
