@@ -1,11 +1,7 @@
 ---
 title: MCP Server
-description: Drop-in long-term memory for any AI coding agent that speaks MCP — Claude Code, Cursor, Cline, Continue.dev, Zed.
+description: Drop-in long-term memory for any AI coding agent that speaks MCP — Claude Code, Cursor, VS Code, Cline, Continue.dev, Zed.
 ---
-
-<div style={{ display: "flex", justifyContent: "center", margin: "1.5rem 0 2rem" }}>
-  <img src="/mcp-logo.png" alt="Memsy MCP" width="128" height="128" />
-</div>
 
 The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible host into a Memsy-aware agent. One server, every host.
 
@@ -84,6 +80,27 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
         ```
       </Tab>
 
+      <Tab title="VS Code">
+        Native MCP support via GitHub Copilot Chat. Add to `.vscode/mcp.json` (per-workspace) or `~/Library/Application Support/Code/User/mcp.json` (global on macOS):
+
+        ```json title=".vscode/mcp.json"
+        {
+          "servers": {
+            "memsy": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@memsy-io/mcp"],
+              "env": {
+                "MEMSY_API_KEY": "msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              }
+            }
+          }
+        }
+        ```
+
+        VS Code prompts on first launch — click **Trust** to allow the server to run.
+      </Tab>
+
       <Tab title="Cline">
         Open Cline → Settings → MCP Servers → **Add**. Paste:
 
@@ -146,6 +163,9 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
       </Tab>
       <Tab title="Cursor">
         Settings → Tools & MCP → `memsy` should show a green status dot.
+      </Tab>
+      <Tab title="VS Code">
+        Command palette → `MCP: List Servers` → `memsy` should appear with state `running`. Or open Copilot Chat → click the tools icon → tools should be listed under `memsy`.
       </Tab>
       <Tab title="Cline">
         Bottom panel → MCP icon → `memsy` listed.

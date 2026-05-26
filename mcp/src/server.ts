@@ -15,7 +15,7 @@ const HELP_TEXT = `memsy-mcp ${VERSION} — Memsy MCP server (long-term memory f
 Usage:
   memsy-mcp [options]
 
-  Normally invoked by an MCP host (Claude Code, Cursor, Cline, Continue.dev, Zed)
+  Normally invoked by an MCP host (Claude Code, Cursor, VS Code, Cline, Continue.dev, Zed)
   over stdio — you rarely run this by hand. See https://docs.memsy.io/docs/mcp
   for per-host setup.
 

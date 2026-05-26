@@ -1,7 +1,7 @@
 {
   "name": "@memsy-io/mcp",
   "version": "0.1.0",
-  "description": "Memsy MCP server — universal memory layer for AI coding agents (Claude Code, Cursor, Cline, Continue, ...)",
+  "description": "Memsy MCP server — universal memory layer for AI coding agents (Claude Code, Cursor, VS Code, Cline, Continue, ...)",
   "type": "module",
   "bin": {
     "memsy-mcp": "./bin/memsy-mcp.js"
