@@ -8,7 +8,7 @@ One server, every supported host. Search and store memories from your agent's co
 
 ## What you get
 
-8 tools exposed to your AI agent:
+11 tools exposed to your AI agent:
 
 | Tool | Purpose |
 |---|---|
@@ -20,8 +20,11 @@ One server, every supported host. Search and store memories from your agent's co
 | `memsy_get_memory` | Fetch one memory by ID. |
 | `memsy_list_orgs` | List local profiles (one profile = one Memsy org). |
 | `memsy_use_org` | Switch which Memsy org subsequent calls hit. |
+| `memsy_list_roles` | List roles defined in the active org (for onboarding pickers). |
+| `memsy_list_teams` | List teams defined in the active org (for onboarding pickers). |
+| `memsy_set_defaults` | Set the default role_ids / team_ids for the active profile, optionally persisted to ~/.memsy or ./.memsy. |
 
-Plus 4 resources (`memsy://memories/recent`, `actor/current`, `session/current`, `profile/current`) and 2 prompts (`recall-context`, `summarize-and-store`).
+Plus 4 resources (`memsy://memories/recent`, `actor/current`, `session/current`, `profile/current`) and 3 prompts (`recall-context`, `setup-defaults`, `summarize-and-store`).
 
 ---
 

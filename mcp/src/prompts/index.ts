@@ -33,6 +33,45 @@ export function registerAllPrompts(server: McpServer): void {
   );
 
   server.prompt(
+    "setup-defaults",
+    "Walk the user through picking their default role(s) and team(s) once, so subsequent memsy_search / memsy_ingest calls don't have to specify them every time.",
+    {
+      persist_scope: z
+        .enum(["none", "global", "project"])
+        .optional()
+        .describe(
+          "Where to save the chosen defaults. Defaults to 'global' if omitted. " +
+            "'global' = ~/.memsy/config.json (every project); " +
+            "'project' = ./.memsy/config.json (this project only, overrides global); " +
+            "'none' = in-memory only for this session.",
+        ),
+    },
+    (args) => {
+      const scope = args.persist_scope ?? "global";
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                "Walk me through picking my default Memsy role(s) and team(s).\n\n" +
+                "Steps:\n" +
+                "1. Call memsy_list_roles to fetch the org's roles. Show me each role's name + role_id + focus as a numbered list.\n" +
+                "2. Ask me which role(s) I want as my defaults. Multi-select is fine.\n" +
+                "3. Call memsy_list_teams to fetch the org's teams. Show me each team's name + team_id + focus the same way.\n" +
+                "4. Ask me which team(s) I want as my defaults.\n" +
+                "5. Confirm the selections back to me.\n" +
+                `6. Call memsy_set_defaults with the chosen role_ids and team_ids and persist="${scope}".\n` +
+                "7. Report success — include the file path persist wrote to so I can find it later.",
+            },
+          },
+        ],
+      };
+    },
+  );
+
+  server.prompt(
     "summarize-and-store",
     "Summarize the recent conversation as a single fact / decision and store it in Memsy.",
     {

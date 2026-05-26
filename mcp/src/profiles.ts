@@ -1,4 +1,4 @@
-import { MemsyClient } from "@memsy-io/memsy";
+import { MemsyClient, MemsyControlClient } from "@memsy-io/memsy";
 
 import { reloadProfilesFromDisk, type Profile, type ResolvedConfig } from "./config.js";
 import { buildIdentity, type Identity } from "./identity.js";
@@ -8,6 +8,16 @@ export interface ActiveContext {
   profile: Profile;
   identity: Identity;
   client: MemsyClient;
+}
+
+/** Derive the control-plane URL from the hot-path URL when it follows the
+ *  canonical `/v1` → `/api` convention. Returns null if it doesn't (caller
+ *  falls back to a clear "set control_url in your profile" error). */
+function deriveControlUrl(hotPathBaseUrl: string): string | null {
+  if (hotPathBaseUrl.endsWith("/v1")) {
+    return `${hotPathBaseUrl.slice(0, -3)}/api`;
+  }
+  return null;
 }
 
 /**
@@ -22,6 +32,10 @@ export class ProfileManager {
   private profiles: Record<string, Profile>;
   private readonly configPath: string | null;
   private active!: ActiveContext;
+  // Lazily-constructed control-plane client + cached orgId per profile, so
+  // we only pay the /me round trip on first-need (list_roles / list_teams).
+  private readonly orgIdCache: Map<string, string> = new Map();
+  private readonly controlClientCache: Map<string, MemsyControlClient> = new Map();
 
   constructor(config: ResolvedConfig) {
     this.profiles = { ...config.profiles };
@@ -122,5 +136,32 @@ export class ProfileManager {
 
     this.active = { profileName: name, profile, identity, client };
     return this.active;
+  }
+
+  /**
+   * Resolve the orgId for the active profile. Cached after first lookup
+   * since orgId is immutable for a given API key.
+   */
+  async resolveOrgId(): Promise<string> {
+    const { profileName, profile } = this.active;
+    const cached = this.orgIdCache.get(profileName);
+    if (cached) return cached;
+
+    const controlUrl = deriveControlUrl(profile.baseUrl);
+    if (!controlUrl) {
+      throw new Error(
+        `Cannot derive control-plane URL from base_url="${profile.baseUrl}". ` +
+          `The MCP needs the control plane to look up your org_id for role/team listing. ` +
+          `Use a base_url that ends in "/v1" or set MEMSY_BASE_URL accordingly.`,
+      );
+    }
+    let control = this.controlClientCache.get(profileName);
+    if (!control) {
+      control = new MemsyControlClient({ baseUrl: controlUrl, apiKey: profile.apiKey });
+      this.controlClientCache.set(profileName, control);
+    }
+    const me = await control.me();
+    this.orgIdCache.set(profileName, me.orgId);
+    return me.orgId;
   }
 }

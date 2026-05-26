@@ -7,7 +7,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible
 
 ## What you get
 
-8 tools your AI agent can call:
+11 tools your AI agent can call:
 
 | Tool | Purpose |
 |---|---|
@@ -19,8 +19,11 @@ The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible
 | `memsy_get_memory` | Fetch one memory by ID. |
 | `memsy_list_orgs` | List configured Memsy profiles (one profile = one org). |
 | `memsy_use_org` | Switch which Memsy org subsequent calls hit. |
+| `memsy_list_roles` | List roles defined in the active org (for onboarding pickers). |
+| `memsy_list_teams` | List teams defined in the active org (for onboarding pickers). |
+| `memsy_set_defaults` | Set the default role_ids / team_ids for the active profile, optionally persisted to `~/.memsy` or `./.memsy`. |
 
-Plus 4 resources — `memsy://memories/recent`, `actor/current`, `session/current`, `profile/current` — and 2 prompts — `recall-context`, `summarize-and-store`.
+Plus 4 resources — `memsy://memories/recent`, `actor/current`, `session/current`, `profile/current` — and 3 prompts — `recall-context`, `setup-defaults`, `summarize-and-store`.
 
 <Info>
 Requires Node.js 18+. You don't need to install anything globally — your host spawns the server via `npx`.
@@ -174,7 +177,11 @@ Talk to your agent naturally — it picks which tool to call.
 - *"List my recent memories."*
 - *"Show me memory mem_abc123."*
 
-The agent translates these into the right `memsy_search` / `memsy_ingest` / `memsy_list_memories` calls.
+**Onboarding** (recommended first interaction):
+- *"Set up my Memsy defaults."* — agent invokes the `setup-defaults` prompt, lists roles and teams, asks you to pick, and persists the choice to `~/.memsy/config.json`.
+- *"Set my default role to senior-eng and team to platform, save it."* — direct path if you already know the IDs.
+
+The agent translates these into the right `memsy_search` / `memsy_ingest` / `memsy_list_memories` / `memsy_set_defaults` calls.
 
 ## Multi-org setup
 
