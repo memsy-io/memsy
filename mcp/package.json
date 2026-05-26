@@ -11,7 +11,8 @@
     "dist",
     "bin",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "logo.png"
   ],
   "scripts": {
     "build": "tsup",
