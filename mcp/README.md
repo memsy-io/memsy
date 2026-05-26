@@ -308,7 +308,7 @@ No PII goes to the server — just the hash. The same developer, same email, sam
 - **Ingest** tags new events with this derived `actor_id` so you can tell which were stored via this MCP.
 - **Search** is **org-wide** by default — finds memories regardless of which channel stored them (dashboard, SDK, prior MCP sessions). Pass `actor_id` explicitly to scope down.
 
-**Override** with `MEMSY_ACTOR_ID=neel-shah` or per-profile `actor_id` in config.
+**Override** with `MEMSY_ACTOR_ID=alex-dev` or per-profile `actor_id` in config.
 
 ---
 
