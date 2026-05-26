@@ -17,7 +17,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "memsy",
