@@ -50,9 +50,9 @@ To switch back to the published npm version:
 
 ## Slash commands
 
-### Universal entry point — smart router
+### `/memsy <anything>` — universal entry point (smart router)
 
-`/memsy <anything>` reads the rest of the line and routes to the right action. You don't need to know the subcommands.
+This is the only slash you really need. The `memsy` skill reads what you typed after the slash, classifies intent, and runs the matching workflow. You don't have to remember subcommands.
 
 ```
 /memsy what did we decide about billing storage?     → searches memories
@@ -64,16 +64,20 @@ To switch back to the published npm version:
 /memsy                                               → shows the menu above
 ```
 
-Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, …) pick the intent; bare topics default to **search** (most common ask, safest fallback). When ambiguous, the router asks rather than guessing.
+Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, `doctor`, `setup`) pick the intent; bare topics default to **search** (most common ask, safest fallback). When ambiguous, the router asks rather than guessing.
 
-### Explicit fast paths (for users who know what they want)
+> Implementation note: `/memsy` is backed by a skill (not a command) because Claude Code namespaces plugin commands as `/<plugin>:<command>` but exposes skills at the top level. Making the smart router a skill is what makes `/memsy` work without the `memsy:` prefix.
+
+### `/memsy:<name>` — explicit namespaced fast paths
+
+For users who know exactly which action they want:
 
 | Command | Args | Description |
 |---|---|---|
-| `/memsy-remember <text>` | free text | Store a fact / decision / note |
-| `/memsy-org [name]` | profile name | Switch active profile / org. With no arg, lists configured profiles. |
-| `/memsy-setup` | none | First-time walkthrough — pick default role(s), team(s), pin `actor_id` |
-| `/memsy-doctor` | none | Health + identity diagnostic with per-error next-step pointers |
+| `/memsy:memsy-remember <text>` | free text | Store a fact / decision / note |
+| `/memsy:memsy-org [name]` | profile name | Switch active profile / org. No-arg lists profiles. |
+| `/memsy:memsy-setup` | none | First-time walkthrough — pick default role(s), team(s), pin `actor_id` |
+| `/memsy:memsy-doctor` | none | Health + identity diagnostic with per-error next-step pointers |
 
 ### MCP-level prompts (also available in Cursor, VS Code, Cline, etc.)
 
