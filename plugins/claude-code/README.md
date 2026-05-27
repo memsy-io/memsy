@@ -61,6 +61,9 @@ This is the only slash you really need. The `memsy` skill reads what you typed a
 /memsy list                                          → lists recent memories
 /memsy doctor                                        → runs the health check
 /memsy setup                                         → first-time walkthrough
+/memsy proactive on  | /memsy proactive off          → toggle auto-save (session)
+/memsy confirm on    | /memsy confirm off            → toggle ask-before-save
+/memsy modes                                         → show current mode state
 /memsy                                               → shows the menu above
 ```
 

@@ -19,6 +19,7 @@ Apply these rules **in order, first match wins**. Be **conservative** — when a
 | starts with `list`, `show`, `browse` and mentions memories/recent | `LIST` | List recent memories. |
 | is exactly `doctor`, `health`, `status`, `check`, or `diagnose` (one or two words) | `DOCTOR` | Run the `/memsy-doctor` workflow inline. |
 | is exactly `setup`, `configure`, `init`, `set defaults`, or `onboard` (one or two words) | `SETUP` | Run the `/memsy-setup` workflow inline. |
+| starts with `mode`, `modes`, `proactive`, `confirm`, `permission`, `autocontext`, or `auto-context` (with or without `on`/`off`/`status`) | `MODE` | Toggle a session-scoped behavior flag. |
 | anything else — a question, topic, or noun phrase | `SEARCH` | Search memories with the query verbatim. |
 
 **Edge cases**:
@@ -37,12 +38,15 @@ Call `memsy_health` once silently — only surface output if it errors. Then pri
 ```
 Memsy is ready. What do you want to do?
 
-  /memsy <question>          — search past memories
-  /memsy remember <fact>     — store something for later
-  /memsy switch <profile>    — change active org
-  /memsy doctor              — health + identity check
-  /memsy setup               — first-time defaults walkthrough
-  /memsy list                — show recent memories
+  /memsy <question>           — search past memories
+  /memsy remember <fact>      — store something for later
+  /memsy switch <profile>     — change active org
+  /memsy doctor               — health + identity check
+  /memsy setup                — first-time defaults walkthrough
+  /memsy list                 — show recent memories
+  /memsy proactive on|off     — auto-save preferences/decisions (session)
+  /memsy confirm on|off       — ask before each save (session)
+  /memsy modes                — show current mode state
 
 Or just talk naturally — say "what did we decide about X" or "remember
 that Y" and the recall / remember skills fire automatically (no slash).
@@ -98,6 +102,55 @@ Run the full `/memsy-doctor` workflow inline (don't recursively call the slash c
    - `ECONNREFUSED` / `ENOTFOUND` → "Cannot reach `<base_url>` — check network or `MEMSY_BASE_URL`"
    - 5xx → "Transient backend issue — retry; check status.memsy.io"
    - anything else → print raw error + suggest `/memsy-setup`
+
+### `MODE`
+
+Lets the user toggle Memsy behavior flags from chat without setting env vars + restarting. Three flags are toggleable in-session:
+
+| Query phrasing | Flag | On effect | Off effect |
+|---|---|---|---|
+| `proactive on` / `proactive off` / `proactive` (toggle) | `MEMSY_PROACTIVE` | Actively watch for save-worthy content (preferences/intents/decisions) and store via `memsy_ingest`. | Stop proactive saves; only explicit verbs / slash commands save. |
+| `confirm on` / `confirm off` / `permission on` / `permission off` | `MEMSY_CONFIRM_STORE` | Ask `Save? (y/n/edit)` before every single-item store. | Store directly without asking. |
+| `autocontext on` / `autocontext off` / `auto-context on/off` | `MEMSY_SESSION_AUTOCONTEXT` | Inject "recent memories" recall block at session start. **Takes effect at next launch** — already-running session is unaffected. | Don't inject auto-context at next launch. |
+| `mode` / `modes` / `status` (no on/off) | — | Show current state of all three modes. | — |
+
+#### Implementation rules
+
+1. **Read current state** from your session context. Modes set at launch appear in the `[memsy modes: ...]` line emitted by the SessionStart hook. Subsequent `/memsy <mode> on/off` invocations override the launch state for the rest of the session.
+
+2. **Apply the change** by:
+   - Acknowledging the new state explicitly back to the user.
+   - Updating your behavior **for the rest of this session** to match. For `MEMSY_PROACTIVE`, this means starting to watch (or stop watching) save-worthy content. For `MEMSY_CONFIRM_STORE`, this means starting (or stopping) the pre-save confirmation step on memsy-remember / smart-router STORE / `/memsy:memsy-remember`.
+
+3. **Reply with this exact shape**:
+
+   ```
+   ✓ Memsy mode: <flag> = <new state>   (session-scoped)
+
+     To persist across restarts:
+       export MEMSY_<FLAG>=<value>     # add to ~/.zshrc or ~/.bashrc
+       then restart Claude Code
+   ```
+
+4. **Special case — autocontext**: changing it mid-session has no effect until next launch (the SessionStart hook has already fired). Make this explicit:
+
+   ```
+   ✓ Memsy mode: autocontext = on   (effective NEXT session — SessionStart already fired this turn)
+
+     To make it take effect now: restart Claude Code with
+       export MEMSY_SESSION_AUTOCONTEXT=on   # then `claude` from that shell
+   ```
+
+5. **`mode` / `modes` / `status` with no direction** → print the current state of all three:
+
+   ```
+   Memsy modes — current session
+     proactive:               on   (toggled via /memsy)
+     confirm-before-store:    off
+     autocontext:             on   (fires at next session start)
+   ```
+
+   For each mode, indicate the source: `(env)` if from launch env, `(toggled via /memsy)` if changed in-session, `(default off)` if never set.
 
 ### `SETUP`
 

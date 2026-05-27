@@ -59,8 +59,13 @@ This is the one slash to remember. The `memsy` skill reads what you typed after 
 /memsy list                                          → lists recent memories
 /memsy doctor                                        → runs the health check
 /memsy setup                                         → first-time walkthrough
+/memsy proactive on | /memsy proactive off           → toggle auto-save (session)
+/memsy confirm on   | /memsy confirm off             → toggle ask-before-save
+/memsy modes                                         → show current mode state
 /memsy                                               → shows the menu above
 ```
+
+> **In-session mode toggling**: `/memsy proactive`, `/memsy confirm`, and `/memsy autocontext` change behavior for the **current session only**. The change is acknowledged immediately and applies to subsequent turns. To make the change persistent across Claude Code restarts, set the corresponding env var (`MEMSY_PROACTIVE`, `MEMSY_CONFIRM_STORE`, `MEMSY_SESSION_AUTOCONTEXT`) in your shell. `/memsy autocontext` is a special case — it fires at SessionStart, so the in-session toggle takes effect at the **next** launch, not the current one.
 
 Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, `doctor`, `setup`) pick the intent; bare topics default to **search** — the safest fallback, since mis-storing creates noise that's hard to undo. When ambiguous, the router asks rather than guessing.
 
