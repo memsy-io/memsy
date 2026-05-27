@@ -1,12 +1,13 @@
 {
   "name": "@memsy-io/claude-code",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Memsy plugin for Claude Code — long-term memory via slash commands, skills, and hooks over the @memsy-io/mcp server.",
   "private": true,
   "files": [
     ".claude-plugin",
     ".mcp.json",
     "commands",
+    "skills",
     "install.sh",
     "README.md",
     "PLAN.md"

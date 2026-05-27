@@ -11,7 +11,7 @@
       "name": "memsy",
       "source": "./plugins/claude-code",
       "description": "Long-term memory for Claude Code — slash commands, skills, and hooks over the @memsy-io/mcp server.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "keywords": ["memory", "memsy", "mcp", "long-term-memory"]
     }
   ]

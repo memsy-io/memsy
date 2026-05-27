@@ -100,8 +100,15 @@ if [[ "$MODE" == "dev" ]]; then
   ABS_MONOREPO="$(cd "$DEV_PATH" && pwd)"
   SERVER_JS="$ABS_MONOREPO/mcp/dist/server.js"
   if [[ ! -f "$SERVER_JS" ]]; then
-    echo "❌ $SERVER_JS not found." >&2
-    echo "   Build the MCP first: (cd $ABS_MONOREPO/mcp && npm run build)" >&2
+    echo "❌ MCP isn't built yet — $SERVER_JS doesn't exist." >&2
+    echo "" >&2
+    echo "   The MCP source is present but you haven't run the build step." >&2
+    echo "   'npm install' only installs dependencies; you also need:" >&2
+    echo "" >&2
+    echo "     cd $ABS_MONOREPO/mcp" >&2
+    echo "     npm run build" >&2
+    echo "" >&2
+    echo "   Then re-run this command." >&2
     exit 1
   fi
   write_dev_config "$SERVER_JS"

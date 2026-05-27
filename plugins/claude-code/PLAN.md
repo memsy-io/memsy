@@ -1,6 +1,6 @@
 # Claude Code Plugin — Phase 1b Plan
 
-**Status**: M1 complete (this branch) · **Branch**: `ns/claude-code-plugin-m1` · **Package**: `@memsy-io/claude-code` (private for now)
+**Status**: M1 + M2 + M3 complete (v0.2.0) · **Branch**: `ns/claude-code-plugin-m1` · **Package**: `@memsy-io/claude-code` (private for now)
 
 ## Goal
 
@@ -33,16 +33,16 @@ Plugin is **strictly additive** on top of the MCP — uninstalling it must leave
 
 ## Milestones (revised after Supermemory research)
 
-| M | Deliverable | Effort | Default state |
-|---|---|---|---|
-| M1 | `plugin.json` + `/memsy-doctor` command + `install.sh` + README | ½ day | always-on |
-| M2 | `/memsy`, `/memsy-org`, `/memsy-setup` slash commands (thin wrappers over MCP tools) | ½ day | always-on |
-| M3 | `memsy-recall` + `memsy-remember` skills with signal-keyword anti-noise filter | 1 day | always-on (skills are triggered by phrasing, not auto-fired) |
-| M4 | `hooks/session-start.ts` — auto-context injection (token-budgeted) | 1 day | **OFF** — opt-in via `MEMSY_SESSION_AUTOCONTEXT=on` |
-| M5 | `hooks/session-stop.ts` — session-end capture with signal-keyword filter | 1 day | **OFF** — opt-in via `MEMSY_AUTO_STORE=on` |
-| M6 | `/memsy-index` command — codebase ingest per-ecosystem playbook | 1 day | manual invoke |
-| M7 | `memsy-archivist` subagent — deep retrieval / cluster / dedupe | ½ day | manual invoke |
-| M8 | Docs page (`/docs/integrations/claude-code`) + e2e verification | ½ day | — |
+| M | Deliverable | Effort | Default state | Status |
+|---|---|---|---|---|
+| M1 | `plugin.json` + `/memsy-doctor` command + `install.sh` + README | ½ day | always-on | ✅ v0.1.0 |
+| M2 | `/memsy`, `/memsy-remember`, `/memsy-org`, `/memsy-setup` slash commands (thin wrappers over MCP tools) | ½ day | always-on | ✅ v0.2.0 |
+| M3 | `memsy-recall` + `memsy-remember` + `memsy-setup` (fallback) skills | 1 day | always-on (skills are triggered by phrasing, not auto-fired) | ✅ v0.2.0 |
+| M4 | `hooks/session-start.ts` — auto-context injection (token-budgeted) | 1 day | **OFF** — opt-in via `MEMSY_SESSION_AUTOCONTEXT=on` | next |
+| M5 | `hooks/session-stop.ts` — session-end capture with signal-keyword filter | 1 day | **OFF** — opt-in via `MEMSY_AUTO_STORE=on` | next |
+| M6 | `/memsy-index` command — codebase ingest per-ecosystem playbook | 1 day | manual invoke | |
+| M7 | `memsy-archivist` subagent — deep retrieval / cluster / dedupe | ½ day | manual invoke | |
+| M8 | Docs page (`/docs/integrations/claude-code`) + e2e verification | ½ day | — | |
 
 **Total**: ~6 working days. Cut lines below.
 

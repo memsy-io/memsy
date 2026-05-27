@@ -4,8 +4,8 @@ Long-term memory for Claude Code — recall, store, and share decisions across s
 
 This plugin wraps [`@memsy-io/mcp`](https://www.npmjs.com/package/@memsy-io/mcp) with Claude Code-native UX. The MCP server provides all the tools and resources; this plugin adds slash commands, skills, and hooks so the surface is discoverable from inside Claude Code.
 
-> **Status: v0.1.0 — M1**
-> Slash command: `/memsy-doctor` (health + identity check). Skills, auto-context, and capture hooks land in v0.2.0+. See [PLAN.md](./PLAN.md) for the full roadmap.
+> **Status: v0.2.0 — M1 + M2 + M3 + setup fallback skill**
+> Slash commands for search / store / org switch / doctor / setup, plus skills that auto-fire on natural phrasing. Auto-context and capture hooks land in v0.3.0 (opt-in). See [PLAN.md](./PLAN.md) for the full roadmap.
 
 ## Install
 
@@ -48,14 +48,34 @@ To switch back to the published npm version:
 ./install.sh --prod
 ```
 
-## Commands
+## Slash commands
 
-| Command | Since | Description |
+| Command | Args | Description |
 |---|---|---|
-| `/memsy-doctor` | v0.1.0 | Check MCP health, identity source, active profile, and session id |
-| `/memsy` | v0.1.0 (planned) | Natural-language memory search |
-| `/memsy-org` | v0.1.0 (planned) | Switch active profile / org |
-| `/memsy-setup` | v0.1.0 (planned) | Walkthrough to pin `actor_id`, set default roles/teams |
+| `/memsy <query>` | free text | Search memories with a natural-language query (e.g. `/memsy what did we decide about billing storage?`) |
+| `/memsy-remember <text>` | free text | Store a fact / decision / note (e.g. `/memsy-remember picked Postgres for billing because it's already deployed`) |
+| `/memsy-org [name]` | profile name | Switch active profile / org. With no arg, lists configured profiles. |
+| `/memsy-setup` | none | First-time walkthrough — pick default role(s), team(s), pin `actor_id` |
+| `/memsy-doctor` | none | Check MCP health, identity source, active profile, session id, and surface setup hints |
+
+### MCP-level prompts (also available in Cursor, VS Code, Cline, etc.)
+
+These are exposed by the `@memsy-io/mcp` server itself, so they work in any MCP host:
+
+| Prompt | Description |
+|---|---|
+| `/memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` + `limit` |
+| `/memsy:proactive-mode` | Switch the session into proactive recall mode |
+| `/memsy:setup-defaults` | Same as `/memsy-setup`, host-agnostic version |
+| `/memsy:summarize-and-store` | Summarize recent turns into a single memory and store it |
+
+## Skills (auto-fire on natural phrasing — no slash needed)
+
+| Skill | Fires when you say… |
+|---|---|
+| `memsy-recall` | "what did we decide", "remember when", "have we discussed", "context on X", "do we have anything about Y" |
+| `memsy-remember` | "remember that", "save this decision", "note that", "let's remember", "store this" |
+| `memsy-setup` | Any Memsy MCP failure or "memsy not working" / "set up memsy" — diagnoses and walks through the fix |
 
 ## Environment
 
