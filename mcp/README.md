@@ -4,9 +4,9 @@
   <img src="./logo.png" alt="Memsy MCP" width="128" height="128" />
 </p>
 
-Memsy [MCP server](https://modelcontextprotocol.io) — drop-in long-term memory for any AI coding agent that speaks MCP (Claude Code, Cursor, VS Code, Cline, Continue.dev, Zed, and more).
+Memsy [MCP server](https://modelcontextprotocol.io) — drop-in memory infrastructure that learns at the role, team, and org level, so your AI app gets smarter as more agents and humans use it.
 
-One server, every supported host. Search and store memories from your agent's context window.
+Works with every host that speaks MCP — Claude Code, Cursor, VS Code, Cline, Continue.dev, Zed. One server, every host.
 
 ---
 

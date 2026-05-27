@@ -10,7 +10,7 @@ import { registerAllTools } from "./tools/index.js";
 const VERSION = "0.1.0";
 const SERVER_NAME = "@memsy-io/mcp";
 
-const HELP_TEXT = `memsy-mcp ${VERSION} — Memsy MCP server (long-term memory for AI coding agents)
+const HELP_TEXT = `memsy-mcp ${VERSION} — Memsy MCP server (drop-in memory that learns at role / team / org level)
 
 Usage:
   memsy-mcp [options]
