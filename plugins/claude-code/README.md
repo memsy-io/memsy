@@ -134,6 +134,7 @@ These are exposed by the `@memsy-io/mcp` server itself, so they work in any MCP 
 | `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
 | `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the SessionStart hook surfaces. Default: `6`, clamped 1–20. |
 | `MEMSY_CONFIRM_STORE` | `on` to require confirmation before every single-item memory store (`/memsy:memsy-remember`, the `memsy-remember` auto-fire skill, and the `/memsy remember` smart-router branch). Default: `off` (stores directly — deliberate slash invocation implies intent). Bulk operations (`/memsy:memsy-checkpoint`, `/memsy:memsy-index`) always confirm regardless. Accepts truthy variants: `on`/`true`/`1`/`yes`/`enabled`. |
+| `MEMSY_PROACTIVE` | `on` to make Claude actively watch the conversation for save-worthy content — preferences, intents, plans, decisions, learnings — and store them via `memsy_ingest` **without** requiring explicit save verbs like "remember that". This is the equivalent of running `/memsy:proactive-mode` once per session, but turned into the default behavior. Combine with `MEMSY_CONFIRM_STORE=on` to get "watch + ask before storing each one." Default: `off` (conservative — only explicit save verbs / slash invocations / `/memsy-checkpoint` save). Accepts the same truthy variants. |
 
 Full env reference: [`../../mcp/README.md`](../../mcp/README.md).
 

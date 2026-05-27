@@ -37,8 +37,83 @@ modes=""
 if is_truthy "${MEMSY_CONFIRM_STORE:-}"; then
   modes="${modes} confirm-before-store"
 fi
+if is_truthy "${MEMSY_PROACTIVE:-}"; then
+  modes="${modes} proactive"
+fi
 if [[ -n "$modes" ]]; then
   printf '[memsy modes:%s]\n\n' "$modes"
+fi
+
+# Proactive mode — when MEMSY_PROACTIVE is on, emit a detailed instruction
+# block telling Claude to actively watch the conversation for save-worthy
+# content (preferences, intents, decisions, learnings) and store via
+# memsy_ingest WITHOUT requiring an explicit "remember that" verb. This
+# bridges the gap that surfaced in real use: a user saying "I plan to go to
+# the FIFA World Cup" is a crucial preference, but the conservative
+# memsy-remember skill only fires on explicit save verbs.
+if is_truthy "${MEMSY_PROACTIVE:-}"; then
+  cat <<'EOF'
+[memsy proactive mode — MEMSY_PROACTIVE=on]
+
+For the rest of this conversation, actively watch for content the user
+clearly wants remembered, EVEN IF they don't say "remember that" or "save
+this". When you spot it, store it via memsy_ingest. Categories that
+qualify:
+
+  - Personal preferences:   "I like X", "my favorite is Y", "I prefer Z"
+  - Intents / plans:        "I want to do X", "I plan to Y", "I'm going to Z"
+  - Decisions:              "we decided X", "going with Y", "switching to Z"
+  - Constraints discovered: "X doesn't work because Y", "we can't do Z"
+  - Learnings:              "turns out X", "the trick is Y", "found that Z"
+
+Workflow per save-worthy item:
+
+  1. Pre-flight (same as memsy-remember skill):
+     - too short (<20 chars) → skip, don't ask.
+     - secret-shaped token (msy_/sk_/ghp_/Bearer) → skip, don't ask.
+     - already stored this session (same substance) → skip, don't double-save.
+
+  2. If [memsy modes: ... confirm-before-store ...] is ALSO in your
+     context, ask before storing:
+
+         Memsy will store:
+           <substance, standalone sentence>
+
+         Save? (y / n / edit "<new text>")
+
+     Otherwise (default), store directly without asking — opting into
+     proactive mode is the user pre-authorizing the saves.
+
+  3. Call memsy_ingest with ONE event:
+       kind:     "user_message"
+       content:  the substance (standalone, no framing)
+       ts:       current ISO 8601
+       metadata: JSON.stringify({source:"claude-code-proactive",
+                                  safe_to_delete:true})
+
+  4. Acknowledge concisely AFTER answering whatever the user actually
+     asked, with a one-liner like:
+
+         → saved to Memsy: "<first 60 chars>..." (event <id>)
+
+     Do NOT interrupt the user's primary task. The save is secondary;
+     the answer they asked for comes first.
+
+Hard rules:
+
+  - Do NOT save every sentence. Save things that would be useful in a
+    later session (3+ months from now). Ephemeral context — "let me try
+    X", "what about Y" — is noise, not memory.
+  - Do NOT ask "do you want me to remember that?" every turn. Either
+    you save (with the confirm-before-store check if enabled) or you
+    don't. Asking each time is worse UX than either pure mode.
+  - Do NOT save the user's question itself when they ask you something.
+    Save substantive content they assert as theirs ("I want X") —
+    not their queries ("how do I X?").
+
+To disable: unset MEMSY_PROACTIVE in your shell and restart Claude Code.
+
+EOF
 fi
 
 # Recall auto-context — separate, only fires when MEMSY_SESSION_AUTOCONTEXT is
