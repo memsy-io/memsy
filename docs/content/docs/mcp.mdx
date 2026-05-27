@@ -45,7 +45,21 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
 
     <Tabs groupId="mcp-host" persist>
       <Tab title="Claude Code">
-        Add to `~/.claude.json` (user-level) or `.claude/settings.json` (per-project):
+        **Method 1 — `claude mcp add` CLI (recommended)**
+
+        Run from your terminal. Claude Code writes the JSON for you:
+
+        ```bash
+        claude mcp add memsy --scope user \
+          -e MEMSY_API_KEY=msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+          -- npx -y @memsy-io/mcp
+        ```
+
+        Scopes: `user` writes to `~/.claude.json` (every project, recommended), `project` writes to `./.mcp.json` (this repo, committed), `local` writes per-project but is gitignored. Add `-e MEMSY_ACTOR_ID=claude-code` to the same flags to pin a host-specific identity (see the [Identity model](#identity-model)).
+
+        **Method 2 — edit the config file directly**
+
+        Add to `~/.claude.json` (user-level) or `./.mcp.json` (per-project):
 
         ```json title="~/.claude.json"
         {

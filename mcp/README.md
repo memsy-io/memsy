@@ -57,9 +57,21 @@ You don't need to install anything globally — `npx` pulls and runs the latest 
 | Continue.dev | `~/.continue/config.yaml` |
 | Zed | `~/.config/zed/settings.json` |
 
-### 2. Paste this entry
+### 2. Add the server
 
-JSON (Claude Code, Cursor, VS Code, Cline, Zed):
+**Claude Code users** — two methods, pick one:
+
+**Method A — `claude mcp add` CLI (recommended).** Claude Code writes the JSON for you:
+
+```bash
+claude mcp add memsy --scope user \
+  -e MEMSY_API_KEY=msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  -- npx -y @memsy-io/mcp
+```
+
+Scopes: `user` → `~/.claude.json` (every project, recommended), `project` → `./.mcp.json` (this repo, committed), `local` → per-project, gitignored. Pass `-e MEMSY_ACTOR_ID=claude-code` to also pin a host-specific identity.
+
+**Method B — edit the config file directly.** This is the only path for Cursor / VS Code / Cline / Zed:
 
 ```jsonc
 {
@@ -76,7 +88,7 @@ JSON (Claude Code, Cursor, VS Code, Cline, Zed):
 }
 ```
 
-YAML (Continue.dev):
+**Continue.dev** — YAML:
 
 ```yaml
 mcpServers:
