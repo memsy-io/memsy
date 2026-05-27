@@ -25,7 +25,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible
 | `memsy_create_team` | Create a new team in the active org during onboarding. |
 | `memsy_set_defaults` | Set the default role_ids, team_ids, and/or actor_id for the active profile, optionally persisted to `~/.memsy` or `./.memsy`. |
 
-Plus 4 resources — `memsy://memories/recent`, `actor/current`, `session/current`, `profile/current` — and 3 prompts — `recall-context`, `setup-defaults`, `summarize-and-store`.
+Plus 4 resources — `memsy://memories/recent`, `actor/current`, `session/current`, `profile/current` — and 4 prompts — `recall-context`, `setup-defaults`, `proactive-mode`, `summarize-and-store`.
 
 <Info>
 Requires Node.js 18+. You don't need to install anything globally — your host spawns the server via `npx`.
@@ -150,6 +150,19 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
         ```
       </Tab>
     </Tabs>
+
+    <Info>
+    **Optional — pin your actor identity per host.** Add `MEMSY_ACTOR_ID` next to `MEMSY_API_KEY` in the same `env` block to tag every memory ingested through this host with a stable label:
+
+    ```jsonc
+    "env": {
+      "MEMSY_API_KEY": "msy_...",
+      "MEMSY_ACTOR_ID": "claude-code"   // or "cursor", "vscode", "coder-agent", or your handle
+    }
+    ```
+
+    Skip this and the server falls back to a stable hash of your git email — fine for solo use, but if you use multiple hosts you'll want each one set distinctly so you can later filter "what did I save via Claude Code last week?". See the [Identity model](#identity-model) section for the four precedence sources. You can also pin it later with *"tag my memories as `<name>` from now on"* — Claude writes it to `~/.memsy/config.json` for you.
+    </Info>
   </Step>
 
   <Step title="Restart your host">
@@ -159,7 +172,7 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
   <Step title="Verify it's connected">
     <Tabs groupId="mcp-host" persist>
       <Tab title="Claude Code">
-        Type `/mcp` — `memsy` should appear with 8 tools.
+        Type `/mcp` — `memsy` should appear with 13 tools.
       </Tab>
       <Tab title="Cursor">
         Settings → Tools & MCP → `memsy` should show a green status dot.
@@ -305,23 +318,28 @@ If you work across multiple Memsy orgs (personal + work, multiple clients), use 
 
 <Steps>
   <Step title="Create ~/.memsy/config.json">
-    ```json title="~/.memsy/config.json"
+    ```jsonc title="~/.memsy/config.json"
     {
       "active_profile": "personal",
       "profiles": {
         "personal": {
           "api_key": "msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
           "base_url": "https://api.memsy.io/v1",
-          "org_label": "Personal"
+          "org_label": "Personal",
+          "actor_id": "alex-dev"            // optional — pin identity for this profile (see Identity model)
         },
         "work": {
           "api_key": "msy_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
           "base_url": "https://api.memsy.io/v1",
-          "org_label": "Work"
+          "org_label": "Work",
+          "default_role_ids": ["senior"],   // optional — applied as default search filter
+          "default_team_ids": ["platform"]  // optional — applied as default search filter
         }
       }
     }
     ```
+
+    Every field other than `api_key` is optional. Omit `actor_id` to fall back to the git-derived hash; omit `default_role_ids` / `default_team_ids` to leave searches unfiltered.
   </Step>
 
   <Step title="Lock down permissions">
@@ -363,7 +381,7 @@ If you work across multiple Memsy orgs (personal + work, multiple clients), use 
 | `MEMSY_API_KEY` | — | API key. Synthesizes a `default` profile when no config file exists. |
 | `MEMSY_BASE_URL` | `https://api.memsy.io/v1` | Memsy hot-path API. Override for staging or self-hosted. |
 | `MEMSY_PROFILE` | `default` | Which named profile to activate at startup. |
-| `MEMSY_ACTOR_ID` | derived | Override the actor identity. |
+| `MEMSY_ACTOR_ID` | *(see Identity model)* | Pin the actor identity for ingest. **Highest precedence** — overrides any `actor_id` set in `~/.memsy/config.json`. Per-host: set differently in each host's MCP config to give each host a distinct identity (e.g. `claude-code` vs `cursor`). |
 | `MEMSY_DEFAULT_ROLE_IDS` | — | Comma-separated role IDs applied as default search filters. |
 | `MEMSY_DEFAULT_TEAM_IDS` | — | Comma-separated team IDs applied as default search filters. |
 
@@ -385,28 +403,35 @@ CLI flags beat env vars beat config-file `active_profile`.
 
 ## Identity model
 
-`actor_id` scopes who memories belong to. The server derives a stable, deterministic value:
+`actor_id` scopes who memories belong to. The server resolves it at startup from one of four sources, in **precedence order** — the first one set wins:
 
-```
-actor_id = sha256("<profile_name>|<git config user.email>")[:16]
-```
+| # | Source | When it fires | `source` label |
+|---|---|---|---|
+| 1 | **Per-call tool arg** | You pass `actor_id` to a single `memsy_ingest` event | `tool-arg` |
+| 2 | **Env var `MEMSY_ACTOR_ID`** | Set in your host's MCP `env` block | `env` |
+| 3 | **Profile config** | `"actor_id": "<value>"` in `~/.memsy/config.json` for the active profile | `profile` |
+| 4 | **Derived (fallback)** | None of the above — server computes `sha256("<profile_name>\|<git user.email>")[:16]` (or `<user>@<hostname>` if no git email exists) | `derived-git` / `derived-os` |
 
-No PII to the server — just the hash. Same developer, same email, same profile, same repo → same actor_id across sessions.
+The derived fallback ships no PII to the server — just a deterministic hash so the same developer in the same repo lands on the same `actor_id` across sessions. But it's only the fallback — most users want option 2 or 3.
 
-**Defaults**:
+**Resolved value applies to**:
 
-- **Ingest** tags new events with this derived `actor_id` so you can tell which were stored via this MCP.
-- **Search** is **org-wide** by default — finds memories regardless of which channel stored them (dashboard, SDK, prior sessions). Pass `actor_id` explicitly to scope down.
+- **Ingest** — every new event is tagged with the resolved `actor_id` (no matter which source it came from).
+- **Search** — **org-wide** by default; the resolved `actor_id` is *not* used as a filter. Pass `actor_id` explicitly to scope down. So pinning your identity for ingest doesn't hide memories from earlier channels (dashboard, SDK, other hosts).
 
 ### Pinning a stable identity
 
 Three options, in order of convenience:
 
-1. **`memsy_set_defaults`** — ask Claude *"tag my memories as `<value>` from now on"* and it calls `memsy_set_defaults { actor_id: "<value>", persist: "global" }`, writing the field into `~/.memsy/config.json` for you.
-2. **Profile config** — hand-edit `~/.memsy/config.json` and add `"actor_id": "<value>"` to the active profile. Stable across every MCP host (Claude Code, Cursor, VS Code, etc.) that reads the same file.
-3. **Per-host env var** — set `MEMSY_ACTOR_ID=<value>` in the host's MCP config. **Highest precedence** — overrides profile config. Useful when you want each host to have a distinct identity (e.g. `claude-code` in Claude Code's config, `cursor` in Cursor's) so you can later filter *"what did I save via Claude Code last week?"*.
+1. **`memsy_set_defaults`** (recommended — conversational) — ask Claude *"tag my memories as `<value>` from now on"* and it calls `memsy_set_defaults { actor_id: "<value>", persist: "global" }`, writing the field into `~/.memsy/config.json` for you. Source becomes `profile`.
+2. **Profile config** (manual) — hand-edit `~/.memsy/config.json` and add `"actor_id": "<value>"` to the active profile. Stable across every MCP host (Claude Code, Cursor, VS Code, etc.) that reads the same file.
+3. **Per-host env var** (highest precedence — overrides #1 and #2) — set `MEMSY_ACTOR_ID=<value>` in the host's MCP config `env` block. Useful when you want each host to have a *distinct* identity (e.g. `claude-code` in Claude Code's config, `cursor` in Cursor's) so you can later filter *"what did I save via Claude Code last week?"*. Source becomes `env`.
 
 **Suggested values**: an agent identifier (`claude-code`, `cursor`, `vscode`, `zed`, `cline`, `coder-agent`) or a personal handle (`alex-dev`). Whatever you pick, search stays org-wide by default so existing memories remain findable.
+
+<Info>
+Want to know what's currently active? Ask *"What's my Memsy actor_id?"* — Claude reads `memsy://actor/current` and reports the `actor_id` plus its `source` (one of `tool-arg` / `env` / `profile` / `derived-git` / `derived-os`). If the resource payload includes a `setup_hint` field, the value is unpinned and the hint walks you through pinning it.
+</Info>
 
 See [Actors and Sessions](/docs/actors-and-sessions) for the broader concept.
 
