@@ -50,13 +50,30 @@ To switch back to the published npm version:
 
 ## Slash commands
 
+### Universal entry point — smart router
+
+`/memsy <anything>` reads the rest of the line and routes to the right action. You don't need to know the subcommands.
+
+```
+/memsy what did we decide about billing storage?     → searches memories
+/memsy remember we picked Postgres for billing       → stores a memory
+/memsy switch to work                                → switches profile
+/memsy list                                          → lists recent memories
+/memsy doctor                                        → runs the health check
+/memsy setup                                         → first-time walkthrough
+/memsy                                               → shows the menu above
+```
+
+Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, …) pick the intent; bare topics default to **search** (most common ask, safest fallback). When ambiguous, the router asks rather than guessing.
+
+### Explicit fast paths (for users who know what they want)
+
 | Command | Args | Description |
 |---|---|---|
-| `/memsy <query>` | free text | Search memories with a natural-language query (e.g. `/memsy what did we decide about billing storage?`) |
-| `/memsy-remember <text>` | free text | Store a fact / decision / note (e.g. `/memsy-remember picked Postgres for billing because it's already deployed`) |
+| `/memsy-remember <text>` | free text | Store a fact / decision / note |
 | `/memsy-org [name]` | profile name | Switch active profile / org. With no arg, lists configured profiles. |
 | `/memsy-setup` | none | First-time walkthrough — pick default role(s), team(s), pin `actor_id` |
-| `/memsy-doctor` | none | Check MCP health, identity source, active profile, session id, and surface setup hints |
+| `/memsy-doctor` | none | Health + identity diagnostic with per-error next-step pointers |
 
 ### MCP-level prompts (also available in Cursor, VS Code, Cline, etc.)
 
