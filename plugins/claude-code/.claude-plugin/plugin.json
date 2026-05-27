@@ -1,0 +1,14 @@
+{
+  "name": "memsy",
+  "displayName": "Memsy",
+  "version": "0.1.0",
+  "description": "Long-term memory for Claude Code — recall, store, and share decisions across sessions and team via @memsy-io/mcp.",
+  "author": {
+    "name": "Memsy",
+    "url": "https://memsy.io"
+  },
+  "homepage": "https://docs.memsy.io",
+  "repository": "https://github.com/memsy-io/memsy",
+  "license": "MIT",
+  "keywords": ["memory", "memsy", "mcp", "long-term-memory", "recall"]
+}

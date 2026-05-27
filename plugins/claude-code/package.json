@@ -1,0 +1,35 @@
+{
+  "name": "@memsy-io/claude-code",
+  "version": "0.1.0",
+  "description": "Memsy plugin for Claude Code — long-term memory via slash commands, skills, and hooks over the @memsy-io/mcp server.",
+  "private": true,
+  "files": [
+    ".claude-plugin",
+    ".mcp.json",
+    "commands",
+    "install.sh",
+    "README.md",
+    "PLAN.md"
+  ],
+  "scripts": {
+    "doctor:dryrun": "echo 'Plugin is markdown + JSON only — no build step yet.'"
+  },
+  "keywords": [
+    "memsy",
+    "claude-code",
+    "plugin",
+    "memory",
+    "mcp"
+  ],
+  "author": "memsy <gaurav@memsy.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memsy-io/memsy",
+    "directory": "plugins/claude-code"
+  },
+  "homepage": "https://docs.memsy.io",
+  "bugs": {
+    "url": "https://github.com/memsy-io/memsy/issues"
+  }
+}
