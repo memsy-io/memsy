@@ -1,0 +1,57 @@
+{
+  "name": "@memsy-io/mcp",
+  "version": "0.1.0",
+  "description": "Memsy MCP server - Drop-in memory infrastructure that learns at the role, team, and org level — so your AI app gets smarter as more agents and humans use it.",
+  "type": "module",
+  "bin": {
+    "memsy-mcp": "./bin/memsy-mcp.js"
+  },
+  "main": "./dist/server.js",
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE",
+    "logo.png"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "memsy",
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "ai",
+    "agents"
+  ],
+  "author": "memsy <gaurav@memsy.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memsy-io/memsy",
+    "directory": "mcp"
+  },
+  "homepage": "https://docs.memsy.io",
+  "bugs": {
+    "url": "https://github.com/memsy-io/memsy/issues"
+  },
+  "dependencies": {
+    "@memsy-io/memsy": "^0.3.2",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
