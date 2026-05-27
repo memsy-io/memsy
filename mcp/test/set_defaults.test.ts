@@ -125,6 +125,43 @@ describe("persistProfileDefaults", () => {
     ).toThrow(/not valid JSON/);
   });
 
+  it("persists actor_id and leaves it untouched when later updates omit it", () => {
+    const path = configPathForScope("global");
+    preSeed(path, {
+      profiles: {
+        default: {
+          api_key: "msy_d",
+          default_role_ids: ["pre-existing-role"],
+        },
+      },
+    });
+
+    // First update: set actor_id.
+    persistProfileDefaults(
+      "global",
+      "default",
+      { apiKey: "msy_d", baseUrl: "https://api.memsy.io/v1" },
+      { actorId: "claude-code" },
+    );
+
+    let profiles = reloadProfilesFromDisk(path);
+    expect(profiles.default.actorId).toBe("claude-code");
+    // pre-existing role survives.
+    expect(profiles.default.defaultRoleIds).toEqual(["pre-existing-role"]);
+
+    // Second update: only touch teams — actor_id must remain.
+    persistProfileDefaults(
+      "global",
+      "default",
+      { apiKey: "msy_d", baseUrl: "https://api.memsy.io/v1", actorId: "claude-code" },
+      { defaultTeamIds: ["platform"] },
+    );
+
+    profiles = reloadProfilesFromDisk(path);
+    expect(profiles.default.actorId).toBe("claude-code");
+    expect(profiles.default.defaultTeamIds).toEqual(["platform"]);
+  });
+
   it("only touches fields the caller passes (clear vs leave-alone)", () => {
     const path = configPathForScope("global");
     preSeed(path, {

@@ -23,7 +23,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server turns any MCP-compatible
 | `memsy_list_teams` | List teams defined in the active org (for onboarding pickers). |
 | `memsy_create_role` | Create a new role in the active org during onboarding. |
 | `memsy_create_team` | Create a new team in the active org during onboarding. |
-| `memsy_set_defaults` | Set the default role_ids / team_ids for the active profile, optionally persisted to `~/.memsy` or `./.memsy`. |
+| `memsy_set_defaults` | Set the default role_ids, team_ids, and/or actor_id for the active profile, optionally persisted to `~/.memsy` or `./.memsy`. |
 
 Plus 4 resources — `memsy://memories/recent`, `actor/current`, `session/current`, `profile/current` — and 3 prompts — `recall-context`, `setup-defaults`, `summarize-and-store`.
 
@@ -266,6 +266,7 @@ If you have multiple Memsy profiles configured:
 |---|---|
 | *"Change my default team to Architect, save it."* | `memsy_set_defaults { team_ids: ["architect-id"], persist: "global" }`. |
 | *"Clear my role default."* | `memsy_set_defaults { role_ids: [], persist: "global" }` (empty array = explicit clear). |
+| *"Tag my memories as claude-code from now on."* | `memsy_set_defaults { actor_id: "claude-code", persist: "global" }` — pins identity so ingest stops using the auto-derived git hash. |
 | *"Stop scoping my searches to one team for the rest of this session."* | Same as above but `persist: "none"` — in-memory only. |
 
 ### Diagnostics
@@ -397,7 +398,17 @@ No PII to the server — just the hash. Same developer, same email, same profile
 - **Ingest** tags new events with this derived `actor_id` so you can tell which were stored via this MCP.
 - **Search** is **org-wide** by default — finds memories regardless of which channel stored them (dashboard, SDK, prior sessions). Pass `actor_id` explicitly to scope down.
 
-Override with `MEMSY_ACTOR_ID=alex-dev` (env) or per-profile `actor_id` in config. See [Actors and Sessions](/docs/actors-and-sessions) for the broader concept.
+### Pinning a stable identity
+
+Three options, in order of convenience:
+
+1. **`memsy_set_defaults`** — ask Claude *"tag my memories as `<value>` from now on"* and it calls `memsy_set_defaults { actor_id: "<value>", persist: "global" }`, writing the field into `~/.memsy/config.json` for you.
+2. **Profile config** — hand-edit `~/.memsy/config.json` and add `"actor_id": "<value>"` to the active profile. Stable across every MCP host (Claude Code, Cursor, VS Code, etc.) that reads the same file.
+3. **Per-host env var** — set `MEMSY_ACTOR_ID=<value>` in the host's MCP config. **Highest precedence** — overrides profile config. Useful when you want each host to have a distinct identity (e.g. `claude-code` in Claude Code's config, `cursor` in Cursor's) so you can later filter *"what did I save via Claude Code last week?"*.
+
+**Suggested values**: an agent identifier (`claude-code`, `cursor`, `vscode`, `zed`, `cline`, `coder-agent`) or a personal handle (`alex-dev`). Whatever you pick, search stays org-wide by default so existing memories remain findable.
+
+See [Actors and Sessions](/docs/actors-and-sessions) for the broader concept.
 
 ## Troubleshooting
 

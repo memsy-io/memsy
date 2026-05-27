@@ -87,14 +87,19 @@ export class ProfileManager {
   }
 
   /**
-   * Update the cached defaultRoleIds / defaultTeamIds on a profile and (if
-   * it's the active one) refresh the live ActiveContext.profile so subsequent
-   * tool calls see the new values without re-instantiating the HTTP client.
-   * Only the fields explicitly passed are touched.
+   * Update the cached defaultRoleIds / defaultTeamIds / actorId on a profile
+   * and (if it's the active one) refresh the live ActiveContext.profile so
+   * subsequent tool calls see the new values without re-instantiating the HTTP
+   * client. Only the fields explicitly passed are touched.
+   *
+   * When actorId is updated on the active profile, identity is re-derived so
+   * ctx.identity.actorId reflects the new value immediately (without this,
+   * ingest would keep tagging events with the old git-derived hash until host
+   * restart).
    */
   updateDefaults(
     name: string,
-    update: { defaultRoleIds?: string[]; defaultTeamIds?: string[] },
+    update: { defaultRoleIds?: string[]; defaultTeamIds?: string[]; actorId?: string },
   ): Profile {
     if (!this.hasProfile(name)) {
       throw new Error(`Unknown profile "${name}".`);
@@ -103,14 +108,15 @@ export class ProfileManager {
       ...this.profiles[name],
       ...(update.defaultRoleIds !== undefined && { defaultRoleIds: update.defaultRoleIds }),
       ...(update.defaultTeamIds !== undefined && { defaultTeamIds: update.defaultTeamIds }),
+      ...(update.actorId !== undefined && { actorId: update.actorId }),
     };
     this.profiles[name] = next;
     if (this.active.profileName === name) {
-      // Mutate the live context's `profile` reference so existing search.ts /
-      // ingest.ts code that reads ctx.profile.defaultRoleIds picks up the
-      // change. Identity + client stay the same — only the filter defaults
-      // moved.
-      this.active = { ...this.active, profile: next };
+      const identity =
+        update.actorId !== undefined
+          ? buildIdentity({ profile: next, profileName: name })
+          : this.active.identity;
+      this.active = { ...this.active, profile: next, identity };
     }
     return next;
   }

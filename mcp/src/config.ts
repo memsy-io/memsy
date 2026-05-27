@@ -88,6 +88,7 @@ function serializeProfile(p: Profile): Record<string, unknown> {
 export interface ProfileUpdate {
   defaultRoleIds?: string[];
   defaultTeamIds?: string[];
+  actorId?: string;
 }
 
 export interface PersistResult {
@@ -144,6 +145,7 @@ export function persistProfileDefaults(
     ...existingProfile,
     ...(updates.defaultRoleIds !== undefined && { defaultRoleIds: updates.defaultRoleIds }),
     ...(updates.defaultTeamIds !== undefined && { defaultTeamIds: updates.defaultTeamIds }),
+    ...(updates.actorId !== undefined && { actorId: updates.actorId }),
   };
 
   existing.profiles[profileName] = merged;

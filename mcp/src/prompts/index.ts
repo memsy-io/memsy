@@ -34,7 +34,7 @@ export function registerAllPrompts(server: McpServer): void {
 
   server.prompt(
     "setup-defaults",
-    "Walk the user through picking their default role(s) and team(s) once, so subsequent memsy_search / memsy_ingest calls don't have to specify them every time.",
+    "Walk the user through picking their default role(s), team(s), and actor_id identity once, so subsequent memsy_search / memsy_ingest calls don't have to specify them every time.",
     {
       persist_scope: z
         .enum(["none", "global", "project"])
@@ -55,7 +55,7 @@ export function registerAllPrompts(server: McpServer): void {
             content: {
               type: "text",
               text:
-                "Walk me through picking my default Memsy role(s) and team(s).\n\n" +
+                "Walk me through picking my default Memsy role(s), team(s), and actor identity.\n\n" +
                 "Steps:\n" +
                 "1. Call memsy_list_roles to fetch the org's roles. If the list is empty OR " +
                 "I name a role that's not in it, call memsy_create_role for each missing one " +
@@ -65,9 +65,23 @@ export function registerAllPrompts(server: McpServer): void {
                 "3. Call memsy_list_teams. Same pattern — if empty or any name is missing, " +
                 "call memsy_create_team for each missing one. Then show the numbered list.\n" +
                 "4. Ask me which team(s) I want as my defaults.\n" +
-                "5. Confirm the selections back to me.\n" +
-                `6. Call memsy_set_defaults with the chosen role_ids and team_ids and persist="${scope}".\n` +
-                "7. Report success — include the file path persist wrote to so I can find it later.",
+                "5. Read memsy://identity/current to show me my current actor_id and how it was " +
+                "derived (env / profile / derived-git / derived-os). Explain that actor_id is the " +
+                "identity new memories get tagged with — search is org-wide by default so existing " +
+                "memories stay findable regardless of what I pick here.\n" +
+                "6. Offer me a short menu of common values and ask which (or 'keep current'):\n" +
+                "   - **Agent-style** (recommended when the same person uses multiple hosts): " +
+                "`claude-code`, `cursor`, `vscode`, `zed`, `cline`, `coder-agent` — lets me later " +
+                "filter 'what did I save via Claude Code last week?'\n" +
+                "   - **Personal handle** (recommended for single-host users): something like " +
+                "`alex-dev` or my first name.\n" +
+                "   - **Keep current** — leave the derived value alone (good if I've already been " +
+                "using Memsy and want continuity).\n" +
+                "7. Confirm all three selections (roles, teams, actor_id) back to me.\n" +
+                `8. Call memsy_set_defaults with role_ids, team_ids, actor_id (omit if I chose 'keep current') and persist="${scope}".\n` +
+                "9. Report success — include the file path persist wrote to. If the response has a " +
+                "`warning` field about MEMSY_ACTOR_ID env shadowing the new value, surface it " +
+                "verbatim so I can fix my host config.",
             },
           },
         ],

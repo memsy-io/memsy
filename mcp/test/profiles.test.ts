@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ProfileManager } from "../src/profiles.js";
+import { _resetGitEmailCache, _resetSessionId } from "../src/identity.js";
 import type { ResolvedConfig } from "../src/config.js";
 
 function fixture(): ResolvedConfig {
@@ -69,6 +70,40 @@ describe("ProfileManager", () => {
     // Switching to work picks up the new defaults
     mgr.activate("work");
     expect(mgr.current().profile.defaultRoleIds).toEqual(["senior"]);
+  });
+
+  it("updateDefaults with actorId re-derives identity on the active profile", () => {
+    // Make sure git-derived caching from a previous test doesn't leak.
+    _resetGitEmailCache();
+    _resetSessionId();
+    delete process.env.MEMSY_ACTOR_ID;
+
+    const mgr = new ProfileManager(fixture());
+    const before = mgr.current().identity.actorId;
+
+    mgr.updateDefaults("personal", { actorId: "claude-code" });
+
+    // Identity reflects the explicit override immediately (source = profile),
+    // not the previous derived hash.
+    expect(mgr.current().identity.actorId).toBe("claude-code");
+    expect(mgr.current().identity.source).toBe("profile");
+    expect(mgr.current().identity.actorId).not.toBe(before);
+    // Profile field is also persisted in memory.
+    expect(mgr.current().profile.actorId).toBe("claude-code");
+  });
+
+  it("updateDefaults without actorId leaves the existing identity in place", () => {
+    _resetGitEmailCache();
+    _resetSessionId();
+    delete process.env.MEMSY_ACTOR_ID;
+
+    const mgr = new ProfileManager(fixture());
+    const before = mgr.current().identity;
+
+    mgr.updateDefaults("personal", { defaultRoleIds: ["ic"] });
+
+    // Same identity object instance — not just same actorId value.
+    expect(mgr.current().identity).toBe(before);
   });
 });
 
