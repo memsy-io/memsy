@@ -1,8 +1,8 @@
 {
   "name": "memsy",
   "displayName": "Memsy",
-  "version": "0.2.0",
-  "description": "Long-term memory for Claude Code — recall and store via slash commands or natural language, with auto-recovery skills when the MCP isn't reachable.",
+  "version": "0.4.0",
+  "description": "Long-term memory for Claude Code — slash commands, skills, opt-in session hooks, codebase indexing, and a deep-retrieval subagent over the @memsy-io/mcp server.",
   "author": {
     "name": "Memsy",
     "url": "https://memsy.io"

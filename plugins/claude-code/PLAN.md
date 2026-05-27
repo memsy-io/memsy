@@ -1,6 +1,6 @@
 # Claude Code Plugin — Phase 1b Plan
 
-**Status**: M1 + M2 + M3 complete (v0.2.0) · **Branch**: `ns/claude-code-plugin-m1` · **Package**: `@memsy-io/claude-code` (private for now)
+**Status**: ALL MILESTONES COMPLETE (v0.4.0) · **Branch**: `ns/claude-code-plugin-m1` · **Package**: `@memsy-io/claude-code` (private for now)
 
 ## Goal
 
@@ -38,11 +38,24 @@ Plugin is **strictly additive** on top of the MCP — uninstalling it must leave
 | M1 | `plugin.json` + `/memsy-doctor` command + `install.sh` + README | ½ day | always-on | ✅ v0.1.0 |
 | M2 | `/memsy`, `/memsy-remember`, `/memsy-org`, `/memsy-setup` slash commands (thin wrappers over MCP tools) | ½ day | always-on | ✅ v0.2.0 |
 | M3 | `memsy-recall` + `memsy-remember` + `memsy-setup` (fallback) skills | 1 day | always-on (skills are triggered by phrasing, not auto-fired) | ✅ v0.2.0 |
-| M4 | `hooks/session-start.ts` — auto-context injection (token-budgeted) | 1 day | **OFF** — opt-in via `MEMSY_SESSION_AUTOCONTEXT=on` | next |
-| M5 | `hooks/session-stop.ts` — session-end capture with signal-keyword filter | 1 day | **OFF** — opt-in via `MEMSY_AUTO_STORE=on` | next |
-| M6 | `/memsy-index` command — codebase ingest per-ecosystem playbook | 1 day | manual invoke | |
-| M7 | `memsy-archivist` subagent — deep retrieval / cluster / dedupe | ½ day | manual invoke | |
-| M8 | Docs page (`/docs/integrations/claude-code`) + e2e verification | ½ day | — | |
+| M4 | `hooks/hooks.json` + `scripts/session-start.sh` — SessionStart auto-context | 1 day | **OFF** — opt-in via `MEMSY_SESSION_AUTOCONTEXT=on` | ✅ v0.4.0 |
+| M5 | `/memsy-checkpoint` command (not a hook — see note below) | 1 day | manual invoke | ✅ v0.4.0 |
+| M6 | `/memsy-index` command — codebase ingest per-ecosystem playbook | 1 day | manual invoke | ✅ v0.4.0 |
+| M7 | `memsy-archivist` subagent — deep retrieval / cluster / dedupe | ½ day | manual invoke | ✅ v0.4.0 |
+| M8 | Docs page (`docs/content/docs/claude-code.mdx`) + meta.json registration | ½ day | — | ✅ v0.4.0 |
+
+### M5 design change — hook → command
+
+The original plan called for a `Stop` or `SessionEnd` hook that would scan the conversation and auto-store qualifying content. **This doesn't work** in Claude Code: per the [hooks reference](https://code.claude.com/docs/en/hooks), stdout from `Stop` and `SessionEnd` hooks goes to the debug log only — it is NOT injected into Claude's context. An auto-save hook therefore couldn't actually call MCP tools to store anything.
+
+We shipped `/memsy-checkpoint` as a user-initiated slash command instead. Same intent (capture session learnings), strictly better trade-offs:
+
+- **Safer**: no surprise noise from over-eager auto-store.
+- **Functional**: the command body runs through Claude, so it can actually call `memsy_ingest`.
+- **Reviewable**: the user sees the candidate list before anything is persisted.
+- **Re-usable**: works at any point in the session, not just at termination.
+
+Hook stdout *is* injected for `SessionStart`, `UserPromptSubmit`, and `UserPromptExpansion`. That's the discriminator — M4 SessionStart auto-context works as a hook because its stdout reaches Claude. M5 doesn't, so it can't.
 
 **Total**: ~6 working days. Cut lines below.
 

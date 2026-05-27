@@ -4,8 +4,8 @@ Long-term memory for Claude Code — recall, store, and share decisions across s
 
 This plugin wraps [`@memsy-io/mcp`](https://www.npmjs.com/package/@memsy-io/mcp) with Claude Code-native UX. The MCP server provides all the tools and resources; this plugin adds slash commands, skills, and hooks so the surface is discoverable from inside Claude Code.
 
-> **Status: v0.2.0 — M1 + M2 + M3 + setup fallback skill**
-> Slash commands for search / store / org switch / doctor / setup, plus skills that auto-fire on natural phrasing. Auto-context and capture hooks land in v0.3.0 (opt-in). See [PLAN.md](./PLAN.md) for the full roadmap.
+> **Status: v0.4.0 — all milestones**
+> Slash commands, skills, opt-in `SessionStart` auto-context, `/memsy-checkpoint` for save-the-conversation, `/memsy-index` for codebase snapshotting, `memsy-archivist` subagent for deep retrieval, and a full docs page at <https://docs.memsy.io/docs/claude-code>. See [PLAN.md](./PLAN.md) for the full roadmap and rationale.
 
 ## Install
 
@@ -78,6 +78,29 @@ For users who know exactly which action they want:
 | `/memsy:memsy-org [name]` | profile name | Switch active profile / org. No-arg lists profiles. |
 | `/memsy:memsy-setup` | none | First-time walkthrough — pick default role(s), team(s), pin `actor_id` |
 | `/memsy:memsy-doctor` | none | Health + identity diagnostic with per-error next-step pointers |
+| `/memsy:memsy-checkpoint` | none | Review and save save-worthy content from the current conversation — manual replacement for an unsupported "save on session end" hook |
+| `/memsy:memsy-index` | none | One-shot ingest of a structured codebase summary (per-ecosystem playbook for JS / Python / Rust / Go / Ruby / JVM) |
+
+## Hooks
+
+### SessionStart auto-context (opt-in)
+
+When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Code, the plugin's `SessionStart` hook injects a "Memsy recall" context block before your first message — surfacing the most recent N memories from the active profile.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MEMSY_SESSION_AUTOCONTEXT` | `off` | Set to `on` to enable auto-context. |
+| `MEMSY_SESSION_CONTEXT_LIMIT` | `6` | How many memories to surface. Clamped to 1–20. |
+
+Turn it off by unsetting the env var and restarting Claude Code. The hook is silent unless explicitly opted in.
+
+> **Why no auto-save-on-end hook?** Claude Code's `SessionEnd` and `Stop` hooks don't pipe their stdout back into Claude, so an auto-save hook can't actually call MCP tools to store anything. We ship `/memsy-checkpoint` as a user-initiated command instead — safer (no surprise noise) and actually functional.
+
+## Subagents
+
+| Agent | Trigger | Purpose |
+|---|---|---|
+| `memsy-archivist` | "do a deep memsy dive", "audit all our past decisions on X", or auto-fires when shallow recall returns thin results | Multi-query exploration — runs 3–5 query variants in parallel, clusters by theme, dedupes, returns structured summary with explicit gap-list. |
 
 ### MCP-level prompts (also available in Cursor, VS Code, Cline, etc.)
 
@@ -108,6 +131,8 @@ These are exposed by the `@memsy-io/mcp` server itself, so they work in any MCP 
 | `MEMSY_ACTOR_ID` | Pin a stable `actor_id` (otherwise it's derived from `git config user.email` or `$USER@hostname`). |
 | `MEMSY_DEFAULT_ROLE_IDS` | Comma-separated default role filters for searches. |
 | `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
+| `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
+| `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the SessionStart hook surfaces. Default: `6`, clamped 1–20. |
 
 Full env reference: [`../../mcp/README.md`](../../mcp/README.md).
 

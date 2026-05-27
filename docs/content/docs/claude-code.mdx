@@ -1,0 +1,178 @@
+---
+title: Claude Code
+description: Install the Memsy plugin for Claude Code to get long-term memory via slash commands, skills, hooks, and a deep-retrieval subagent.
+---
+
+The `@memsy-io/claude-code` plugin wraps [`@memsy-io/mcp`](/docs/mcp) with Claude Code-native UX. The MCP server provides the tools and resources; the plugin adds the surface (slash commands, skills, hooks, agents) so Memsy is discoverable from inside Claude Code without you having to memorize the MCP tool names.
+
+Plugin is **strictly additive** on top of the MCP — uninstalling the plugin leaves the MCP server working unchanged.
+
+## Install
+
+<Steps>
+<Step>
+**Get an API key** at [app.memsy.io](https://app.memsy.io).
+</Step>
+
+<Step>
+**Set it in your shell** (e.g. `~/.zshrc` / `~/.bashrc`):
+
+```sh
+export MEMSY_API_KEY=msy_...
+```
+</Step>
+
+<Step>
+**Add the Memsy marketplace + install the plugin:**
+
+```sh
+claude plugin marketplace add memsy-io/memsy
+claude plugin install memsy@memsy
+```
+</Step>
+
+<Step>
+**Restart Claude Code** so it loads the plugin's MCP server.
+</Step>
+
+<Step>
+**Verify:**
+
+```
+/memsy-doctor
+```
+
+You should see "Status: ok" with your active profile and `actor_id`.
+</Step>
+</Steps>
+
+## Slash commands
+
+### `/memsy <anything>` — universal entry point
+
+This is the one slash to remember. The `memsy` skill reads what you typed after the slash, classifies intent, and runs the matching workflow.
+
+```
+/memsy what did we decide about billing storage?     → searches memories
+/memsy remember we picked Postgres for billing       → stores a memory
+/memsy switch to work                                → switches profile
+/memsy list                                          → lists recent memories
+/memsy doctor                                        → runs the health check
+/memsy setup                                         → first-time walkthrough
+/memsy                                               → shows the menu above
+```
+
+Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, `doctor`, `setup`) pick the intent; bare topics default to **search** — the safest fallback, since mis-storing creates noise that's hard to undo. When ambiguous, the router asks rather than guessing.
+
+### `/memsy:<name>` — explicit namespaced fast paths
+
+| Command | Args | Description |
+|---|---|---|
+| `/memsy:memsy-remember <text>` | free text | Store a fact / decision / note |
+| `/memsy:memsy-org [name]` | profile name | Switch active profile / org. No-arg lists profiles. |
+| `/memsy:memsy-setup` | none | First-time walkthrough — pick default role(s), team(s), pin `actor_id` |
+| `/memsy:memsy-doctor` | none | Health + identity diagnostic with per-error next-step pointers |
+| `/memsy:memsy-checkpoint` | none | Review and save save-worthy content from the current conversation |
+| `/memsy:memsy-index` | none | One-shot ingest of a structured codebase summary |
+
+## Skills (auto-fire on natural phrasing, no slash needed)
+
+| Skill | Fires on | Behavior |
+|---|---|---|
+| `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" | Extracts the topic from your message, calls `memsy_search`, surfaces results grouped by theme. |
+| `memsy-remember` | "remember that", "save this decision", "note that", "store this" | Calls `memsy_ingest` with the substance. Refuses secret-shaped tokens, too-short content, transient scratch. |
+| `memsy-setup` | Any Memsy MCP failure or "memsy isn't working" | Diagnoses by symptom (tool-not-found / 401 / `ECONNREFUSED` / Node missing), walks through the matching fix. |
+
+## MCP-level prompts (work in Cursor / VS Code / Cline too)
+
+These come from the MCP server itself, so they're available in any MCP host — not just Claude Code:
+
+| Prompt | Description |
+|---|---|
+| `/memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` and `limit`. |
+| `/memsy:proactive-mode` | Switch the session into proactive recall mode for the rest of the conversation. |
+| `/memsy:setup-defaults` | Same as `/memsy-setup`, host-agnostic version. |
+| `/memsy:summarize-and-store` | Summarize the recent turns into a single memory and store it. |
+
+## Hooks
+
+### SessionStart auto-context (opt-in)
+
+When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Code, the plugin's SessionStart hook injects a "Memsy recall" context block before your first message — surfacing the most recent N memories from the active profile.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MEMSY_SESSION_AUTOCONTEXT` | `off` | Set to `on` to enable auto-context. |
+| `MEMSY_SESSION_CONTEXT_LIMIT` | `6` | How many memories to surface. Clamped to 1–20. |
+
+Turn it off by unsetting `MEMSY_SESSION_AUTOCONTEXT` and restarting Claude Code. The hook is silent unless explicitly opted in.
+
+> Why not auto-store on session end? Claude Code's `SessionEnd` and `Stop` hooks don't pipe their stdout back into Claude, so an auto-save hook can't actually call MCP tools to store anything. We ship `/memsy-checkpoint` as a user-initiated command instead — safer (no surprise noise) and actually functional.
+
+## Subagent: `memsy-archivist`
+
+For deep multi-query retrieval ("what's our full thinking on X", "audit all our past decisions on Y"), Claude Code can delegate to the `memsy-archivist` subagent. It runs 3–5 query variants in parallel, dedupes, clusters by theme, and returns a structured summary instead of a flat list — plus an explicit list of gaps it noticed.
+
+Trigger it by asking explicitly:
+
+```
+Do a deep memsy dive on rate limiting decisions across all our services.
+```
+
+Or it auto-fires when a shallow `memsy_search` returns thin results on a multi-faceted topic.
+
+## Environment reference
+
+| Var | Purpose |
+|---|---|
+| `MEMSY_API_KEY` | **Required.** Your `msy_...` key. |
+| `MEMSY_BASE_URL` | Override API endpoint (default: `https://api.memsy.io/v1`). |
+| `MEMSY_PROFILE` | Select a named profile from `~/.memsy/config.json`. |
+| `MEMSY_ACTOR_ID` | Pin a stable `actor_id` (else derived from `git config user.email` or `$USER@hostname`). |
+| `MEMSY_DEFAULT_ROLE_IDS` | Comma-separated default role filters for searches. |
+| `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
+| `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
+| `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the auto-context surfaces. Default: `6`. |
+
+Full env reference: see the [MCP docs](/docs/mcp).
+
+## Local development
+
+Iterating on the MCP server itself? Point the plugin at your local build:
+
+```sh
+# 1. Build the MCP
+cd /path/to/memsy/mcp
+npm install && npm run build
+
+# 2. Rewrite the plugin's .mcp.json to use the local build
+cd /path/to/memsy/plugins/claude-code
+./install.sh --dev /path/to/memsy
+
+# 3. Restart Claude Code
+```
+
+Switch back to the published npm version:
+
+```sh
+./install.sh --prod
+```
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `/memsy` says "Unknown command" | Plugin not installed or not enabled | `claude plugin list` — should show `memsy enabled`. If not, `claude plugin enable memsy`. |
+| `/memsy-doctor` reports `Status: ❌` with auth error | `MEMSY_API_KEY` not in the MCP child's env | Confirm `echo $MEMSY_API_KEY` in the shell you launched `claude` from. Restart Claude from that shell. |
+| Long delay before tools load | `dist/server.js` missing (local-dev mode) | `cd mcp && npm install && npm run build`, restart Claude Code. |
+| `command not found: node` in MCP logs | `install.sh --dev` not run, Node not on PATH | Re-run `./install.sh --dev /path/to/memsy` and restart Claude Code. |
+| SessionStart auto-context not appearing | `MEMSY_SESSION_AUTOCONTEXT` not set, or session not restarted after setting | `export MEMSY_SESSION_AUTOCONTEXT=on && claude` — child inherits launch env. |
+| Wrong org's memories surfacing | Active profile mismatch | `/memsy switch <profile>` or set `MEMSY_PROFILE` in your shell. |
+
+## Uninstall
+
+```sh
+claude plugin uninstall memsy
+```
+
+The MCP server (`@memsy-io/mcp`) is unaffected — uninstalling the plugin only removes the slash commands, skills, hooks, and agent. The MCP keeps working in any other host where you've configured it (Cursor, VS Code, Cline, Continue.dev, Zed).
