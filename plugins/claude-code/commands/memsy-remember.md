@@ -15,9 +15,9 @@ Workflow:
 
 3. **If `$ARGUMENTS` contains a secret-shaped token** (e.g. `msy_`, `sk_`, `ghp_`, `Bearer `, anything that looks like an API key, password, or JWT): **refuse**. Say: "That looks like it contains a secret — Memsy stores in plain text and rotates poorly. Either paraphrase without the secret, or store the secret in a real secret manager."
 
-4. **Otherwise**, call `memsy_ingest` with a single event:
+4. **Otherwise**, strip any leading framing verb (`remember that`, `save this`, `note that`, `tag this as`, `let's remember`, `for future reference`) from `$ARGUMENTS` — same transform the smart-router skill and the `memsy-remember` skill apply, so all three paths store identical content for the same input. Then call `memsy_ingest` with a single event:
    - `kind`: `"user_message"`
-   - `content`: `$ARGUMENTS` (verbatim)
+   - `content`: the stripped substance (verbatim — do not paraphrase or rewrite)
    - `ts`: current ISO 8601 timestamp
 
 5. **Confirm back** to the user:

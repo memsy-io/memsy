@@ -25,13 +25,12 @@ If the message is ambiguous (e.g. "remember that?" with no antecedent), ask a cl
 
 ## 3. Present results
 
-Format as bullet points, **grouped by theme** when 3+ results share a thread (e.g. all about the same migration). Each bullet:
+Format as bullet points, **grouped by theme** when 3+ results share a thread (e.g. all about the same migration). Each bullet uses the fields `memsy_search` returns (`id`, `score`, `content`, `metadata`):
 
-- Memory text (truncate to 200 chars)
+- Memory `content` (truncate to 200 chars)
 - Score in parens
-- Date if available (parse `observed_at`)
 
-Top 3–5 most relevant first. If memories are clearly unrelated to the query (low scores, off-topic), surface only what's relevant — don't pad.
+Top 3–5 most relevant first. If memories are clearly unrelated to the query (low scores, off-topic), surface only what's relevant — don't pad. Do **not** invent fields like `observed_at` or `actor_id` — search results don't carry them at the top level; call `memsy_get_memory` for a specific result if the user needs more detail.
 
 ## 4. If 0 results
 

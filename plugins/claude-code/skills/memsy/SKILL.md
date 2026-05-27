@@ -1,9 +1,11 @@
 ---
 name: memsy
-description: Use this skill ONLY when the user explicitly invokes the `/memsy` slash command in Claude Code (with or without arguments). This is the universal Memsy entry point — read the user's message after `/memsy`, classify intent (search / store / switch profile / list / doctor / setup), and run the matching Memsy workflow. DO NOT auto-fire on natural-language Memsy phrasing — the `memsy-recall`, `memsy-remember`, and `memsy-setup` skills handle those without a slash.
+description: Triggered ONLY when the user explicitly types the `/memsy` slash command in Claude Code. Do not auto-fire on natural-language phrasing — the `memsy-recall`, `memsy-remember`, and `memsy-setup` skills handle those without a slash.
 ---
 
 The user invoked `/memsy <something>`. Treat everything they typed after `/memsy` as the **query** for this skill. If they typed `/memsy` alone with no arguments, the query is empty.
+
+This skill is the universal Memsy entry point — read the user's message after `/memsy`, classify intent (search / store / switch profile / list / doctor / setup), and run the matching Memsy workflow inline.
 
 ## Step 1: Classify intent from the user's query
 
@@ -73,15 +75,15 @@ If `memsy_health` errored, hand off to the `memsy-setup` skill instead.
 ### `SEARCH`
 
 1. Call `memsy_search` with `query=<user's query verbatim>` and `limit=8`. **Do not paraphrase.**
-2. Format as a numbered list ranked by score:
+2. Format as a numbered list ranked by score. Use only the fields `memsy_search` actually returns (`id`, `score`, `content`, `metadata`, `source_events`, `source_metadata`):
    ```
    Memsy results for "<query>" (N hits)
 
-   1. [score 0.87] <memory text, truncate to 200 chars>
-      actor=<actor_id>  observed=<observed_at>
-   2. [score 0.81] ...
+   1. [score 0.87] <content, truncate to 200 chars>
+   2. [score 0.81] <content, truncate to 200 chars>
    ```
-3. If 0 results: say so plainly. Suggest broader wording or `/memsy-doctor` to check the active profile (memory may be in a different org).
+   Do not invent fields. If the user needs timestamps or actor attribution, call `memsy_get_memory` for the specific result they want to dig into.
+3. If 0 results: say so plainly. Suggest broader wording or `/memsy:memsy-doctor` to check the active profile (memory may be in a different org).
 
 ### `DOCTOR`
 

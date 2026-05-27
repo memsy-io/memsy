@@ -29,7 +29,7 @@ For each candidate, before storing:
 | Filter | Action |
 |---|---|
 | Shorter than 40 chars when standalone | Drop — not enough substance |
-| Contains a secret-shaped token (`msy_`, `sk_`, `ghp_`, `Bearer `, JWT-shaped) | Drop or paraphrase — refuse to store secrets |
+| Contains a secret-shaped token (`msy_`, `sk_`, `ghp_`, `Bearer `, anything that looks like an API key, password, or JWT) | **Refuse**. Say: "That looks like it contains a secret — Memsy stores in plain text. Either paraphrase without the secret, or use a real secret manager." Same wording as `/memsy:memsy-remember` and the `memsy-remember` skill — all four save surfaces share this rule. |
 | Requires conversation context to make sense (uses unresolved pronouns like "the thing we were discussing") | Rewrite as standalone, or drop |
 | Already in Memsy from earlier in this session (you already stored a near-duplicate) | Drop — don't double-store |
 
@@ -53,25 +53,27 @@ Reply with: "save all", "save N,M,…", "drop N", or "cancel".
 
 **Do not auto-store**. Wait for the user's confirmation. This prevents noise creep: the user sees what's being persisted and curates.
 
-## 4. After confirmation, store
+## 4. After confirmation, store — in ONE batched call
 
-For each approved item, call `memsy_ingest` with one event:
+Call `memsy_ingest` **once** with `events` as an array (the MCP tool accepts up to 100 events per batch — don't loop). Each element:
+
 - `kind`: `"user_message"`
 - `content`: the standalone sentence (from step 1, refined in step 3)
 - `ts`: the conversation timestamp closest to where the content originated (if you can identify it), else `now`
-- `metadata.source`: `"claude-code-checkpoint"`
-- `metadata.safe_to_delete`: `true` (so retrospective cleanup is easy if checkpoint quality drifts)
+- `metadata`: a **JSON-encoded string** (the tool's schema requires `metadata: string`, max 4096 chars). Set it to `JSON.stringify({source: "claude-code-checkpoint", safe_to_delete: true})` — i.e. the literal string `{"source":"claude-code-checkpoint","safe_to_delete":true}`.
+
+If the approved list exceeds 100 items, split into batches of 100; otherwise one call.
 
 ## 5. Confirm back
 
 ```
-✓ Saved 3 memories from this session.
-  Event IDs: a1b2c3d4, e5f6g7h8, i9j0k1l2
+✓ Saved N memories from this session in 1 batch.
+  Event IDs: a1b2c3d4, e5f6g7h8, ...
   Use /memsy <topic> to find any of them later.
 ```
 
 ## Edge cases
 
 - **Nothing qualifies**: say "Nothing in this session looks worth saving — that's fine, most don't." Don't pad with anything marginal.
-- **MCP errors during save**: tell the user the save failed for those specific items, with the error. Don't silently swallow.
+- **MCP errors during save**: tell the user the save failed, surface the error verbatim, and hand off to the `memsy-setup` skill if it looks like an auth / network / tool-not-loaded issue. **Be explicit** that the memories were NOT stored — do not silently swallow.
 - **User invokes the command mid-session, not at end**: same workflow — works at any point.

@@ -17,18 +17,25 @@
 
 set -eu
 
-# Gate: only fire when explicitly opted in.
-if [[ "${MEMSY_SESSION_AUTOCONTEXT:-off}" != "on" ]]; then
-  exit 0
-fi
+# Gate: only fire when explicitly opted in. Accept the conventional truthy
+# variants users actually type, lower-cased — `true`/`1`/`yes`/`on`/`enabled`.
+# Anything else (unset, empty, `off`, typos like `Yes!`) → silent exit.
+case "$(printf '%s' "${MEMSY_SESSION_AUTOCONTEXT:-}" | tr '[:upper:]' '[:lower:]')" in
+  on|true|1|yes|enabled) ;;
+  *) exit 0 ;;
+esac
 
 # Pick a recall budget. Override via MEMSY_SESSION_CONTEXT_LIMIT=N (default 6).
 LIMIT="${MEMSY_SESSION_CONTEXT_LIMIT:-6}"
 
 # Be defensive about the limit — clamp to a sane range so the hook can't be
-# weaponized to burn the whole context window via an env var.
-if ! [[ "$LIMIT" =~ ^[0-9]+$ ]] || (( LIMIT < 1 )) || (( LIMIT > 20 )); then
+# weaponized to burn the whole context window via an env var. `10#$LIMIT`
+# forces base-10 arithmetic, so values like `08` and `09` don't crash on
+# bash's octal interpretation.
+if ! [[ "$LIMIT" =~ ^[0-9]+$ ]] || (( 10#$LIMIT < 1 )) || (( 10#$LIMIT > 20 )); then
   LIMIT=6
+else
+  LIMIT="$((10#$LIMIT))"
 fi
 
 cat <<EOF

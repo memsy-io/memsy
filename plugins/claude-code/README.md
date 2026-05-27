@@ -16,15 +16,15 @@ This plugin wraps [`@memsy-io/mcp`](https://www.npmjs.com/package/@memsy-io/mcp)
    ```
 3. **Add the Memsy marketplace + install the plugin:**
    ```sh
-   claude marketplace add memsy-io/memsy
+   claude plugin marketplace add memsy-io/memsy
    claude plugin install memsy@memsy
    ```
 4. **Restart Claude Code** so it loads the plugin's MCP server.
 5. **Verify:**
    ```
-   /memsy-doctor
+   /memsy doctor
    ```
-   You should see a "Status: ok" block with your active profile and `actor_id`.
+   (or the namespaced form `/memsy:memsy-doctor`). You should see a "Status: ok" block with your active profile and `actor_id`.
 
 ## Local development
 
@@ -100,7 +100,7 @@ Turn it off by unsetting the env var and restarting Claude Code. The hook is sil
 
 | Agent | Trigger | Purpose |
 |---|---|---|
-| `memsy-archivist` | "do a deep memsy dive", "audit all our past decisions on X", or auto-fires when shallow recall returns thin results | Multi-query exploration — runs 3–5 query variants in parallel, clusters by theme, dedupes, returns structured summary with explicit gap-list. |
+| `memsy-archivist` | Explicit invocation via Task tool, or when you ask "do a deep memsy dive on X" / "audit all our past decisions on X" | Multi-query exploration — runs 3–5 query variants in parallel, clusters by theme, dedupes, returns structured summary with explicit gap-list. (Subagents are invoked explicitly; they do not auto-fire from description matching.) |
 
 ### MCP-level prompts (also available in Cursor, VS Code, Cline, etc.)
 
@@ -146,7 +146,7 @@ The MCP server (`@memsy-io/mcp`) is unaffected — uninstalling the plugin only 
 
 ## Troubleshooting
 
-**`/memsy-doctor` says "Status: ❌" or the command doesn't appear**
+**`/memsy:memsy-doctor` (or `/memsy doctor`) says "Status: ❌" or the command doesn't appear**
 
 - Confirm `MEMSY_API_KEY` is set in the shell that launched Claude Code: `echo $MEMSY_API_KEY`
 - Restart Claude Code — MCP servers are loaded at startup.
@@ -160,5 +160,5 @@ The MCP server (`@memsy-io/mcp`) is unaffected — uninstalling the plugin only 
 
 **Wrong org's memories surfacing**
 
-- Run `/memsy-org` (coming in v0.2.0) or set `MEMSY_PROFILE` in your shell.
+- Run `/memsy switch <profile>` (smart router) or `/memsy:memsy-org <profile>` (namespaced) to switch active profile, or set `MEMSY_PROFILE` in your shell and restart Claude Code.
 - For now, you can also set `MEMSY_API_KEY` to the key of the org you want to use.

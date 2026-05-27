@@ -7,15 +7,15 @@ The user wants to commit something to Memsy memory. Run this workflow:
 
 ## 1. Extract the substance
 
-From the user's message, isolate what should be remembered:
+Strip the leading verb / framing (`remember that`, `save this`, `note that`, `let's remember`, `tag this as`, `for future reference`) and keep the substance **verbatim**. This rule must match the smart-router skill and the `/memsy:memsy-remember` command exactly — three converging paths must store the same content for the same input.
 
 | User said | Store |
 |---|---|
-| "Remember that we picked Postgres for billing because it's already deployed" | `Picked Postgres for billing storage because it's already deployed in prod.` |
-| "Let's note that the rate limiter rewrite is scoped to v0.4, not v0.3" | `Rate limiter rewrite is scoped to v0.4, not v0.3.` |
-| "Tag this as a decision: we're not adding GraphQL" | `Decision: not adding GraphQL.` |
+| "Remember that we picked Postgres for billing because it's already deployed" | `we picked Postgres for billing because it's already deployed` |
+| "Let's note that the rate limiter rewrite is scoped to v0.4, not v0.3" | `the rate limiter rewrite is scoped to v0.4, not v0.3` |
+| "Tag this as a decision: we're not adding GraphQL" | `a decision: we're not adding GraphQL` |
 
-Make the stored memory **standalone** — it should still be intelligible in 3 months without the surrounding conversation. Drop framing ("let's remember that"), keep the substance + any context that prevents ambiguity.
+**Do not paraphrase, rewrite, or invent context.** If the result wouldn't be intelligible standalone (e.g. resolves to a pronoun with no antecedent), ask the user to expand rather than guessing. Drop only the framing verb; preserve every substantive word.
 
 ## 2. Pre-flight checks — refuse / clarify if
 

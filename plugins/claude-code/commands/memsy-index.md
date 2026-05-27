@@ -73,21 +73,21 @@ Reply: "ingest all", "ingest N,M,…", "drop N", or "cancel".
 
 Wait for confirmation. Do not auto-ingest — the user might want to refine.
 
-## 6. Ingest with metadata
+## 6. Ingest with metadata — in ONE batched call
 
-For each approved memory, call `memsy_ingest` with one event:
+Call `memsy_ingest` **once** with `events` as an array (the MCP tool accepts up to 100 events per batch). For each approved memory, append an element:
+
 - `kind`: `"app_event"` (not `user_message` — this is a structured codebase fact, not conversation)
 - `content`: the standalone summary from step 3
 - `ts`: current ISO 8601
-- `metadata.source`: `"claude-code-index"`
-- `metadata.repo`: the repo name (from `package.json#name`, `pyproject.toml[project].name`, etc.)
-- `metadata.component`: the directory path (e.g. `mcp/`, `api/`)
-- `metadata.safe_to_delete`: `true` (re-run of `/memsy-index` should be safely re-doable)
+- `metadata`: a **JSON-encoded string** (the tool's schema requires `metadata: string`, max 4096 chars). Build it as `JSON.stringify({source: "claude-code-index", repo: "<repo_name>", component: "<dir_path>", safe_to_delete: true})`.
+
+For monorepos with >100 components, split into batches of 100 (one `memsy_ingest` per batch).
 
 ## 7. Confirm and suggest re-run cadence
 
 ```
-✓ Indexed N components into Memsy.
+✓ Indexed N components into Memsy (1 batch).
   Repo: <repo name>
   Re-run /memsy-index when:
     - You add a new top-level component
@@ -97,8 +97,17 @@ For each approved memory, call `memsy_ingest` with one event:
   Try: /memsy how is <repo> laid out?
 ```
 
+## Error handling
+
+If `memsy_ingest` returns "tool not found", 401 / 403, `ECONNREFUSED`, or any other MCP-side failure:
+
+- **Stop**. Do not retry. Do not fabricate success.
+- Tell the user the index was **NOT saved**.
+- Hand off to the `memsy-setup` skill — it diagnoses by symptom and walks through the matching fix.
+
+For partial failures (e.g. one batch succeeded, the next failed): tell the user exactly which batches landed (with event_ids) and which didn't.
+
 ## Notes
 
 - This command does **not** ingest source code itself. It builds *structural* memories. For "what does this function do" recall, rely on git + the codebase itself; Memsy is for cross-session decisions and high-level context.
-- Memories created here have `safe_to_delete: true`, so a cleanup script can remove all `source=claude-code-index` entries to re-index fresh.
-- For very large monorepos (50+ components), ingest in two passes: top-level first (let the user confirm), then drill into selected subdirs.
+- Memories created here have `safe_to_delete: true` in their JSON metadata, so a cleanup script can remove all entries where `metadata` contains `"source":"claude-code-index"` to re-index fresh.

@@ -39,10 +39,10 @@ claude plugin install memsy@memsy
 **Verify:**
 
 ```
-/memsy-doctor
+/memsy doctor
 ```
 
-You should see "Status: ok" with your active profile and `actor_id`.
+(or the namespaced form `/memsy:memsy-doctor`). You should see "Status: ok" with your active profile and `actor_id`.
 </Step>
 </Steps>
 
@@ -113,13 +113,11 @@ Turn it off by unsetting `MEMSY_SESSION_AUTOCONTEXT` and restarting Claude Code.
 
 For deep multi-query retrieval ("what's our full thinking on X", "audit all our past decisions on Y"), Claude Code can delegate to the `memsy-archivist` subagent. It runs 3–5 query variants in parallel, dedupes, clusters by theme, and returns a structured summary instead of a flat list — plus an explicit list of gaps it noticed.
 
-Trigger it by asking explicitly:
+Subagents in Claude Code are invoked **explicitly** (they don't auto-fire from description matching). Trigger it by asking:
 
 ```
 Do a deep memsy dive on rate limiting decisions across all our services.
 ```
-
-Or it auto-fires when a shallow `memsy_search` returns thin results on a multi-faceted topic.
 
 ## Environment reference
 
@@ -163,7 +161,7 @@ Switch back to the published npm version:
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `/memsy` says "Unknown command" | Plugin not installed or not enabled | `claude plugin list` — should show `memsy enabled`. If not, `claude plugin enable memsy`. |
-| `/memsy-doctor` reports `Status: ❌` with auth error | `MEMSY_API_KEY` not in the MCP child's env | Confirm `echo $MEMSY_API_KEY` in the shell you launched `claude` from. Restart Claude from that shell. |
+| `/memsy:memsy-doctor` (or `/memsy doctor`) reports `Status: ❌` with auth error | `MEMSY_API_KEY` not in the MCP child's env | Confirm `echo $MEMSY_API_KEY` in the shell you launched `claude` from. Restart Claude from that shell. |
 | Long delay before tools load | `dist/server.js` missing (local-dev mode) | `cd mcp && npm install && npm run build`, restart Claude Code. |
 | `command not found: node` in MCP logs | `install.sh --dev` not run, Node not on PATH | Re-run `./install.sh --dev /path/to/memsy` and restart Claude Code. |
 | SessionStart auto-context not appearing | `MEMSY_SESSION_AUTOCONTEXT` not set, or session not restarted after setting | `export MEMSY_SESSION_AUTOCONTEXT=on && claude` — child inherits launch env. |

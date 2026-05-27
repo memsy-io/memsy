@@ -42,9 +42,9 @@ Collect all results into one pool.
 
 ### 3. Dedupe and cluster
 
-- Merge results with the same `memory_id` (keep the highest score occurrence).
-- Group remaining memories by theme. Themes emerge from the content; don't pre-impose categories.
-- Within each cluster, sort by `observed_at` descending (most recent context first).
+- Merge results with the same `id` (the `memsy_search` response keys each memory by `id` — keep the highest-score occurrence per duplicate id).
+- Group remaining memories by theme. Themes emerge from the `content` field; don't pre-impose categories.
+- Within each cluster, sort by `score` descending (highest-confidence matches first). The search response does not include `observed_at` at the top level — to get observation timestamps, call `memsy_get_memory` for the items you actually need to time-order. Don't bulk-fetch; only fetch when chronology is essential to the user's question.
 
 If a cluster has just 1 member that's tangentially related to the topic, drop it — keep clusters tight.
 
@@ -68,13 +68,11 @@ clusters:
     summary: "After evaluating Auth0 vs Clerk, decided on Clerk for v0.3 due to lower per-user cost and better Next.js integration. Reversed in v0.4 to roll our own because Clerk's audit log was insufficient for SOC2."
     memories:
       - id: "mem_01H..."
-        observed_at: "2026-03-10T14:23:00Z"
-        text: "Picked Clerk for auth — cheaper than Auth0 at our scale and better Next.js DX."
         score: 0.91
+        content: "Picked Clerk for auth — cheaper than Auth0 at our scale and better Next.js DX."
       - id: "mem_01H..."
-        observed_at: "2026-04-22T09:11:00Z"
-        text: "Reversed auth decision — Clerk's audit log can't be exported to our SIEM, blocking SOC2."
         score: 0.87
+        content: "Reversed auth decision — Clerk's audit log can't be exported to our SIEM, blocking SOC2."
   - theme: "Session token storage"
     summary: "..."
     memories:
@@ -86,12 +84,14 @@ gaps_noticed: |
   - Several references to a "Q2 review" but no memory captures what was decided there.
 ```
 
+Field names match the `memsy_search` response exactly: `id`, `score`, `content`, `metadata`, `source_events`, `source_metadata`. Do not introduce synthetic field names — if a value isn't in the response, omit the key rather than emitting `undefined`.
+
 ## Output rules
 
 - **Never fabricate memory content**. If a cluster's summary requires inference, say so explicitly ("Inferred from N memories — no single memory states this directly").
 - **Always surface gaps**. The user wants to know what's missing, not just what's there.
 - **Don't filter for tidiness**. If memories contradict each other, return both — that's signal, not noise.
-- **Truncate per memory** to 200 chars in the `text` field. The full memory is available via `memsy_get_memory`.
+- **Truncate per memory** to 200 chars in the `content` field. The full memory is available via `memsy_get_memory`.
 
 ## When MCP fails
 

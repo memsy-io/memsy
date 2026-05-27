@@ -12,8 +12,7 @@
     "scripts",
     "agents",
     "install.sh",
-    "README.md",
-    "PLAN.md"
+    "README.md"
   ],
   "scripts": {
     "doctor:dryrun": "echo 'Plugin is markdown + JSON only — no build step yet.'"
