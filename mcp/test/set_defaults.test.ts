@@ -17,6 +17,7 @@ import {
   reloadProfilesFromDisk,
   type Profile,
 } from "../src/config.js";
+import { actorIdSchema, computeEnvShadowingWarning } from "../src/tools/set_defaults.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -162,6 +163,59 @@ describe("persistProfileDefaults", () => {
     expect(profiles.default.defaultTeamIds).toEqual(["platform"]);
   });
 
+  it("rescues an in-memory-only actor_id pin when a later persist call omits actor_id (regression for code-review #3)", () => {
+    const path = configPathForScope("global");
+    // Prior persist=global wrote api_key + some role_ids but NO actor_id.
+    preSeed(path, {
+      profiles: {
+        default: { api_key: "msy_d", default_role_ids: ["pre-existing-role"] },
+      },
+    });
+
+    // Simulate ProfileManager state after a prior persist='none' set_defaults
+    // that pinned actor_id in memory only.
+    const inMemoryWithPin: Profile = {
+      apiKey: "msy_d",
+      baseUrl: "https://api.memsy.io/v1",
+      actorId: "alex-dev",
+    };
+
+    // Now persist a DIFFERENT field, omitting actor_id from the update.
+    persistProfileDefaults("global", "default", inMemoryWithPin, {
+      defaultTeamIds: ["platform"],
+    });
+
+    const profiles = reloadProfilesFromDisk(path);
+    // Pin must survive — without #3's fix, this would be undefined.
+    expect(profiles.default.actorId).toBe("alex-dev");
+    expect(profiles.default.defaultTeamIds).toEqual(["platform"]);
+    // Pre-existing role still preserved.
+    expect(profiles.default.defaultRoleIds).toEqual(["pre-existing-role"]);
+  });
+
+  it("does NOT clobber an existing on-disk actor_id with a different in-memory value", () => {
+    // Reverse case: if the file already pins actor_id, the in-memory value
+    // (which could be from a transient session-level set) must NOT win.
+    // We're explicit: file is the source of truth for what's persisted; the
+    // in-memory rescue only fills gaps.
+    const path = configPathForScope("global");
+    preSeed(path, {
+      profiles: {
+        default: { api_key: "msy_d", actor_id: "from-disk" },
+      },
+    });
+
+    persistProfileDefaults(
+      "global",
+      "default",
+      { apiKey: "msy_d", baseUrl: "https://api.memsy.io/v1", actorId: "in-memory" },
+      { defaultRoleIds: ["ic"] },
+    );
+
+    const profiles = reloadProfilesFromDisk(path);
+    expect(profiles.default.actorId).toBe("from-disk");
+  });
+
   it("only touches fields the caller passes (clear vs leave-alone)", () => {
     const path = configPathForScope("global");
     preSeed(path, {
@@ -198,5 +252,77 @@ describe("persistProfileDefaults", () => {
     expect(after.default.defaultTeamIds).toEqual([]);
     // roles still the previous value
     expect(after.default.defaultRoleIds).toEqual(["new-role"]);
+  });
+});
+
+describe("computeEnvShadowingWarning (regression for code-review #5+#6)", () => {
+  it("returns null when the caller didn't set actor_id at all", () => {
+    expect(
+      computeEnvShadowingWarning({
+        argActorId: undefined,
+        envActorId: "claude-code",
+        effectiveActorId: "claude-code",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when MEMSY_ACTOR_ID is unset", () => {
+    expect(
+      computeEnvShadowingWarning({
+        argActorId: "alex-dev",
+        envActorId: undefined,
+        effectiveActorId: "alex-dev",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when MEMSY_ACTOR_ID is empty string (matches resolveActorId truthy check)", () => {
+    // #6: !== undefined was the old gate, which would have produced a false-
+    // positive warning. Boolean() correctly treats empty string as 'unset'.
+    expect(
+      computeEnvShadowingWarning({
+        argActorId: "alex-dev",
+        envActorId: "",
+        effectiveActorId: "alex-dev",
+      }),
+    ).toBeNull();
+  });
+
+  it("fires with the 'shadowing different value' message when env != args", () => {
+    const msg = computeEnvShadowingWarning({
+      argActorId: "alex-dev",
+      envActorId: "claude-code",
+      effectiveActorId: "claude-code",
+    });
+    expect(msg).toBeTypeOf("string");
+    expect(msg).toContain("takes precedence");
+    expect(msg).toContain("\"alex-dev\"");
+    expect(msg).toContain("\"claude-code\"");
+  });
+
+  it("rejects whitespace-only or whitespace-bookended actor_id (regression for code-review #7)", () => {
+    expect(actorIdSchema.safeParse("   ").success).toBe(false);
+    expect(actorIdSchema.safeParse("\t\n").success).toBe(false);
+    expect(actorIdSchema.safeParse(" claude-code").success).toBe(false);
+    expect(actorIdSchema.safeParse("claude-code ").success).toBe(false);
+    expect(actorIdSchema.safeParse("").success).toBe(false);
+    // Accepts non-empty, non-bookended values
+    expect(actorIdSchema.safeParse("claude-code").success).toBe(true);
+    expect(actorIdSchema.safeParse("alex-dev").success).toBe(true);
+    // Internal whitespace is OK (some users may want labels like "Alex Dev")
+    expect(actorIdSchema.safeParse("Alex Dev").success).toBe(true);
+  });
+
+  it("ALSO fires when env equals args (regression for code-review #5: false-negative)", () => {
+    // The old condition `refreshed.identity.actorId !== args.actor_id` would
+    // skip the warning in this case — silently letting env be load-bearing.
+    const msg = computeEnvShadowingWarning({
+      argActorId: "claude-code",
+      envActorId: "claude-code",
+      effectiveActorId: "claude-code",
+    });
+    expect(msg).toBeTypeOf("string");
+    expect(msg).toContain("matches the value you persisted");
+    expect(msg).toContain("load-bearing");
   });
 });

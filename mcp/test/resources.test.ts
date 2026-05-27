@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeSetupHint } from "../src/resources/index.js";
+import { computeSetupHint, isActorIdPinned } from "../src/resources/index.js";
 
 describe("computeSetupHint", () => {
   it("emits a hint when actor_id is derived from git and unpinned", () => {
@@ -30,5 +30,29 @@ describe("computeSetupHint", () => {
 
   it("stays silent when source is tool-arg", () => {
     expect(computeSetupHint("tool-arg", undefined)).toBeNull();
+  });
+});
+
+describe("isActorIdPinned (regression for code-review #4)", () => {
+  it("returns true for env source even when profile.actorId is undefined", () => {
+    // The whole point of the source-based check: post-#2-fix, env-only
+    // identity has profile.actorId === undefined, but it's still pinned.
+    expect(isActorIdPinned("env")).toBe(true);
+  });
+
+  it("returns true for profile source", () => {
+    expect(isActorIdPinned("profile")).toBe(true);
+  });
+
+  it("returns true for tool-arg source", () => {
+    expect(isActorIdPinned("tool-arg")).toBe(true);
+  });
+
+  it("returns false for derived-git", () => {
+    expect(isActorIdPinned("derived-git")).toBe(false);
+  });
+
+  it("returns false for derived-os", () => {
+    expect(isActorIdPinned("derived-os")).toBe(false);
   });
 });

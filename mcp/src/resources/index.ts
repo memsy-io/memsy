@@ -7,6 +7,17 @@ const RECENT_DEFAULT_LIMIT = 20;
 const RECENT_MAX_LIMIT = 100;
 
 /**
+ * Whether the resolved actor_id is "pinned" — i.e. any explicit source
+ * (env var, profile config, per-call tool arg) is in effect. The opposite
+ * is `derived-git` / `derived-os`, the auto-fallback. Source-based rather
+ * than Boolean(profile.actorId) so an env-set identity (where profile.actorId
+ * is undefined post-#2-fix) is still correctly reported as pinned.
+ */
+export function isActorIdPinned(source: Identity["source"]): boolean {
+  return source === "env" || source === "profile" || source === "tool-arg";
+}
+
+/**
  * Decide whether `memsy://actor/current` should emit a `setup_hint`.
  * The hint fires only when the actor_id was auto-derived (git or OS) AND
  * the active profile has not pinned an explicit override. A profile-pinned
@@ -42,7 +53,7 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
     },
     async (uri) => {
       const ctx = profiles.current();
-      const isPinned = Boolean(ctx.profile.actorId);
+      const isPinned = isActorIdPinned(ctx.identity.source);
       const setupHint = computeSetupHint(ctx.identity.source, ctx.profile.actorId);
 
       return {

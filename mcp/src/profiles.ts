@@ -92,10 +92,13 @@ export class ProfileManager {
    * subsequent tool calls see the new values without re-instantiating the HTTP
    * client. Only the fields explicitly passed are touched.
    *
-   * When actorId is updated on the active profile, identity is re-derived so
-   * ctx.identity.actorId reflects the new value immediately (without this,
-   * ingest would keep tagging events with the old git-derived hash until host
-   * restart).
+   * When actorId is updated on the active profile, identity is re-derived.
+   * The re-derivation runs through resolveActorId, which gives MEMSY_ACTOR_ID
+   * env top precedence over profile.actorId. So when env is set,
+   * ctx.identity.actorId will reflect the env value, NOT the just-set profile
+   * actorId — and that's correct: the env override is what the user wired
+   * into the host config. The tool layer (set_defaults) detects this and
+   * surfaces a warning in its response.
    */
   updateDefaults(
     name: string,

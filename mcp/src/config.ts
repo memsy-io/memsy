@@ -140,7 +140,18 @@ export function persistProfileDefaults(
   // other fields); fall back to the in-memory active profile when the file
   // doesn't yet have this profile. This is what lets env-only users persist
   // — the api_key from env synthesis flows into the new file.
-  const existingProfile = existing.profiles[profileName] ?? activeProfileInMemory;
+  const onDisk = existing.profiles[profileName];
+  const existingProfile: Profile = onDisk
+    ? {
+        ...onDisk,
+        // Rescue an in-memory-only actor_id pin (set by a prior call with
+        // persist='none') when the file doesn't carry one. Without this,
+        // a subsequent persist of any unrelated field would silently drop
+        // the pin on disk. Other in-memory fields aren't auto-carried
+        // because they have explicit-clear semantics ([] = clear).
+        actorId: onDisk.actorId ?? activeProfileInMemory.actorId,
+      }
+    : activeProfileInMemory;
   const merged: Profile = {
     ...existingProfile,
     ...(updates.defaultRoleIds !== undefined && { defaultRoleIds: updates.defaultRoleIds }),
@@ -275,7 +286,9 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
 
   const envKey = process.env.MEMSY_API_KEY;
   const envBaseUrl = process.env.MEMSY_BASE_URL;
-  const envActorId = process.env.MEMSY_ACTOR_ID;
+  // MEMSY_ACTOR_ID is intentionally NOT read here. identity.ts:resolveActorId
+  // reads it at resolve time so env keeps top precedence without leaking
+  // into profile.actorId (which would risk being serialized to ~/.memsy/...).
   const envProfile = process.env.MEMSY_PROFILE;
   const envDefaultRoles = parseList(process.env.MEMSY_DEFAULT_ROLE_IDS);
   const envDefaultTeams = parseList(process.env.MEMSY_DEFAULT_TEAM_IDS);
@@ -289,11 +302,17 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
 
   // Synthesize an env-backed profile under the resolved active name so users
   // can run with just MEMSY_API_KEY (+ optional MEMSY_PROFILE) and no file.
+  //
+  // NB: MEMSY_ACTOR_ID is intentionally NOT copied into profile.actorId here.
+  // Doing so would let a later memsy_set_defaults call accidentally serialize
+  // an env-derived value into ~/.memsy/config.json (defeating the per-host
+  // distinction the env var exists to enable). identity.ts:resolveActorId
+  // already gives env top precedence at resolve time, so env still wins for
+  // ingest/search without polluting the profile object.
   if (envKey) {
     profiles[activeName] = profiles[activeName] ?? {
       apiKey: envKey,
       baseUrl: envBaseUrl ?? DEFAULT_BASE_URL,
-      actorId: envActorId,
       defaultRoleIds: envDefaultRoles,
       defaultTeamIds: envDefaultTeams,
       orgLabel: `${activeName} (env)`,
@@ -307,7 +326,7 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
     profiles[activeName] = {
       apiKey: flags.apiKey,
       baseUrl: flags.baseUrl ?? existing?.baseUrl ?? envBaseUrl ?? DEFAULT_BASE_URL,
-      actorId: existing?.actorId ?? envActorId,
+      actorId: existing?.actorId,
       defaultRoleIds: existing?.defaultRoleIds ?? envDefaultRoles,
       defaultTeamIds: existing?.defaultTeamIds ?? envDefaultTeams,
       orgLabel: existing?.orgLabel ?? `${activeName} (cli)`,
@@ -316,14 +335,13 @@ export function loadConfig(flags: CliFlags = {}): ResolvedConfig {
 
   // Merge env-derived defaults into the active profile if the profile (file-
   // loaded, env-synthesized, or CLI-overridden) didn't already specify them.
-  // Without this, MEMSY_DEFAULT_ROLE_IDS / MEMSY_DEFAULT_TEAM_IDS / MEMSY_ACTOR_ID
-  // are silently dropped whenever a file profile is active — contradicting
-  // the env-var table in the README.
+  // Without this, MEMSY_DEFAULT_ROLE_IDS / MEMSY_DEFAULT_TEAM_IDS are silently
+  // dropped whenever a file profile is active — contradicting the env-var
+  // table in the README. MEMSY_ACTOR_ID is excluded here; see the NB above.
   const activeBeforeMerge = profiles[activeName];
   if (activeBeforeMerge) {
     profiles[activeName] = {
       ...activeBeforeMerge,
-      actorId: activeBeforeMerge.actorId ?? envActorId,
       defaultRoleIds: activeBeforeMerge.defaultRoleIds ?? envDefaultRoles,
       defaultTeamIds: activeBeforeMerge.defaultTeamIds ?? envDefaultTeams,
     };

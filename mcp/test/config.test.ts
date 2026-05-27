@@ -22,6 +22,10 @@ describe("loadConfig", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "memsy-mcp-test-"));
     originalCwd = process.cwd();
     process.chdir(tmpDir);
+    // Redirect HOME so findConfigFile() can't fall through to the developer's
+    // real ~/.memsy/config.json on local runs. Without this, tests that expect
+    // env-synthesis to win silently bind to whatever's in the dev's homedir.
+    process.env.HOME = tmpDir;
   });
 
   afterEach(() => {
@@ -217,7 +221,7 @@ describe("loadConfig — robustness fixes", () => {
     expect(cfg.profiles).not.toHaveProperty("broken");
   });
 
-  it("merges MEMSY_DEFAULT_ROLE_IDS / MEMSY_DEFAULT_TEAM_IDS / MEMSY_ACTOR_ID into a file-loaded profile", () => {
+  it("merges MEMSY_DEFAULT_ROLE_IDS / MEMSY_DEFAULT_TEAM_IDS into a file-loaded profile", () => {
     // Regression for code-review finding #8: env defaults were only applied
     // when the profile came from env synthesis or CLI override — file
     // profiles silently ignored these env vars.
@@ -233,15 +237,13 @@ describe("loadConfig — robustness fixes", () => {
     );
     process.env.MEMSY_DEFAULT_ROLE_IDS = "ic,senior";
     process.env.MEMSY_DEFAULT_TEAM_IDS = "platform";
-    process.env.MEMSY_ACTOR_ID = "alice";
 
     const cfg = loadConfig({ configPath });
     expect(cfg.activeProfile.defaultRoleIds).toEqual(["ic", "senior"]);
     expect(cfg.activeProfile.defaultTeamIds).toEqual(["platform"]);
-    expect(cfg.activeProfile.actorId).toBe("alice");
   });
 
-  it("does NOT override an explicit profile field with the env default", () => {
+  it("does NOT override an explicit profile defaultRoleIds with the env default", () => {
     // Ensure the merge is "fill in if missing", not "always override".
     const configPath = join(tmpDir, "c.json");
     writeFileSync(
@@ -249,13 +251,46 @@ describe("loadConfig — robustness fixes", () => {
       JSON.stringify({
         active_profile: "work",
         profiles: {
-          work: { api_key: "msy_w", actor_id: "explicit-actor" },
+          work: { api_key: "msy_w", default_role_ids: ["explicit-role"] },
         },
       }),
     );
-    process.env.MEMSY_ACTOR_ID = "env-actor";
+    process.env.MEMSY_DEFAULT_ROLE_IDS = "env-role";
 
     const cfg = loadConfig({ configPath });
-    expect(cfg.activeProfile.actorId).toBe("explicit-actor");
+    expect(cfg.activeProfile.defaultRoleIds).toEqual(["explicit-role"]);
+  });
+
+  it("does NOT leak MEMSY_ACTOR_ID into profile.actorId (regression for code-review #2)", () => {
+    // The env-merge for actorId used to land MEMSY_ACTOR_ID in profile.actorId,
+    // which would then be serialized to ~/.memsy/config.json by any later
+    // persist call — defeating the per-host design. identity.ts:resolveActorId
+    // still gives env top precedence at resolve time, but the profile object
+    // itself must stay clean so set_defaults can't accidentally write it out.
+    const configPath = join(tmpDir, "c.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        active_profile: "work",
+        profiles: {
+          work: { api_key: "msy_w" },
+        },
+      }),
+    );
+    process.env.MEMSY_ACTOR_ID = "claude-code";
+
+    const cfg = loadConfig({ configPath });
+    expect(cfg.activeProfile.actorId).toBeUndefined();
+  });
+
+  it("env-synthesized profile (no file) also has actorId undefined when MEMSY_ACTOR_ID is set", () => {
+    // Regression for #2: env synthesis at config.ts:293 used to seed
+    // profile.actorId from env. Now it must not — identity.ts handles env.
+    process.env.MEMSY_API_KEY = "msy_envonly";
+    process.env.MEMSY_ACTOR_ID = "claude-code";
+
+    const cfg = loadConfig({});
+    expect(cfg.activeProfile.apiKey).toBe("msy_envonly");
+    expect(cfg.activeProfile.actorId).toBeUndefined();
   });
 });

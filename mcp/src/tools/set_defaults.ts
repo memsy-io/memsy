@@ -5,6 +5,53 @@ import { persistProfileDefaults, type PersistScope } from "../config.js";
 import type { ProfileManager } from "../profiles.js";
 import { formatError, jsonResult } from "./_shared.js";
 
+/**
+ * Schema for actor_id values accepted by memsy_set_defaults. Exported so
+ * tests can verify the rejection rules without instantiating an McpServer.
+ * Rejects: empty strings (min(1)), whitespace-only values, and values with
+ * leading/trailing whitespace — those would be unfilterable in the dashboard
+ * and the tool offers no clear path to fix them.
+ */
+export const actorIdSchema = z
+  .string()
+  .min(1)
+  .refine((s) => s.trim().length > 0 && s.trim() === s, {
+    message:
+      "actor_id must be non-empty and cannot contain leading or trailing whitespace " +
+      "(whitespace-only values are unfilterable and look broken in the dashboard).",
+  });
+
+/**
+ * Build the envShadowing warning message for the memsy_set_defaults response,
+ * or return null when no warning is warranted. Extracted for unit testability.
+ *
+ * Fires whenever MEMSY_ACTOR_ID is truthy AND the caller asked to set
+ * actor_id — even when env equals the just-set value — because env being
+ * load-bearing is the user-relevant fact, regardless of whether it currently
+ * conflicts. (Boolean() matches resolveActorId's `if (fromEnv)` truthy check,
+ * so an empty MEMSY_ACTOR_ID is correctly ignored.)
+ */
+export function computeEnvShadowingWarning(args: {
+  argActorId: string | undefined;
+  envActorId: string | undefined;
+  effectiveActorId: string;
+}): string | null {
+  if (args.argActorId === undefined) return null;
+  if (!args.envActorId) return null; // unset or empty string — not shadowing
+
+  if (args.effectiveActorId !== args.argActorId) {
+    return (
+      `MEMSY_ACTOR_ID env var (value: "${args.envActorId}") takes precedence over the profile actor_id. ` +
+      `The persisted value "${args.argActorId}" is recorded in the config file but identity remains "${args.effectiveActorId}" (source: env). ` +
+      "Unset MEMSY_ACTOR_ID in the host's MCP config for the persisted value to take effect."
+    );
+  }
+  return (
+    "MEMSY_ACTOR_ID env var is set and matches the value you persisted, but env is what's actually load-bearing right now (source: env). " +
+    "If you later change or unset the env var, identity will fall back to the persisted profile value."
+  );
+}
+
 export function registerSetDefaults(server: McpServer, profiles: ProfileManager): void {
   server.tool(
     "memsy_set_defaults",
@@ -23,9 +70,7 @@ export function registerSetDefaults(server: McpServer, profiles: ProfileManager)
         .describe(
           "Team IDs to apply as the default search filter. Omit to leave the current value unchanged; pass [] to clear.",
         ),
-      actor_id: z
-        .string()
-        .min(1)
+      actor_id: actorIdSchema
         .optional()
         .describe(
           "Identity to tag every memsy_ingest event with for this profile. Pins to a stable value across host restarts so events aren't fragmented by the git-derived hash. " +
@@ -72,15 +117,12 @@ export function registerSetDefaults(server: McpServer, profiles: ProfileManager)
           );
         }
 
-        // After updateDefaults, the live identity reflects the new actor_id
-        // unless MEMSY_ACTOR_ID env is set (env wins over profile). Surface
-        // that so the caller isn't confused when their persisted value is
-        // silently shadowed.
         const refreshed = profiles.current();
-        const envShadowing =
-          args.actor_id !== undefined &&
-          process.env.MEMSY_ACTOR_ID !== undefined &&
-          refreshed.identity.actorId !== args.actor_id;
+        const warning = computeEnvShadowingWarning({
+          argActorId: args.actor_id,
+          envActorId: process.env.MEMSY_ACTOR_ID,
+          effectiveActorId: refreshed.identity.actorId,
+        });
 
         return jsonResult({
           profile: ctx.profileName,
@@ -94,11 +136,7 @@ export function registerSetDefaults(server: McpServer, profiles: ProfileManager)
             persisted_to: persistInfo.path,
             file_created: persistInfo.created,
           }),
-          ...(envShadowing && {
-            warning:
-              "MEMSY_ACTOR_ID env var is set and takes precedence over the persisted profile actor_id. " +
-              "Unset the env var (in your MCP host's config) for the new value to take effect.",
-          }),
+          ...(warning && { warning }),
         });
       } catch (err) {
         return formatError("memsy_set_defaults", err);

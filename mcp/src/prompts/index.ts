@@ -65,7 +65,7 @@ export function registerAllPrompts(server: McpServer): void {
                 "3. Call memsy_list_teams. Same pattern — if empty or any name is missing, " +
                 "call memsy_create_team for each missing one. Then show the numbered list.\n" +
                 "4. Ask me which team(s) I want as my defaults.\n" +
-                "5. Read memsy://identity/current to show me my current actor_id and how it was " +
+                "5. Read memsy://actor/current to show me my current actor_id and how it was " +
                 "derived (env / profile / derived-git / derived-os). Explain that actor_id is the " +
                 "identity new memories get tagged with — search is org-wide by default so existing " +
                 "memories stay findable regardless of what I pick here.\n" +
