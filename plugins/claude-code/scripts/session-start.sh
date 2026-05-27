@@ -17,13 +17,36 @@
 
 set -eu
 
-# Gate: only fire when explicitly opted in. Accept the conventional truthy
-# variants users actually type, lower-cased — `true`/`1`/`yes`/`on`/`enabled`.
-# Anything else (unset, empty, `off`, typos like `Yes!`) → silent exit.
-case "$(printf '%s' "${MEMSY_SESSION_AUTOCONTEXT:-}" | tr '[:upper:]' '[:lower:]')" in
-  on|true|1|yes|enabled) ;;
-  *) exit 0 ;;
-esac
+# Helper: decide whether a Memsy env flag is set to a truthy value.
+# Accepts the conventional truthy variants users actually type, lower-cased —
+# `true`/`1`/`yes`/`on`/`enabled`. Anything else (unset, empty, `off`, typos
+# like `Yes!`) is treated as off.
+is_truthy() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    on|true|1|yes|enabled) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Mode block: emit a small "[memsy modes: ...]" line whenever any plugin mode
+# is set. SessionStart hook stdout is injected into Claude's context, so this
+# is how skill/command bodies learn the user's runtime preferences. Modes are
+# independent — a user can opt into confirm-before-store WITHOUT also enabling
+# the recall auto-context below.
+modes=""
+if is_truthy "${MEMSY_CONFIRM_STORE:-}"; then
+  modes="${modes} confirm-before-store"
+fi
+if [[ -n "$modes" ]]; then
+  printf '[memsy modes:%s]\n\n' "$modes"
+fi
+
+# Recall auto-context — separate, only fires when MEMSY_SESSION_AUTOCONTEXT is
+# truthy. If neither this nor any mode flag above was set, the script has
+# already finished its observable work and is about to exit 0 silently.
+if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}"; then
+  exit 0
+fi
 
 # Pick a recall budget. Override via MEMSY_SESSION_CONTEXT_LIMIT=N (default 6).
 LIMIT="${MEMSY_SESSION_CONTEXT_LIMIT:-6}"

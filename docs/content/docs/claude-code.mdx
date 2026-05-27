@@ -107,6 +107,25 @@ When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Cod
 
 Turn it off by unsetting `MEMSY_SESSION_AUTOCONTEXT` and restarting Claude Code. The hook is silent unless explicitly opted in.
 
+### Confirm-before-store mode (opt-in)
+
+When `MEMSY_CONFIRM_STORE=on` is set in the launch shell, the SessionStart hook emits a `[memsy modes: confirm-before-store]` line into Claude's context. Every single-item save surface (`memsy-remember` skill on auto-fire, `/memsy:memsy-remember <text>` command, and the `/memsy remember <text>` smart-router branch) reads that line and asks for confirmation before calling `memsy_ingest`:
+
+```
+Memsy will store:
+  picked Postgres for billing because it's already deployed
+
+Save? (y / n / edit "<new text>")
+```
+
+- `y` / "save it" → stores.
+- `n` / "don't" → not stored.
+- `edit "..."` → stores the edited text instead.
+
+`/memsy:memsy-checkpoint` and `/memsy:memsy-index` are unaffected — they always confirm by design (they batch multiple memories and show the list before any save).
+
+This is independent of `MEMSY_SESSION_AUTOCONTEXT` — you can enable confirmation without enabling auto-context (or vice versa). Both modes accept `on`/`true`/`1`/`yes`/`enabled`.
+
 > Why not auto-store on session end? Claude Code's `SessionEnd` and `Stop` hooks don't pipe their stdout back into Claude, so an auto-save hook can't actually call MCP tools to store anything. We ship `/memsy-checkpoint` as a user-initiated command instead — safer (no surprise noise) and actually functional.
 
 ## Subagent: `memsy-archivist`
@@ -130,7 +149,8 @@ Do a deep memsy dive on rate limiting decisions across all our services.
 | `MEMSY_DEFAULT_ROLE_IDS` | Comma-separated default role filters for searches. |
 | `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
 | `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
-| `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the auto-context surfaces. Default: `6`. |
+| `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the auto-context surfaces. Default: `6`, clamped 1–20. |
+| `MEMSY_CONFIRM_STORE` | `on` to ask for confirmation before every single-item memory store (the auto-fire `memsy-remember` skill, the `/memsy:memsy-remember` command, and the `/memsy remember <text>` smart-router branch). Bulk operations like `/memsy:memsy-checkpoint` and `/memsy:memsy-index` already confirm by design, regardless of this flag. Default: `off`. Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 
 Full env reference: see the [MCP docs](/docs/mcp).
 

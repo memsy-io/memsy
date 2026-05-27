@@ -56,8 +56,9 @@ If `memsy_health` errored, hand off to the `memsy-setup` skill instead.
 2. Pre-flight guards:
    - too short (<20 chars) → ask user to expand.
    - contains a secret-shaped token (`msy_`, `sk_`, `ghp_`, `Bearer `, etc.) → **refuse**. Say: "That looks like it contains a secret — Memsy stores in plain text. Paraphrase without it, or use a real secret manager."
-3. Call `memsy_ingest` with one event: `kind="user_message"`, `content=<stripped substance>`, `ts=<current ISO 8601>`.
-4. Confirm: `✓ Stored: <first 80 chars>...` plus event_id (first 8 chars).
+3. **Confirm-before-store mode**: if your session context contains `[memsy modes: ... confirm-before-store ...]`, surface the stripped content and ask `Save? (y / n / edit "<new text>")`. Proceed only on `y` or `edit`. On `n`, say "Not stored." and stop. If the mode line isn't in context, skip this step (user invoked `/memsy` explicitly — that's deliberate enough on its own).
+4. Call `memsy_ingest` with one event: `kind="user_message"`, `content=<stripped substance>`, `ts=<current ISO 8601>`.
+5. Confirm: `✓ Stored: <first 80 chars>...` plus event_id (first 8 chars).
 
 ### `SWITCH`
 

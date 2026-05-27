@@ -24,7 +24,24 @@ Strip the leading verb / framing (`remember that`, `save this`, `note that`, `le
 - **Transient / scratch content** (TODOs for the current turn, half-formed ideas being explored, debug output): ask if they really want to persist it. Default to NOT storing unless they reconfirm.
 - **Already-stored**: if you just stored something nearly identical this session, skip and tell the user it's a duplicate.
 
-## 3. Call memsy_ingest
+## 3. Confirm-before-store mode (if enabled)
+
+If your session context contains the line `[memsy modes: ... confirm-before-store ...]` (emitted by the SessionStart hook when `MEMSY_CONFIRM_STORE=on`), the user has opted into explicit-permission mode. Surface the proposed content and ask before calling the tool:
+
+```
+Memsy will store:
+  <stripped substance from step 1>
+
+Save? (y / n / edit "<new text>")
+```
+
+- `y` / "save it" → proceed to step 4.
+- `n` / "don't" → say "Not stored." and stop. **Do not** call `memsy_ingest`.
+- `edit "..."` → use the new text as the content and proceed.
+
+If the mode line isn't in context (default), skip this step — the auto-fire trigger already implies user intent.
+
+## 4. Call memsy_ingest
 
 A single event:
 - `kind`: `"user_message"`
@@ -33,7 +50,7 @@ A single event:
 
 Do NOT add `role_id` / `team_id` unless the user explicitly specified them — let the user's defaults from `memsy_set_defaults` apply.
 
-## 4. Confirm back
+## 5. Confirm back
 
 ```
 ✓ Stored in Memsy.
@@ -42,7 +59,7 @@ Do NOT add `role_id` / `team_id` unless the user explicitly specified them — l
   Use /memsy <query> to find it later.
 ```
 
-## 5. If the tool errors out
+## 6. If the tool errors out
 
 Hand off to the `memsy-setup` skill. **Be explicit** that the memory was **NOT saved**. Do not silently swallow the failure or pretend it worked.
 
