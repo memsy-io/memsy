@@ -71,7 +71,7 @@ claude mcp add memsy --scope user \
 
 Scopes: `user` → `~/.claude.json` (every project, recommended), `project` → `./.mcp.json` (this repo, committed), `local` → per-project, gitignored. Pass `-e MEMSY_ACTOR_ID=claude-code` to also pin a host-specific identity.
 
-**Method B — edit the config file directly.** This is the only path for Cursor / VS Code / Cline / Zed:
+**Method B — edit `~/.claude.json` (or `./.mcp.json`) directly:**
 
 ```jsonc
 {
@@ -87,6 +87,54 @@ Scopes: `user` → `~/.claude.json` (every project, recommended), `project` → 
   }
 }
 ```
+
+**VS Code users** — also two methods:
+
+**Method A — `code --add-mcp` CLI (recommended).** VS Code writes the entry into your user profile:
+
+```bash
+code --add-mcp '{"name":"memsy","command":"npx","args":["-y","@memsy-io/mcp"],"env":{"MEMSY_API_KEY":"msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}'
+```
+
+POSIX shells: wrap the JSON in single quotes. Windows PowerShell / cmd: escape the inner double quotes. Works with `code-insiders` too.
+
+**Method B — edit `.vscode/mcp.json` (per-workspace) or the user `mcp.json` directly:**
+
+```json
+{
+  "servers": {
+    "memsy": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@memsy-io/mcp"],
+      "env": {
+        "MEMSY_API_KEY": "msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+Note the JSON-shape difference between the two methods: the CLI takes a flat object with `name` as a field; the file uses `"servers": { "<name>": { ... } }`.
+
+**Cursor / Cline / Zed** — edit the config file directly (no CLI equivalent):
+
+```jsonc
+{
+  "mcpServers": {
+    "memsy": {
+      "command": "npx",
+      "args": ["-y", "@memsy-io/mcp"],
+      "env": {
+        "MEMSY_API_KEY": "msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "MEMSY_ACTOR_ID": "cursor"        // optional — see "Identity model" below
+      }
+    }
+  }
+}
+```
+
+(Zed uses `"context_servers"` instead of `"mcpServers"`, and nests `command`/`args` under `"command": { "path": ..., "args": [...] }`. See the [docs](https://docs.memsy.io/docs/mcp) for the exact shape.)
 
 **Continue.dev** — YAML:
 

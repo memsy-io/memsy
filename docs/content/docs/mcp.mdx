@@ -95,7 +95,21 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
       </Tab>
 
       <Tab title="VS Code">
-        Native MCP support via GitHub Copilot Chat. Add to `.vscode/mcp.json` (per-workspace) or `~/Library/Application Support/Code/User/mcp.json` (global on macOS):
+        Native MCP support via GitHub Copilot Chat.
+
+        **Method 1 — `code --add-mcp` CLI (recommended)**
+
+        Run from your terminal. VS Code writes the entry into your user profile:
+
+        ```bash
+        code --add-mcp '{"name":"memsy","command":"npx","args":["-y","@memsy-io/mcp"],"env":{"MEMSY_API_KEY":"msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}'
+        ```
+
+        Works with `code-insiders` too. POSIX shells: wrap the JSON in single quotes. Windows PowerShell / cmd: escape the inner double quotes (`\"name\":\"memsy\"...`) or paste into `.vscode/mcp.json` directly via Method 2.
+
+        **Method 2 — edit the config file directly**
+
+        Add to `.vscode/mcp.json` (per-workspace) or `~/Library/Application Support/Code/User/mcp.json` (global on macOS):
 
         ```json title=".vscode/mcp.json"
         {
@@ -112,7 +126,7 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
         }
         ```
 
-        VS Code prompts on first launch — click **Trust** to allow the server to run.
+        Note the shape difference between the two methods: the CLI takes a flat object with `name` as a field, while the file uses `"servers": { "<name>": { ... } }`. VS Code prompts on first launch — click **Trust** to allow the server to run.
       </Tab>
 
       <Tab title="Cline">
