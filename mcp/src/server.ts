@@ -98,12 +98,23 @@ async function main(): Promise<void> {
   // Surface startup diagnostics on stderr so they show up in host logs without
   // corrupting the stdio JSON-RPC stream.
   const active = profiles.current();
+  const derived =
+    active.identity.source === "derived-git" || active.identity.source === "derived-os";
+  const pinned = Boolean(active.profile.actorId);
+  const pinSuffix = derived && !pinned ? " (unpinned)" : "";
   process.stderr.write(
     `[memsy-mcp ${VERSION}] active_profile=${active.profileName} ` +
       `base_url=${active.profile.baseUrl} ` +
-      `actor_id=${active.identity.actorId} (${active.identity.source}) ` +
+      `actor_id=${active.identity.actorId} (${active.identity.source})${pinSuffix} ` +
       `session_id=${active.identity.sessionId}\n`,
   );
+  if (derived && !pinned) {
+    process.stderr.write(
+      `[memsy-mcp ${VERSION}] hint: actor_id is auto-derived. ` +
+        `Pin a stable value with memsy_set_defaults { actor_id, persist: "global" } ` +
+        `or set MEMSY_ACTOR_ID in this host's MCP config.\n`,
+    );
+  }
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

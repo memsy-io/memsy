@@ -1,9 +1,33 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
+import type { Identity } from "../identity.js";
 import type { ProfileManager } from "../profiles.js";
 
 const RECENT_DEFAULT_LIMIT = 20;
 const RECENT_MAX_LIMIT = 100;
+
+/**
+ * Decide whether `memsy://actor/current` should emit a `setup_hint`.
+ * The hint fires only when the actor_id was auto-derived (git or OS) AND
+ * the active profile has not pinned an explicit override. A profile-pinned
+ * value (source=profile) is the user's explicit choice; env-shadowing has
+ * its own warning emitted by memsy_set_defaults.
+ */
+export function computeSetupHint(
+  source: Identity["source"],
+  profileActorId: string | undefined,
+): string | null {
+  const isDerived = source === "derived-git" || source === "derived-os";
+  const isPinned = Boolean(profileActorId);
+  if (!isDerived || isPinned) return null;
+  return (
+    "Your actor_id is auto-derived from git/OS and not pinned to this profile. " +
+    "To tag future memories with a stable identifier (e.g. 'claude-code', 'cursor', " +
+    "'coder-agent', or a personal handle), ask the user 'tag my memories as <name> from " +
+    'now on\' and call memsy_set_defaults { actor_id: "<name>", persist: "global" }. ' +
+    "Search remains org-wide so existing memories stay findable regardless of what's chosen."
+  );
+}
 
 export function registerAllResources(server: McpServer, profiles: ProfileManager): void {
   server.resource(
@@ -11,11 +35,16 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
     "memsy://actor/current",
     {
       description:
-        "The currently resolved actor identity (actor_id + source) for the active profile.",
+        "The currently resolved actor identity (actor_id + source) for the active profile. " +
+        "Includes a setup_hint when the identity is auto-derived and not yet pinned, so hosts " +
+        "can nudge the user to run onboarding.",
       mimeType: "application/json",
     },
     async (uri) => {
       const ctx = profiles.current();
+      const isPinned = Boolean(ctx.profile.actorId);
+      const setupHint = computeSetupHint(ctx.identity.source, ctx.profile.actorId);
+
       return {
         contents: [
           {
@@ -26,6 +55,8 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
                 profile: ctx.profileName,
                 actor_id: ctx.identity.actorId,
                 actor_id_source: ctx.identity.source,
+                actor_id_pinned: isPinned,
+                ...(setupHint && { setup_hint: setupHint }),
               },
               null,
               2,

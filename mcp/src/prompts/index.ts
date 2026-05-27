@@ -100,12 +100,15 @@ export function registerAllPrompts(server: McpServer): void {
           content: {
             type: "text",
             text:
-              "For the rest of this conversation, treat Memsy as your long-term memory. Follow these two rules:\n\n" +
+              "For the rest of this conversation, treat Memsy as your long-term memory. Before applying the rules, do a one-time identity check:\n\n" +
+              "**Setup check (do this once, silently)** — Read `memsy://actor/current`. If the payload includes a `setup_hint` field, surface it to me as a brief one-liner ('FYI — your actor_id is unpinned, say \"tag my memories as <name>\" to pin it') and continue. Don't block on this; just nudge.\n\n" +
+              "Then follow these rules:\n\n" +
               "1. **Recall before answering** — when I mention any of the following, call `memsy_search` FIRST and weave the results into your answer:\n" +
               "   - A project, component, file, person, or feature by name\n" +
               "   - A past decision or design choice ('how did we…', 'why does X…')\n" +
               "   - A technical concept this codebase or org uses\n" +
               "   - Anything I'm asking you to recall, compare, or build on\n" +
+              "   **Always search org-wide** — never pass an `actor_id` filter to `memsy_search` unless I explicitly say 'just mine' or 'just memories from <actor>'. The default behavior surfaces every memory in the org, which is what I want.\n" +
               "   Cite the memories inline (memory id + a sentence summary) so I know you grounded in memory.\n\n" +
               "2. **Store after decisions** — call `memsy_ingest` with a 1-3 sentence summary AFTER any of:\n" +
               "   - An explicit decision I state or confirm ('we'll use X', 'going with Y')\n" +
@@ -114,7 +117,11 @@ export function registerAllPrompts(server: McpServer): void {
               "   - A fix I confirm worked\n" +
               "   Do NOT store: typos, aborted experiments, raw code, transient state ('currently debugging X').\n\n" +
               "After each `memsy_ingest`, mention briefly that you stored it so I can correct false-positive stores. " +
-              "If you're uncertain whether something is worth storing, ASK ME ('worth remembering?') instead of guessing.",
+              "If you're uncertain whether something is worth storing, ASK ME ('worth remembering?') instead of guessing.\n\n" +
+              "**Identity shortcuts** — if I say any of these, treat them as direct commands:\n" +
+              "   - 'tag my memories as X' / 'tag as X from now on' → call `memsy_set_defaults { actor_id: \"X\", persist: \"global\" }`.\n" +
+              "   - 'give me all memories' / 'global memories' / 'org-wide' / 'henceforth take all memories into account' → reaffirm that search is already org-wide; no config change needed, just keep omitting `actor_id` on every `memsy_search`.\n" +
+              "   - 'only my memories' / 'just mine' → start passing `actor_id` from `memsy://actor/current` on subsequent searches until I say otherwise.",
           },
         },
       ],
