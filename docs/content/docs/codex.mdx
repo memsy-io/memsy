@@ -1,0 +1,136 @@
+---
+title: Codex CLI
+description: Long-term memory for OpenAI Codex CLI — recall past decisions, store context, and surface relevant history across every session.
+---
+
+Add Memsy to Codex CLI to persist decisions and context across sessions. The Memsy [MCP server](/docs/mcp) registers as a tool server; two skills give Codex natural-language recall and store triggers.
+
+## Requirements
+
+- Node.js 18+
+- [Codex CLI](https://github.com/openai/codex) (`npm install -g @openai/codex`)
+- Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
+
+## Install
+
+<Steps>
+  <Step title="Clone and run the installer">
+    ```bash
+    git clone https://github.com/memsy-io/memsy
+    cd memsy/plugins/codex
+    ./install.sh
+    ```
+
+    Add `--project` to also append Memsy instructions to the current project's `AGENTS.md`:
+
+    ```bash
+    ./install.sh --project
+    ```
+  </Step>
+
+  <Step title="Add your API key to the MCP env block">
+    Codex does not inherit shell environment variables. The key must live in `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.memsy.env]
+    MEMSY_API_KEY = "msy_..."
+    ```
+
+    <Info>
+      Get your key at [app.memsy.io](https://app.memsy.io) → Settings → API Keys.
+    </Info>
+  </Step>
+
+  <Step title="Verify">
+    Open Codex and ask: *"What did we decide about X?"*
+
+    Codex should trigger the `memsy-recall` skill and call `memsy_search`. If tools show as unavailable, run `memsy_health` or check the manual config below.
+  </Step>
+</Steps>
+
+## Manual config
+
+If you prefer to configure by hand, add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.memsy]
+command = "npx"
+args = ["-y", "@memsy-io/mcp"]
+
+[mcp_servers.memsy.env]
+MEMSY_API_KEY = "msy_..."
+```
+
+Or via the Codex CLI:
+
+```bash
+codex mcp add memsy -- npx -y @memsy-io/mcp
+```
+
+Then add the API key to the generated entry in `~/.codex/config.toml`.
+
+## Skills
+
+The installer copies two skills to `~/.codex/skills/`:
+
+| Skill | Trigger phrases |
+|---|---|
+| `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" |
+| `memsy-remember` | "remember that", "save this decision", "note that", "for future reference" |
+
+Invoke via `/skills` in the Codex CLI, or type `$memsy-recall` to mention a skill inline.
+
+## AGENTS.md (recommended)
+
+`AGENTS.md.snippet` (in `plugins/codex/`) gives Codex proactive instructions — search Memsy at session start and store decisions automatically. Append it to your project root:
+
+```bash
+cat plugins/codex/AGENTS.md.snippet >> AGENTS.md
+```
+
+Codex reads `AGENTS.md` automatically at the start of every session in that directory.
+
+## Multi-org
+
+If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org)), then ask Codex:
+
+- *"What orgs do I have?"* → calls `memsy_list_orgs`
+- *"Switch to my work org"* → calls `memsy_use_org`
+
+## Capabilities
+
+| Capability | Supported |
+|---|---|
+| Recall (memsy_search) | ✓ |
+| Store (memsy_ingest) | ✓ |
+| Skills (SKILL.md) | ✓ |
+| AGENTS.md context injection | ✓ |
+| Multi-org / profiles | ✓ |
+| SessionStart auto-recall hook | — |
+| Confirm-before-store mode | — |
+
+## Troubleshooting
+
+### MCP shows "disconnected" or tools unavailable
+
+Run the server directly to see the error:
+
+```bash
+MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp
+```
+
+Common causes: missing API key in the env block (not just shell env), Node < 18, or a stale `@memsy-io/mcp` cached by npm.
+
+### Skills not appearing in `/skills`
+
+Confirm `~/.codex/skills/memsy-recall/SKILL.md` exists. Re-run `./install.sh`.
+
+### Wrong memories returned
+
+Check the active org: ask Codex to call `memsy_list_orgs`. Switch with `memsy_use_org { profile: "work" }`.
+
+## See also
+
+- [MCP Server](/docs/mcp) — the universal layer that all integrations share
+- [Actors and Sessions](/docs/actors-and-sessions) — identity and `actor_id`
+- [Plugin source](https://github.com/memsy-io/memsy/tree/main/plugins/codex) on GitHub

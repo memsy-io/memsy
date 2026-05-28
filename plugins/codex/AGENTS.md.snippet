@@ -1,0 +1,35 @@
+# Memsy — persistent memory across sessions
+
+This project has Memsy MCP enabled. You have these memory tools:
+
+| Tool | When to call it |
+|---|---|
+| `memsy_search` | User asks about prior decisions, past context, "what did we decide", "do we have anything on X" |
+| `memsy_ingest` | User says "remember that", "save this", "note that", or makes a clear decision worth persisting |
+| `memsy_health` | Diagnose connectivity issues — tool errors, 401s, "disconnected" |
+| `memsy_list_memories` | Browse stored memories when search returns 0 results |
+| `memsy_list_orgs` | Check which org / profile is active |
+
+## Recall at session start
+
+When starting a new session on an existing project, call:
+
+```
+memsy_search(query="recent work on <repo-name>", limit=6)
+```
+
+Inject the top results as brief context bullets before responding to the user's first message. Skip if 0 results or if the query clearly doesn't match the current task.
+
+## What to store proactively
+
+Store (via `memsy_ingest`) when:
+- A **technology or architecture decision** is made ("we're using X because Y")
+- A **constraint or non-goal** is stated ("out of scope: GraphQL", "no TypeScript until v2")
+- A **bug root-cause** is confirmed ("the 401s were caused by missing /v1 suffix")
+- The user says something they clearly want to remember
+
+Do NOT store: ephemeral debug output, draft iterations, things already in the codebase.
+
+## Active profile
+
+Check `memsy_list_orgs` if results look wrong — you may be querying the wrong org.
