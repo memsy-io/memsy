@@ -22,6 +22,7 @@
     "---Integrations---",
     "langchain",
     "mcp",
+    "claude-code",
     "codex",
     "openclaw",
     "hermes",
