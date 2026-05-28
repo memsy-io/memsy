@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "memsy": {
-      "command": "node",
-      "args": ["/Users/neelshah/Desktop/memory/memsy/memsy/mcp/dist/server.js"]
+      "command": "npx",
+      "args": ["-y", "@memsy-io/mcp"]
     }
   }
 }
