@@ -1,6 +1,6 @@
 # Claude Code Plugin — Phase 1b Plan
 
-**Status**: ALL MILESTONES COMPLETE (v0.4.0) · **Branch**: `ns/claude-code-plugin-m1` · **Package**: `@memsy-io/claude-code` (private for now)
+**Status**: ALL MILESTONES COMPLETE — shipping as v0.1.0 (first published version, matching `@memsy-io/mcp@0.1.0`). The internal v0.1/v0.2/v0.3/v0.4 labels in this plan were cut-line markers, not actual releases. · **Branch**: `ns/claude-code-plugin-m1` · **Package**: `@memsy-io/claude-code` (private for now)
 
 ## Goal
 
@@ -35,14 +35,14 @@ Plugin is **strictly additive** on top of the MCP — uninstalling it must leave
 
 | M | Deliverable | Effort | Default state | Status |
 |---|---|---|---|---|
-| M1 | `plugin.json` + `/memsy-doctor` command + `install.sh` + README | ½ day | always-on | ✅ v0.1.0 |
-| M2 | `/memsy`, `/memsy-remember`, `/memsy-org`, `/memsy-setup` slash commands (thin wrappers over MCP tools) | ½ day | always-on | ✅ v0.2.0 |
-| M3 | `memsy-recall` + `memsy-remember` + `memsy-setup` (fallback) skills | 1 day | always-on (skills are triggered by phrasing, not auto-fired) | ✅ v0.2.0 |
-| M4 | `hooks/hooks.json` + `scripts/session-start.sh` — SessionStart auto-context | 1 day | **OFF** — opt-in via `MEMSY_SESSION_AUTOCONTEXT=on` | ✅ v0.4.0 |
-| M5 | `/memsy-checkpoint` command (not a hook — see note below) | 1 day | manual invoke | ✅ v0.4.0 |
-| M6 | `/memsy-index` command — codebase ingest per-ecosystem playbook | 1 day | manual invoke | ✅ v0.4.0 |
-| M7 | `memsy-archivist` subagent — deep retrieval / cluster / dedupe | ½ day | manual invoke | ✅ v0.4.0 |
-| M8 | Docs page (`docs/content/docs/claude-code.mdx`) + meta.json registration | ½ day | — | ✅ v0.4.0 |
+| M1 | `plugin.json` + `/memsy-doctor` command + `install.sh` + README | ½ day | always-on | ✅ v0.1.0 (M1 cut) |
+| M2 | `/memsy`, `/memsy-remember`, `/memsy-org`, `/memsy-setup` slash commands (thin wrappers over MCP tools) | ½ day | always-on | ✅ v0.1.0 (M2+M3 cut) |
+| M3 | `memsy-recall` + `memsy-remember` + `memsy-setup` (fallback) skills | 1 day | always-on (skills are triggered by phrasing, not auto-fired) | ✅ v0.1.0 (M2+M3 cut) |
+| M4 | `hooks/hooks.json` + `scripts/session-start.sh` — SessionStart auto-context | 1 day | **OFF** — opt-in via `MEMSY_SESSION_AUTOCONTEXT=on` | ✅ v0.1.0 (M4–M8 cut) |
+| M5 | `/memsy-checkpoint` command (not a hook — see note below) | 1 day | manual invoke | ✅ v0.1.0 (M4–M8 cut) |
+| M6 | `/memsy-index` command — codebase ingest per-ecosystem playbook | 1 day | manual invoke | ✅ v0.1.0 (M4–M8 cut) |
+| M7 | `memsy-archivist` subagent — deep retrieval / cluster / dedupe | ½ day | manual invoke | ✅ v0.1.0 (M4–M8 cut) |
+| M8 | Docs page (`docs/content/docs/claude-code.mdx`) + meta.json registration | ½ day | — | ✅ v0.1.0 (M4–M8 cut) |
 
 ### M5 design change — hook → command
 
@@ -59,14 +59,16 @@ Hook stdout *is* injected for `SessionStart`, `UserPromptSubmit`, and `UserPromp
 
 **Total**: ~6 working days. Cut lines below.
 
-## Cut lines (versioned releases)
+## Cut lines (original — historical)
 
-| Release | Includes | Value |
+The plan originally anticipated 4 incremental releases mapped to the milestones above. In practice, the work landed in one PR so we're shipping everything as a single `v0.1.0` — the first published version, matching `@memsy-io/mcp@0.1.0`. The cut-line table is preserved below as a record of the original phasing:
+
+| Originally planned | Would have included | Now in |
 |---|---|---|
-| `claude-code-v0.1.0` | M1 + M2 | One-command install, slash commands discover the surface. Low risk. |
-| `claude-code-v0.2.0` | M3 | Natural-phrase recall + remember. The high-value leap. |
-| `claude-code-v0.3.0` | M4 + M5 | Auto-context + auto-store, both opt-in. Where noise risk lives. |
-| `claude-code-v0.4.0` | M6 + M7 + M8 | Polish, codebase indexing, deep retrieval, docs. |
+| `claude-code-v0.1.0` | M1 + M2 | folded into `v0.1.0` |
+| `claude-code-v0.2.0` | M3 | folded into `v0.1.0` |
+| `claude-code-v0.3.0` | M4 + M5 | folded into `v0.1.0` |
+| `claude-code-v0.4.0` | M6 + M7 + M8 | folded into `v0.1.0` |
 
 ## Dev/prod MCP path strategy
 

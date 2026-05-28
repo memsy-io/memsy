@@ -4,7 +4,7 @@ Long-term memory for Claude Code — recall, store, and share decisions across s
 
 This plugin wraps [`@memsy-io/mcp`](https://www.npmjs.com/package/@memsy-io/mcp) with Claude Code-native UX. The MCP server provides all the tools and resources; this plugin adds slash commands, skills, and hooks so the surface is discoverable from inside Claude Code.
 
-> **Status: v0.4.0 — all milestones**
+> **Status: v0.1.0 — all milestones**
 > Slash commands, skills, opt-in `SessionStart` auto-context, `/memsy-checkpoint` for save-the-conversation, `/memsy-index` for codebase snapshotting, `memsy-archivist` subagent for deep retrieval, and a full docs page at <https://docs.memsy.io/docs/claude-code>. See [PLAN.md](./PLAN.md) for the full roadmap and rationale.
 
 ## Install
