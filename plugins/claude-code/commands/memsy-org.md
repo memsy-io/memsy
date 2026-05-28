@@ -15,8 +15,8 @@ Workflow:
      ```
      Memsy profiles
      ──────────────
-     1. personal   (Neel — personal)        ← active
-     2. work       (Calfus engineering)
+     1. personal   (<org_label from profile>)   ← active
+     2. work       (<org_label from profile>)
      ```
    - Ask which profile they want. Do **not** auto-switch.
 
