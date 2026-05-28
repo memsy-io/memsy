@@ -64,24 +64,24 @@ Return to the parent agent (do NOT print directly to the user; the parent decide
 ```yaml
 topic: <user's question>
 clusters:
-  - theme: "Auth provider selection"
-    summary: "After evaluating Auth0 vs Clerk, decided on Clerk for v0.3 due to lower per-user cost and better Next.js integration. Reversed in v0.4 to roll our own because Clerk's audit log was insufficient for SOC2."
+  - theme: "<theme name in plain language>"
+    summary: "<2–3 sentence synthesis across the memories in this cluster — what was decided/learned/observed, with the through-line>"
     memories:
       - id: "mem_01H..."
         score: 0.91
-        content: "Picked Clerk for auth — cheaper than Auth0 at our scale and better Next.js DX."
+        content: "<200-char excerpt from the memory's content field>"
       - id: "mem_01H..."
         score: 0.87
-        content: "Reversed auth decision — Clerk's audit log can't be exported to our SIEM, blocking SOC2."
-  - theme: "Session token storage"
+        content: "<200-char excerpt from a related memory>"
+  - theme: "<another theme>"
     summary: "..."
     memories:
       - ...
 total_memories_surfaced: 12
 total_queries_run: 4
 gaps_noticed: |
-  - No memories about the migration timeline from Clerk back to in-house.
-  - Several references to a "Q2 review" but no memory captures what was decided there.
+  - <Surface what isn't in the memories — e.g. a referenced decision with no follow-up captured.>
+  - <Or a phrase that's mentioned across memories but never explained.>
 ```
 
 Field names match the `memsy_search` response exactly: `id`, `score`, `content`, `metadata`, `source_events`, `source_metadata`. Do not introduce synthetic field names — if a value isn't in the response, omit the key rather than emitting `undefined`.
