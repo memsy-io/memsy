@@ -1,0 +1,6 @@
+name: memsy
+version: 0.1.0
+description: Long-term memory for Hermes — recall past decisions, store context, and surface the right information across sessions.
+provides_hooks:
+  - pre_llm_call
+  - on_session_start
