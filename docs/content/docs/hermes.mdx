@@ -1,0 +1,138 @@
+---
+title: Hermes Agent
+description: Long-term shared memory for Hermes Agent (NousResearch) — org-wide recall that persists across sessions and complements Hermes's built-in learning loop.
+---
+
+Add Memsy to [Hermes Agent](https://hermes-agent.nousresearch.com) to layer org-wide shared memory on top of Hermes's built-in experience-based learning. Memories stored from Codex, Claude Code, or a teammate's Hermes session are immediately searchable here.
+
+## Requirements
+
+- Node.js 18+
+- [Hermes Agent](https://hermes-agent.nousresearch.com) (`npm install -g @nousresearch/hermes-agent`)
+- Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
+
+## Install
+
+<Steps>
+  <Step title="Clone and run the installer">
+    ```bash
+    git clone https://github.com/memsy-io/memsy
+    cd memsy/plugins/hermes
+    ./install.sh
+    ```
+
+    The installer adds `mcp_servers.memsy` to `~/.hermes/config.yaml`.
+  </Step>
+
+  <Step title="Set your API key and start Hermes">
+    ```bash
+    export MEMSY_API_KEY=msy_...
+    hermes chat
+    ```
+
+    <Info>
+      Hermes reads `MEMSY_API_KEY` from the environment at startup. Set it in the same shell or add it to your `~/.profile` / `.zshrc`.
+    </Info>
+  </Step>
+
+  <Step title="Verify">
+    In `hermes chat`, ask:
+
+    > *"What do we know about our rate limiter decisions?"*
+
+    Hermes should call `memsy_search`. If tools aren't available, try `/reload-mcp` to reload the MCP config without restarting.
+  </Step>
+</Steps>
+
+## Manual config
+
+Add to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  memsy:
+    command: npx
+    args: ["-y", "@memsy-io/mcp"]
+    enabled: true
+    env:
+      MEMSY_API_KEY: "${MEMSY_API_KEY}"
+```
+
+Reload without restarting: `/reload-mcp` inside `hermes chat`.
+
+## Available tools
+
+All 13 Memsy MCP tools are available. The most common:
+
+| Tool | When Hermes uses it |
+|---|---|
+| `memsy_search` | "What did we decide about X?", "Do we have anything on Y?" |
+| `memsy_ingest` | "Remember that…", "Save this decision…" |
+| `memsy_health` | Diagnosing connectivity issues |
+| `memsy_list_orgs` | "What Memsy orgs do I have?" |
+| `memsy_use_org` | "Switch to my work Memsy org" |
+
+### Limiting exposed tools (optional)
+
+To expose only the core set and reduce noise:
+
+```yaml
+mcp_servers:
+  memsy:
+    command: npx
+    args: ["-y", "@memsy-io/mcp"]
+    enabled: true
+    env:
+      MEMSY_API_KEY: "${MEMSY_API_KEY}"
+    tools:
+      include: [memsy_search, memsy_ingest, memsy_health, memsy_status]
+```
+
+## Hermes learning loop + Memsy
+
+Hermes's built-in learning loop extracts skills from conversations and stores them locally. Memsy adds a **complementary** layer:
+
+| | Hermes learning loop | Memsy |
+|---|---|---|
+| Scope | Per-instance, local | Org-wide, shared |
+| Access | This Hermes instance | Any host (Codex, Claude Code, teammates) |
+| Storage | Local skill files | Encrypted cloud store |
+| Search | Skills invocation | Semantic vector search |
+
+Use Hermes skills for agent-specific workflows; use Memsy for decisions and context you want the whole team (or your other agents) to find.
+
+## Capabilities
+
+| Capability | Supported |
+|---|---|
+| Recall (memsy_search) | ✓ |
+| Store (memsy_ingest) | ✓ |
+| Tool filtering (`tools.include`) | ✓ |
+| Multi-org / profiles | ✓ |
+| Dynamic tool reload (`/reload-mcp`) | ✓ |
+| SKILL.md skills | — (Hermes uses its own Skills Hub) |
+| SessionStart auto-recall hook | — |
+
+## Troubleshooting
+
+### Tools not available after config change
+
+Use `/reload-mcp` in `hermes chat` to reload the MCP config without restarting.
+
+### MCP shows "disconnected"
+
+Run the server directly to see the error:
+
+```bash
+MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp
+```
+
+### Wrong memories returned
+
+Ask Hermes to call `memsy_list_orgs` to check the active profile. Switch with `memsy_use_org { profile: "work" }`.
+
+## See also
+
+- [MCP Server](/docs/mcp) — the universal layer that all integrations share
+- [Actors and Sessions](/docs/actors-and-sessions) — identity and `actor_id`
+- [Plugin source](https://github.com/memsy-io/memsy/tree/main/plugins/hermes) on GitHub

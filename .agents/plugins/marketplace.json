@@ -1,0 +1,22 @@
+{
+  "name": "memsy",
+  "interface": {
+    "displayName": "Memsy Plugins"
+  },
+  "plugins": [
+    {
+      "name": "memsy",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/memsy-io/memsy.git",
+        "path": "./plugins/codex",
+        "ref": "ns/other-plugins"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

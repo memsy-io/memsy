@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "memsy-hermes-plugin"
+version = "0.1.0"
+description = "Memsy long-term memory plugin for Hermes Agent"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["memsy", "hermes", "memory", "recall", "long-term-memory", "agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://memsy.io/docs/hermes"
+Repository = "https://github.com/memsy-io/memsy"
+Documentation = "https://memsy.io/docs/hermes"
+
+# General plugin (MCP tools, skills, pre_llm_call auto-context hook)
+# Discovered via pip entry-points — active after: hermes plugins enable memsy
+[project.entry-points."hermes_agent.plugins"]
+memsy = "memsy_hermes_plugin"
+
+# Memory provider is bundled in memsy_hermes_plugin (same wheel).
+# Hermes discovers it at ~/.hermes/plugins/memsy/ via text-scan heuristic
+# (looks for "MemoryProvider" in __init__.py). The plugin.yaml kind: standalone
+# prevents PluginManager from hijacking it as kind=exclusive.
+
+[tool.hatch.build.targets.wheel]
+packages = ["memsy_hermes_plugin"]

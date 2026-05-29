@@ -1,0 +1,51 @@
+{
+  "name": "@memsy-io/openclaw-plugin",
+  "version": "0.1.0",
+  "description": "Long-term memory for OpenClaw agents — recall, store, and surface context across channels",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2",
+      "pluginSdkVersion": "2026.3.24-beta.2"
+    }
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.33.0"
+  },
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "devDependencies": {
+    "openclaw": "*",
+    "typescript": "^5.5.0"
+  },
+  "keywords": ["memsy", "memory", "openclaw", "long-term-memory", "recall"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memsy-io/memsy.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

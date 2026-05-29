@@ -1,0 +1,65 @@
+name: Publish Skills to ClawHub
+
+on:
+  push:
+    tags:
+      - "skills-v*"
+
+jobs:
+  publish:
+    name: Publish memsy-recall and memsy-remember to ClawHub
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install clawhub CLI
+        run: npm install -g clawhub
+
+      - name: Publish memsy-recall (OpenClaw)
+        working-directory: plugins/openclaw/skills/memsy-recall
+        run: |
+          clawhub publish . \
+            --slug memsy-recall \
+            --name "Memsy Recall" \
+            --version "${GITHUB_REF_NAME#skills-v}" \
+            --changelog "Release ${GITHUB_REF_NAME}"
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+
+      - name: Publish memsy-remember (OpenClaw)
+        working-directory: plugins/openclaw/skills/memsy-remember
+        run: |
+          clawhub publish . \
+            --slug memsy-remember \
+            --name "Memsy Remember" \
+            --version "${GITHUB_REF_NAME#skills-v}" \
+            --changelog "Release ${GITHUB_REF_NAME}"
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+
+      - name: Publish memsy-recall (Hermes)
+        working-directory: plugins/hermes/memsy_hermes_plugin/skills/memsy-recall
+        run: |
+          clawhub publish . \
+            --slug memsy-recall-hermes \
+            --name "Memsy Recall (Hermes)" \
+            --version "${GITHUB_REF_NAME#skills-v}" \
+            --changelog "Release ${GITHUB_REF_NAME}"
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+
+      - name: Publish memsy-remember (Hermes)
+        working-directory: plugins/hermes/memsy_hermes_plugin/skills/memsy-remember
+        run: |
+          clawhub publish . \
+            --slug memsy-remember-hermes \
+            --name "Memsy Remember (Hermes)" \
+            --version "${GITHUB_REF_NAME#skills-v}" \
+            --changelog "Release ${GITHUB_REF_NAME}"
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
