@@ -1,0 +1,7 @@
+name: memsy
+version: 0.1.0
+description: "Memsy long-term memory backend — automatic turn sync, prefetch context injection, and native memsy_search/memsy_ingest tools."
+hooks:
+  - prefetch
+  - sync_turn
+  - on_session_end

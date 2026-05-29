@@ -38,7 +38,23 @@ if [[ -d "${PLUGIN_DST}" ]]; then
 fi
 
 cp -r "${PLUGIN_SRC}" "${PLUGIN_DST}"
-echo "✓ Plugin installed to ${PLUGIN_DST}"
+echo "✓ General plugin installed to ${PLUGIN_DST}"
+
+# ── 2b. Install memory provider plugin ───────────────────────────────────────
+# Memory providers live at ~/.hermes/plugins/memory/<name>/ — separate discovery
+# path from general plugins.
+MEMORY_PROVIDER_SRC="${SCRIPT_DIR}/memory_provider"
+MEMORY_PROVIDER_DST="${HERMES_PLUGINS_DIR}/memory/memsy"
+
+mkdir -p "${HERMES_PLUGINS_DIR}/memory"
+
+if [[ -d "${MEMORY_PROVIDER_DST}" ]]; then
+  echo "  Updating existing memory provider at ${MEMORY_PROVIDER_DST}"
+  rm -rf "${MEMORY_PROVIDER_DST}"
+fi
+
+cp -r "${MEMORY_PROVIDER_SRC}" "${MEMORY_PROVIDER_DST}"
+echo "✓ Memory provider installed to ${MEMORY_PROVIDER_DST}"
 
 # ── 3. Update config.yaml ─────────────────────────────────────────────────────
 # Expands MEMSY_API_KEY at install time so Hermes gets the real value.
@@ -154,6 +170,19 @@ echo ""
 echo "After config changes, reload MCP without restarting:"
 echo "  /reload-mcp"
 echo ""
-echo "Verify plugins: hermes plugins list"
-echo "Verify MCP: ask 'What do we know about X?' to test recall."
+echo "Installed components:"
+echo "  General plugin  : ~/.hermes/plugins/memsy/         (MCP tools + skills + auto-context hook)"
+echo "  Memory provider : ~/.hermes/plugins/memory/memsy/  (native turn sync + prefetch)"
+echo ""
+echo "Verify general plugin:  hermes plugins list | grep memsy"
+echo "Verify memory provider: hermes plugins list  (check Provider Plugins section)"
+echo ""
+echo "To activate the memory provider (replaces any other active memory backend):"
+echo "  hermes plugins  # interactive — select Memsy under Provider Plugins → Memory"
+echo "  # or add to ~/.hermes/config.yaml:"
+echo "  #   memory:"
+echo "  #     provider: memsy"
+echo ""
+echo "Once active, Memsy auto-syncs every turn and prefetches relevant memories."
+echo "Verify: hermes memsy status"
 echo "Docs: https://memsy.io/docs/hermes"

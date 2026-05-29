@@ -26,12 +26,14 @@ Homepage = "https://memsy.io/docs/hermes"
 Repository = "https://github.com/memsy-io/memsy"
 Documentation = "https://memsy.io/docs/hermes"
 
+# General plugin (MCP tools, skills, pre_llm_call auto-context hook)
+# Discovered via pip entry-points — active after: hermes plugins enable memsy
 [project.entry-points."hermes_agent.plugins"]
 memsy = "memsy_hermes_plugin"
 
+# Memory provider is NOT distributed via pip entry-points.
+# Hermes discovers memory providers by directory convention only
+# (~/.hermes/plugins/memory/<name>/). install.sh handles the copy.
+
 [tool.hatch.build.targets.wheel]
 packages = ["memsy_hermes_plugin"]
-
-[tool.hatch.build.targets.wheel.shared-data]
-# Ensure plugin.yaml and skills are included in the wheel
-"memsy_hermes_plugin/plugin.yaml" = "memsy_hermes_plugin/plugin.yaml"
