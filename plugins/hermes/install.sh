@@ -27,8 +27,9 @@ if [[ ! -f "${HERMES_CONFIG}" ]]; then
 fi
 
 # ── 2. Install Python plugin ──────────────────────────────────────────────────
-# Copies plugin/ into ~/.hermes/plugins/memsy/ so Hermes discovers it on startup.
-PLUGIN_SRC="${SCRIPT_DIR}/plugin"
+# Copies memsy_hermes_plugin/ into ~/.hermes/plugins/memsy/ so Hermes discovers
+# it on startup. This is the manual install path; pip install is also available.
+PLUGIN_SRC="${SCRIPT_DIR}/memsy_hermes_plugin"
 PLUGIN_DST="${HERMES_PLUGINS_DIR}/memsy"
 
 if [[ -d "${PLUGIN_DST}" ]]; then
