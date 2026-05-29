@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { Type, type Static } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
 const DEFAULT_BASE_URL = "https://api.memsy.io";
@@ -39,16 +39,52 @@ function isAutoContextEnabled(config: PluginConfig): boolean {
 }
 
 function contextLimit(config: PluginConfig): number {
-  if (config.sessionContextLimit !== undefined) {
-    return Math.min(Math.max(config.sessionContextLimit, 1), 20);
-  }
-  const raw = process.env.MEMSY_SESSION_CONTEXT_LIMIT;
-  if (raw) {
-    const n = parseInt(raw, 10);
-    if (!isNaN(n)) return Math.min(Math.max(n, 1), 20);
-  }
+  const n = config.sessionContextLimit ?? parseInt(process.env.MEMSY_SESSION_CONTEXT_LIMIT ?? "", 10);
+  if (!Number.isNaN(n) && n >= 1) return Math.min(n, 20);
   return DEFAULT_CONTEXT_LIMIT;
 }
+
+// Tool parameter schemas
+const SearchParams = Type.Object({
+  query: Type.String({ description: "What to search for" }),
+  limit: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
+  since: Type.Optional(Type.String()),
+  threshold: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+});
+
+const IngestEvent = Type.Object({
+  kind: Type.Union([
+    Type.Literal("user_message"),
+    Type.Literal("assistant_message"),
+    Type.Literal("tool_result"),
+    Type.Literal("app_event"),
+  ]),
+  content: Type.String({ maxLength: 32000 }),
+  ts: Type.Optional(Type.String()),
+  metadata: Type.Optional(Type.String()),
+});
+
+const IngestParams = Type.Object({
+  events: Type.Array(IngestEvent),
+});
+
+const ListMemoriesParams = Type.Object({
+  limit: Type.Optional(Type.Number()),
+  offset: Type.Optional(Type.Number()),
+  sort: Type.Optional(Type.String()),
+  search: Type.Optional(Type.String()),
+  kind: Type.Optional(Type.String()),
+  status: Type.Optional(Type.String()),
+});
+
+const UseOrgParams = Type.Object({
+  profile: Type.String(),
+});
+
+type SearchParamsType = Static<typeof SearchParams>;
+type IngestParamsType = Static<typeof IngestParams>;
+type ListMemoriesParamsType = Static<typeof ListMemoriesParams>;
+type UseOrgParamsType = Static<typeof UseOrgParams>;
 
 export default definePluginEntry({
   id: "memsy",
@@ -57,180 +93,135 @@ export default definePluginEntry({
     "Long-term memory for OpenClaw agents — recall, store, and surface context across channels.",
 
   register(api) {
-    // Plugin config is accessed at runtime; start with empty defaults and
-    // read process.env lazily inside each tool call so env vars set after
-    // plugin load are picked up correctly.
     const config: PluginConfig = {};
+
+    // Fired-once flag for auto-context: reset on session_start so gateway
+    // /new and idle-rotation both get a fresh context block.
+    const _state = { autocontextFired: false };
 
     // ── memsy_health ─────────────────────────────────────────────────────────
     api.registerTool({
       name: "memsy_health",
+      label: "Memsy Health",
       description:
         "Check Memsy service health. Call this first when any other Memsy tool errors.",
       parameters: Type.Object({}),
-      async execute() {
+      async execute(_toolCallId: string, _params: unknown) {
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         const resp = await fetch(`${baseUrl}/health`, {
           headers: authHeaders(apiKey),
         });
         const data = (await resp.json()) as unknown;
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+          details: data,
+        };
       },
     });
 
     // ── memsy_search ─────────────────────────────────────────────────────────
     api.registerTool({
       name: "memsy_search",
+      label: "Memsy Search",
       description:
-        "Search Memsy long-term memory for past decisions, preferences, and context. Use when the user asks what was decided, remembered, or discussed previously.",
-      parameters: Type.Object({
-        query: Type.String({ description: "What to search for" }),
-        limit: Type.Optional(
-          Type.Number({
-            description: "Number of results (1–100, default 8)",
-            minimum: 1,
-            maximum: 100,
-          })
-        ),
-        since: Type.Optional(
-          Type.String({
-            description: "ISO 8601 — only memories observed after this time",
-          })
-        ),
-        threshold: Type.Optional(
-          Type.Number({
-            description: "Minimum similarity score 0–1 (default 0.0)",
-            minimum: 0,
-            maximum: 1,
-          })
-        ),
-      }),
-      async execute(_id, params) {
+        "Search Memsy long-term memory for past decisions, preferences, and context.",
+      parameters: SearchParams,
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as SearchParamsType;
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         const body: Record<string, unknown> = {
-          query: params.query,
-          limit: params.limit ?? 8,
-          threshold: params.threshold ?? 0.0,
+          query: p.query,
+          limit: p.limit ?? 8,
+          threshold: p.threshold ?? 0.0,
         };
-        if (params.since) body.since = params.since;
+        if (p.since) body.since = p.since;
         const resp = await fetch(`${baseUrl}/search`, {
           method: "POST",
           headers: authHeaders(apiKey),
           body: JSON.stringify(body),
         });
         const data = (await resp.json()) as unknown;
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+          details: data,
+        };
       },
     });
 
     // ── memsy_ingest ─────────────────────────────────────────────────────────
     api.registerTool({
       name: "memsy_ingest",
+      label: "Memsy Ingest",
       description:
         "Store a memory event in Memsy. Use when the user explicitly says to remember, save, or note something.",
-      parameters: Type.Object({
-        events: Type.Array(
-          Type.Object({
-            kind: Type.Union([
-              Type.Literal("user_message"),
-              Type.Literal("assistant_message"),
-              Type.Literal("tool_result"),
-              Type.Literal("app_event"),
-            ]),
-            content: Type.String({
-              description: "The memory content",
-              maxLength: 32000,
-            }),
-            ts: Type.Optional(
-              Type.String({ description: "ISO 8601 timestamp" })
-            ),
-            metadata: Type.Optional(
-              Type.String({ description: "JSON string of extra metadata" })
-            ),
-          }),
-          { description: "Events to ingest (max 100 per call)" }
-        ),
-      }),
-      async execute(_id, params) {
+      parameters: IngestParams,
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as IngestParamsType;
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         const resp = await fetch(`${baseUrl}/ingest`, {
           method: "POST",
           headers: authHeaders(apiKey),
-          body: JSON.stringify({ events: params.events }),
+          body: JSON.stringify({ events: p.events }),
         });
         const data = (await resp.json()) as unknown;
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+          details: data,
+        };
       },
     });
 
     // ── memsy_list_memories ──────────────────────────────────────────────────
     api.registerTool({
       name: "memsy_list_memories",
+      label: "Memsy List Memories",
       description:
         "List memories with optional filters. Use when memsy_search returns nothing or the user wants to browse stored memories.",
-      parameters: Type.Object({
-        limit: Type.Optional(
-          Type.Number({ description: "Number to return (default 20)" })
-        ),
-        offset: Type.Optional(
-          Type.Number({ description: "Pagination offset" })
-        ),
-        sort: Type.Optional(
-          Type.String({ description: "Sort order e.g. 'observed_at_desc'" })
-        ),
-        search: Type.Optional(Type.String({ description: "Free-text filter" })),
-        kind: Type.Optional(Type.String({ description: "Filter by memory kind" })),
-        status: Type.Optional(Type.String({ description: "Filter by status e.g. 'active'" })),
-      }),
-      async execute(_id, params) {
+      parameters: ListMemoriesParams,
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as ListMemoriesParamsType;
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
         const qs = new URLSearchParams();
-        if (params.limit != null) qs.set("limit", String(params.limit));
-        if (params.offset != null) qs.set("offset", String(params.offset));
-        if (params.sort) qs.set("sort", params.sort);
-        if (params.search) qs.set("search", params.search);
-        if (params.kind) qs.set("kind", params.kind);
-        if (params.status) qs.set("status", params.status);
+        if (p.limit != null) qs.set("limit", String(p.limit));
+        if (p.offset != null) qs.set("offset", String(p.offset));
+        if (p.sort) qs.set("sort", p.sort);
+        if (p.search) qs.set("search", p.search);
+        if (p.kind) qs.set("kind", p.kind);
+        if (p.status) qs.set("status", p.status);
         const url = `${baseUrl}/memories${qs.size > 0 ? "?" + qs.toString() : ""}`;
         const resp = await fetch(url, { headers: authHeaders(apiKey) });
         const data = (await resp.json()) as unknown;
-        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+          details: data,
+        };
       },
     });
 
     // ── memsy_list_orgs ──────────────────────────────────────────────────────
     api.registerTool({
       name: "memsy_list_orgs",
+      label: "Memsy List Orgs",
       description:
-        "List available Memsy profiles/orgs. Use to check which org is active or discover available profiles.",
+        "List available Memsy profiles/orgs. Use to check which org is active.",
       parameters: Type.Object({}),
-      async execute() {
-        // Local introspection — no network call needed.
-        // Full multi-profile support requires the @memsy-io/mcp config layer;
-        // in this plugin, profile selection is via env vars.
+      async execute(_toolCallId: string, _params: unknown) {
         const baseUrl = resolveBaseUrl(config);
+        const profiles = [
+          {
+            profile_name: process.env.MEMSY_PROFILE ?? "default",
+            active: true,
+            base_url: baseUrl,
+            org_label: process.env.MEMSY_PROFILE ?? "Default",
+          },
+        ];
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                [
-                  {
-                    profile_name: process.env.MEMSY_PROFILE ?? "default",
-                    active: true,
-                    base_url: baseUrl,
-                    org_label: process.env.MEMSY_PROFILE ?? "Default",
-                  },
-                ],
-                null,
-                2
-              ),
-            },
-          ],
+          content: [{ type: "text" as const, text: JSON.stringify(profiles, null, 2) }],
+          details: profiles,
         };
       },
     });
@@ -238,47 +229,47 @@ export default definePluginEntry({
     // ── memsy_use_org ────────────────────────────────────────────────────────
     api.registerTool({
       name: "memsy_use_org",
+      label: "Memsy Use Org",
       description:
         "Switch the active Memsy profile. Requires restarting OpenClaw with the new profile env var.",
-      parameters: Type.Object({
-        profile: Type.String({ description: "Profile name to switch to" }),
-      }),
-      async execute(_id, params) {
+      parameters: UseOrgParams,
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as UseOrgParamsType;
+        const text = `To switch to profile "${p.profile}", restart OpenClaw with:\n  MEMSY_PROFILE=${p.profile} MEMSY_API_KEY=<that-profile-key> openclaw start`;
         return {
-          content: [
-            {
-              type: "text",
-              text: `To switch to profile "${params.profile}", restart OpenClaw with:\n  MEMSY_PROFILE=${params.profile} MEMSY_API_KEY=<that-profile-key> openclaw start`,
-            },
-          ],
+          content: [{ type: "text" as const, text }],
+          details: { profile: p.profile },
         };
       },
     });
 
-    // ── session_start hook — auto-context injection ───────────────────────────
-    // Fires at session lifecycle boundaries. When MEMSY_SESSION_AUTOCONTEXT=on
-    // (or sessionAutoContext: true in plugin config), fetches recent memories
-    // and returns a context contribution for the agent's first turn.
-    api.on("session_start", async (_event) => {
-      if (!isAutoContextEnabled(config)) return;
+    // ── session_start hook — reset auto-context flag ──────────────────────────
+    // Returns void. Context injection happens in heartbeat_prompt_contribution.
+    api.on("session_start", (_event: unknown) => {
+      _state.autocontextFired = false;
+    });
 
-      const limit = contextLimit(config);
+    // ── heartbeat_prompt_contribution — auto-context injection ─────────────────
+    // Fires each turn during the agent's prompt build cycle. Returns
+    // { prependContext } to inject text. We fire once per session (guarded by
+    // _state.autocontextFired) when MEMSY_SESSION_AUTOCONTEXT=on.
+    api.on("heartbeat_prompt_contribution", async (_event: unknown) => {
+      if (!isAutoContextEnabled(config)) return;
+      if (_state.autocontextFired) return;
+      _state.autocontextFired = true;
 
       let apiKey: string;
       try {
         apiKey = resolveApiKey(config);
       } catch {
-        // API key not configured — silently skip rather than blocking startup.
         return;
       }
 
       const baseUrl = resolveBaseUrl(config);
+      const limit = contextLimit(config);
 
       try {
-        const qs = new URLSearchParams({
-          limit: String(limit),
-          sort: "observed_at_desc",
-        });
+        const qs = new URLSearchParams({ limit: String(limit), sort: "observed_at_desc" });
         const resp = await fetch(`${baseUrl}/memories?${qs.toString()}`, {
           headers: authHeaders(apiKey),
         });
@@ -298,13 +289,9 @@ export default definePluginEntry({
           })
           .join("\n");
 
-        // Return context contribution for this session start.
-        // OpenClaw injects the returned contextContribution into the agent prompt.
-        return {
-          contextContribution: `[Memsy recall (top ${memories.length})]\n${lines}\n`,
-        };
+        return { prependContext: `[Memsy recall (top ${memories.length})]\n${lines}\n` };
       } catch {
-        // Network failure — silently skip so startup is never blocked.
+        // Network failure — never block the agent turn.
       }
     });
   },
