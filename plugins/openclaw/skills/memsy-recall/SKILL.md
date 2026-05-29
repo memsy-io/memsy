@@ -1,6 +1,7 @@
 ---
 name: memsy-recall
-description: Use this skill when the user asks to recall past context, decisions, or what was discussed previously. Trigger phrases include "what did we decide", "remember when", "have we discussed", "context on X", "do we have anything about Y", "look up", "search past conversations", "find that thing about", or any retrieval-intent question about prior work. Calls memsy_search MCP tool with the topic extracted from the user's question.
+version: 0.1.0
+description: Use this skill when the user asks to recall past context, decisions, or what was discussed previously. Trigger phrases include "what did we decide", "remember when", "have we discussed", "context on X", "do we have anything about Y", "look up", "search past conversations", "find that thing about", or any retrieval-intent question about prior work. Calls memsy_search with the topic extracted from the user's question.
 ---
 
 The user is asking you to recall something from Memsy memory. Run this workflow:
@@ -30,7 +31,7 @@ Format as bullet points, **grouped by theme** when 3+ results share a thread. Ea
 - Memory `content` (truncate to 200 chars)
 - Score in parens
 
-Top 3–5 most relevant first. If memories are clearly unrelated to the query, surface only what's relevant. Do **not** invent fields — call `memsy_get_memory` if the user needs detail on a specific result.
+Top 3–5 most relevant first. If memories are clearly unrelated to the query, surface only what's relevant. Do **not** invent fields — call `memsy_list_memories` with a specific id if the user needs detail on a result.
 
 ## 4. If 0 results
 
@@ -41,7 +42,7 @@ Say: "No memories matched `<query>`." Then offer:
 
 ## 5. If the tool errors out
 
-Call `memsy_health` to diagnose. Do not retry blindly or fabricate substitute answers. Be explicit that Memsy isn't reachable — suggest the user verify `MEMSY_API_KEY` is set in the MCP env block (the OpenClaw gateway does not inherit shell env).
+Call `memsy_health` to diagnose. Do not retry blindly or fabricate substitute answers. Be explicit that Memsy isn't reachable — suggest the user verify `MEMSY_API_KEY` is set in the environment.
 
 ## Anti-noise rules — DO NOT fire when
 

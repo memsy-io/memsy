@@ -1,0 +1,45 @@
+{
+  "id": "memsy",
+  "name": "Memsy",
+  "description": "Long-term memory for OpenClaw agents — recall past decisions, store context, and surface the right information across all connected channels.",
+  "contracts": {
+    "tools": [
+      "memsy_search",
+      "memsy_ingest",
+      "memsy_health",
+      "memsy_list_memories",
+      "memsy_list_orgs",
+      "memsy_use_org"
+    ]
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "Memsy API key (alternative to MEMSY_API_KEY env var)"
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "Memsy API base URL",
+        "default": "https://api.memsy.io"
+      },
+      "sessionAutoContext": {
+        "type": "boolean",
+        "description": "Inject recent memories at session start",
+        "default": false
+      },
+      "sessionContextLimit": {
+        "type": "number",
+        "description": "Number of memories to surface at session start (1-20)",
+        "default": 6,
+        "minimum": 1,
+        "maximum": 20
+      }
+    }
+  }
+}

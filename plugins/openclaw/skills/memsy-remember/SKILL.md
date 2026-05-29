@@ -1,6 +1,7 @@
 ---
 name: memsy-remember
-description: Use this skill when the user explicitly asks to save, note, or persist a fact, decision, or piece of context for future sessions. Trigger phrases include "remember that", "save this decision", "note that", "let's remember", "store this", "tag this as", "for future reference", or any clear save-intent statement. Calls memsy_ingest MCP tool to persist the substance.
+version: 0.1.0
+description: Use this skill when the user explicitly asks to save, note, or persist a fact, decision, or piece of context for future sessions. Trigger phrases include "remember that", "save this decision", "note that", "let's remember", "store this", "tag this as", "for future reference", or any clear save-intent statement. Calls memsy_ingest to persist the substance.
 ---
 
 The user wants to commit something to Memsy memory. Run this workflow:
@@ -30,7 +31,7 @@ A single event:
 - `content`: the substantive text from step 1 (verbatim)
 - `ts`: current ISO 8601 timestamp
 
-Do NOT add `role_id` / `team_id` unless the user explicitly specified them — let their defaults from `memsy_set_defaults` apply.
+Do NOT add `role_id` / `team_id` unless the user explicitly specified them.
 
 ## 4. Confirm back
 
