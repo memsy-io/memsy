@@ -1,7 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
-const DEFAULT_BASE_URL = "https://api.memsy.io";
+const DEFAULT_BASE_URL = "https://api.memsy.io/v1";
 const DEFAULT_CONTEXT_LIMIT = 6;
 
 interface PluginConfig {
@@ -192,7 +192,7 @@ export default definePluginEntry({
         if (p.search) qs.set("search", p.search);
         if (p.kind) qs.set("kind", p.kind);
         if (p.status) qs.set("status", p.status);
-        const url = `${baseUrl}/memories${qs.size > 0 ? "?" + qs.toString() : ""}`;
+        const url = `${baseUrl}/console/memories${qs.size > 0 ? "?" + qs.toString() : ""}`;
         const resp = await fetch(url, { headers: authHeaders(apiKey) });
         const data = (await resp.json()) as unknown;
         return {
@@ -270,7 +270,7 @@ export default definePluginEntry({
 
       try {
         const qs = new URLSearchParams({ limit: String(limit), sort: "observed_at_desc" });
-        const resp = await fetch(`${baseUrl}/memories?${qs.toString()}`, {
+        const resp = await fetch(`${baseUrl}/console/memories?${qs.toString()}`, {
           headers: authHeaders(apiKey),
         });
         if (!resp.ok) return;

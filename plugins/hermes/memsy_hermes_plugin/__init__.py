@@ -33,7 +33,7 @@ from agent.memory_provider import MemoryProvider
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BASE_URL = "https://api.memsy.io"
+_DEFAULT_BASE_URL = "https://api.memsy.io/v1"
 _DEFAULT_LIMIT = 6
 _MAX_LIMIT = 20
 
@@ -192,7 +192,7 @@ class MemsyMemoryProvider(MemoryProvider):
                 return self._get("/health")
             elif tool_name == "memsy_list_memories":
                 qs = f"?limit={args.get('limit', 20)}&sort={args.get('sort', 'observed_at_desc')}"
-                return self._get(f"/memories{qs}")
+                return self._get(f"/console/memories{qs}")
             else:
                 return json.dumps({"error": f"Unknown Memsy tool: {tool_name}"})
         except Exception as exc:
