@@ -77,13 +77,31 @@ already_has_memsy = bool(re.search(r"^\s+memsy\s*:", content, re.MULTILINE))
 
 if already_has_memsy:
     print("  memsy MCP server already present — skipping.")
-elif re.search(r"^mcp_servers\s*:", content, re.MULTILINE):
+elif re.search(r"^mcp_servers\s*:\s*\[\s*\]", content, re.MULTILINE):
+    # Hermes writes mcp_servers: [] when no servers are configured — replace
+    # the inline empty list with a proper block so we can insert the entry.
+    content = re.sub(
+        r"^mcp_servers\s*:\s*\[\s*\]",
+        "mcp_servers:\n" + memsy_block.rstrip("\n"),
+        content, count=1, flags=re.MULTILINE,
+    )
+    print("✓ Replaced empty mcp_servers: [] with memsy block")
+elif re.search(r"^mcp_servers\s*:\s*\n", content, re.MULTILINE):
+    # Block form — insert memsy as the first entry
     content = re.sub(
         r"(^mcp_servers\s*:\s*\n)",
         r"\1" + memsy_block,
         content, count=1, flags=re.MULTILINE,
     )
     print("✓ Added memsy under existing mcp_servers:")
+elif re.search(r"^mcp_servers\s*:", content, re.MULTILINE):
+    # Some other form (e.g. mcp_servers: null) — replace the whole line
+    content = re.sub(
+        r"^mcp_servers\s*:.*",
+        "mcp_servers:\n" + memsy_block.rstrip("\n"),
+        content, count=1, flags=re.MULTILINE,
+    )
+    print("✓ Replaced mcp_servers line with memsy block")
 else:
     content += "\nmcp_servers:\n" + memsy_block
     print("✓ Added mcp_servers.memsy to config.yaml")
