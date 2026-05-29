@@ -10,7 +10,7 @@
         "source": "git-subdir",
         "url": "https://github.com/memsy-io/memsy.git",
         "path": "./plugins/codex",
-        "ref": "main"
+        "ref": "ns/other-plugins"
       },
       "policy": {
         "installation": "AVAILABLE",
