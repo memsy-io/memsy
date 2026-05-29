@@ -31,9 +31,10 @@ Documentation = "https://memsy.io/docs/hermes"
 [project.entry-points."hermes_agent.plugins"]
 memsy = "memsy_hermes_plugin"
 
-# Memory provider is NOT distributed via pip entry-points.
-# Hermes discovers memory providers by directory convention only
-# (~/.hermes/plugins/memory/<name>/). install.sh handles the copy.
+# Memory provider is bundled in memsy_hermes_plugin (same wheel).
+# Hermes discovers it at ~/.hermes/plugins/memsy/ via text-scan heuristic
+# (looks for "MemoryProvider" in __init__.py). The plugin.yaml kind: standalone
+# prevents PluginManager from hijacking it as kind=exclusive.
 
 [tool.hatch.build.targets.wheel]
 packages = ["memsy_hermes_plugin"]
