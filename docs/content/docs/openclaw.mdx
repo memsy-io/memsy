@@ -3,6 +3,8 @@ title: OpenClaw
 description: Long-term memory for OpenClaw — recall decisions and store context from any connected chat app (WhatsApp, Telegram, Slack, Discord, iMessage, and more).
 ---
 
+<img src="/integrations/openclaw.png" alt="OpenClaw" style={{height: '52px', borderRadius: '8px', marginBottom: '1.5rem'}} />
+
 Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent persistent memory across every connected channel. Store a decision from Telegram, recall it from Slack — the memory is channel-agnostic.
 
 ## Requirements
@@ -24,14 +26,25 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
     The installer merges `mcpServers.memsy` into `~/.openclaw/openclaw.json` and copies two skills to `~/.openclaw/workspace/skills/`.
   </Step>
 
-  <Step title="Set your API key and restart OpenClaw">
+  <Step title="Set your API key">
+    The recommended way persists the key across restarts:
+
     ```bash
+    openclaw config set env.MEMSY_API_KEY "msy_..."
+    ```
+
+    Alternatives:
+
+    ```bash
+    # .env file (survives daemon restarts)
+    echo "MEMSY_API_KEY=msy_..." >> ~/.openclaw/.env
+
+    # Session only
     export MEMSY_API_KEY=msy_...
-    openclaw start
     ```
 
     <Info>
-      OpenClaw reads environment variables at gateway startup. Set `MEMSY_API_KEY` in the same shell (or in your `~/.profile` / `.zshrc`) before starting the gateway.
+      `openclaw config set env.MEMSY_API_KEY` writes the key into `~/.openclaw/openclaw.json` and injects it at every gateway start. Use `~/.openclaw/.env` instead if you run OpenClaw as a systemd/LaunchAgent service.
     </Info>
   </Step>
 
