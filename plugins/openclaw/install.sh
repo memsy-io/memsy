@@ -1,31 +1,58 @@
 #!/usr/bin/env bash
-# Install the Memsy plugin for OpenClaw via ClawHub.
+# Install the Memsy plugin for OpenClaw.
+# Builds from source and installs locally.
 # Usage: ./install.sh
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Pre-flight ────────────────────────────────────────────────────────────────
 if ! command -v openclaw &>/dev/null; then
   echo "Error: openclaw CLI not found."
   echo "Install: https://docs.openclaw.ai/install"
   exit 1
 fi
 
-echo "Installing Memsy plugin from ClawHub..."
-openclaw plugins install clawhub:memsy-io/memsy-openclaw
+if ! command -v node &>/dev/null || ! command -v npm &>/dev/null; then
+  echo "Error: node and npm are required to build the plugin."
+  echo "Install: https://nodejs.org"
+  exit 1
+fi
 
-echo ""
-echo "Installing Memsy skills..."
-openclaw skills install memsy-recall
-openclaw skills install memsy-remember
+# ── Build ─────────────────────────────────────────────────────────────────────
+echo "Building Memsy plugin..."
+cd "${SCRIPT_DIR}"
+npm install --silent
+npm run build
+echo "✓ Plugin built."
 
+# ── Install plugin ────────────────────────────────────────────────────────────
+echo "Installing plugin..."
+openclaw plugins install --force "${SCRIPT_DIR}/dist/index.js"
+echo "✓ Plugin installed."
+
+# ── Install skills ────────────────────────────────────────────────────────────
+echo "Installing skills..."
+openclaw skills install --global --force --as memsy-recall   "${SCRIPT_DIR}/skills/memsy-recall"
+openclaw skills install --global --force --as memsy-remember "${SCRIPT_DIR}/skills/memsy-remember"
+echo "✓ Skills installed."
+
+# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Memsy for OpenClaw installed."
 echo ""
-echo "Set your API key before starting OpenClaw:"
-echo "  export MEMSY_API_KEY=msy_..."
+if [[ -z "${MEMSY_API_KEY:-}" ]]; then
+  echo "Set your API key before starting OpenClaw:"
+  echo "  export MEMSY_API_KEY=msy_..."
+else
+  echo "✓ MEMSY_API_KEY is set."
+fi
+echo ""
+echo "Start OpenClaw:"
 echo "  openclaw start"
 echo ""
-echo "Optional modes:"
-echo "  export MEMSY_SESSION_AUTOCONTEXT=on  # surface recent memories at session start"
+echo "Optional: enable auto-context (injects recent memories at session start):"
+echo "  export MEMSY_SESSION_AUTOCONTEXT=on"
 echo ""
 echo "Verify: ask your agent 'What do we know about X?' to test recall."
 echo "Docs: https://memsy.io/docs/openclaw"
