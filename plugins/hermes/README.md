@@ -1,120 +1,107 @@
 # Memsy for Hermes Agent
 
-Long-term memory for [Hermes Agent](https://hermes-agent.nousresearch.com) (NousResearch). Decisions and context persist across sessions — Hermes's own learning loop plus Memsy's org-wide memory gives you both local and shared recall.
+Long-term memory for [Hermes Agent](https://hermes-agent.nousresearch.com) (NousResearch), integrated as a native memory provider. Every conversation turn is automatically synced to Memsy and relevant memories are injected before each LLM call — no MCP layer required.
 
 ## What you get
 
 | Feature | How |
 |---|---|
-| **Recall** | Ask "what did we decide about X?" — Hermes calls `memsy_search` |
-| **Store** | Say "remember that…" — Hermes calls `memsy_ingest` |
-| **Auto-context** | `MEMSY_SESSION_AUTOCONTEXT=on` — recent memories injected at session start via `pre_llm_call` hook |
-| **Bundled skills** | `memsy-recall` and `memsy-remember` ship with the plugin |
-| **Multi-org** | `memsy_list_orgs` / `memsy_use_org` to switch profiles mid-session |
+| **Auto-prefetch** | Relevant memories injected before every LLM call via `prefetch()` |
+| **Auto-sync** | Every user+assistant turn saved to Memsy via `sync_turn()` |
+| **Pre-compress snapshot** | Conversation snapshot saved before Hermes discards context |
+| **Native tools** | `memsy_search`, `memsy_ingest`, `memsy_health`, `memsy_list_memories` |
+| **CLI** | `hermes memsy status` / `hermes memsy config` |
 
 ## Requirements
 
 - Python 3.10+
-- Node.js 18+ (for the MCP server)
 - Hermes Agent installed
 - Memsy API key from [app.memsy.io](https://app.memsy.io)
 
 ## Install
 
 ```bash
-export MEMSY_API_KEY=msy_...
+git clone https://github.com/memsy-io/memsy
+cd memsy/plugins/hermes
 ./install.sh
-hermes chat
 ```
 
 The installer:
-1. Copies `plugin/` to `~/.hermes/plugins/memsy/` (Python plugin with hooks + skills)
-2. Adds `mcp_servers.memsy` to `~/.hermes/config.yaml` (registers `@memsy-io/mcp`)
-3. Adds `memsy` to `plugins.enabled` in `~/.hermes/config.yaml`
+1. Copies `memory_provider/` to `~/.hermes/plugins/memory/memsy/`
+2. Sets `memory.provider: memsy` in `~/.hermes/config.yaml`
+
+Then set your API key:
+
+```bash
+# Option 1 — environment variable (add to ~/.zshrc or ~/.bashrc)
+export MEMSY_API_KEY=msy_...
+
+# Option 2 — interactive setup (persists to ~/.hermes/.env)
+hermes memory setup
+```
+
+Start Hermes:
+
+```bash
+hermes chat
+```
 
 ## Plugin structure
 
 ```
 plugins/hermes/
 ├── install.sh
-├── plugin/                  # Dropped into ~/.hermes/plugins/memsy/
-│   ├── plugin.yaml          # manifest: name, version, provides_hooks
-│   ├── __init__.py          # register(ctx) — hooks + skill registration
-│   └── skills/
-│       ├── memsy-recall/SKILL.md
-│       └── memsy-remember/SKILL.md
+├── memory_provider/              # Dropped into ~/.hermes/plugins/memory/memsy/
+│   ├── plugin.yaml               # Declares hooks
+│   ├── __init__.py               # MemsyMemoryProvider + register(ctx)
+│   └── cli.py                    # hermes memsy status / config
 └── README.md
 ```
-
-The Python plugin adds lifecycle hooks and skills on top of the MCP tools. MCP provides `memsy_search`, `memsy_ingest`, `memsy_health`, etc. as native Hermes tools.
 
 ## Manual config
 
 Add to `~/.hermes/config.yaml`:
 
 ```yaml
-mcp_servers:
-  memsy:
-    command: npx
-    args: ["-y", "@memsy-io/mcp"]
-    enabled: true
-    env:
-      MEMSY_API_KEY: "msy_your_actual_key_here"
-
-plugins:
-  enabled:
-    - memsy
+memory:
+  provider: memsy
 ```
 
-> **Note:** The `env` block takes literal values — shell variable references like `${MEMSY_API_KEY}` are not expanded by YAML. Either write your actual key here or omit the `env` block and set `MEMSY_API_KEY` in your shell before starting Hermes.
+Add your API key to `~/.hermes/.env`:
 
-Reload without restarting: `/reload-mcp` inside `hermes chat`.
+```
+MEMSY_API_KEY=msy_...
+```
 
-## Modes
+## Hooks
+
+| Hook | When called | What it does |
+|---|---|---|
+| `prefetch` | Before each LLM call | Searches Memsy, returns relevant context |
+| `queue_prefetch` | After each turn | Pre-warms cache for next turn |
+| `sync_turn` | After each turn | Saves user + assistant content (non-blocking) |
+| `on_pre_compress` | Before context compression | Saves conversation snapshot |
+| `on_memory_write` | When Hermes writes a built-in memory | Mirrors write to Memsy |
+| `on_session_end` | At session end | Waits for pending sync |
+
+## Environment variables
 
 | Variable | Effect |
 |---|---|
-| `MEMSY_SESSION_AUTOCONTEXT=on` | Fetches recent memories and injects them into the first turn via `pre_llm_call` hook |
-| `MEMSY_SESSION_CONTEXT_LIMIT=N` | Number of memories to surface at session start (default 6, max 20) |
-| `MEMSY_BASE_URL=https://...` | Override the Memsy API URL (self-hosted installations) |
-
-## Capabilities
-
-| Capability | Supported |
-|---|---|
-| Recall (`memsy_search`) | ✓ |
-| Store (`memsy_ingest`) | ✓ |
-| Skills (`SKILL.md`) | ✓ (bundled via plugin) |
-| Session start auto-context | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`, `pre_llm_call` hook) |
-| Multi-org / profiles | ✓ |
-| MCP tool filtering (`tools:`) | ✓ (via `mcp_servers.memsy.tools.include` in config) |
-
-### Limiting exposed tools (optional)
-
-```yaml
-mcp_servers:
-  memsy:
-    command: npx
-    args: ["-y", "@memsy-io/mcp"]
-    enabled: true
-    tools:
-      include: [memsy_search, memsy_ingest, memsy_health, memsy_status]
-```
+| `MEMSY_API_KEY` | **Required.** Your `msy_...` key |
+| `MEMSY_BASE_URL` | Override the API URL (self-hosted installations) |
+| `MEMSY_ACTOR_ID` | Pin a stable actor ID across machines |
 
 ## Hermes + Memsy: complementary memory
 
-Hermes Agent has a built-in learning loop that extracts skills from experience. Memsy adds a **shared, org-wide layer** — so memories stored from a Codex session, a Claude Code session, or a teammate's Hermes session are all searchable here. The two systems complement rather than duplicate each other.
+Hermes Agent has a built-in learning loop that extracts skills from experience. Memsy adds a **shared, org-wide layer** — memories from a Codex session, Claude Code session, or a teammate's Hermes session are all searchable here.
 
 ## Troubleshooting
 
-**Plugin not loading** — Run `hermes plugins list` to check that `memsy` is in the enabled list. If not, run `hermes plugins enable memsy`.
+**Provider not loading** — Check `~/.hermes/plugins/memory/memsy/` exists. Re-run `./install.sh`.
 
-**MCP shows "disconnected"** — Run `MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp` to see the startup error directly.
+**`memsy_search` not available** — Run `hermes memsy status` to check connectivity and API key.
 
-**Tools not available after config change** — Use `/reload-mcp` in `hermes chat` to reload without restarting.
-
-**Skills not triggering** — Run `hermes skills list` to verify `memsy:memsy-recall` and `memsy:memsy-remember` appear. Skills bundled by a plugin are namespaced as `plugin:skill-name`.
-
-**Wrong memories returned** — Ask Hermes to call `memsy_list_orgs` and verify the active profile, then `memsy_health` to confirm connectivity.
+**Wrong memories returned** — Set a stable `MEMSY_ACTOR_ID` if you work across multiple machines.
 
 Full docs: [memsy.io/docs/hermes](https://memsy.io/docs/hermes)
