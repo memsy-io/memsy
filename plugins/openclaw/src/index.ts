@@ -34,23 +34,36 @@ function authHeaders(apiKey: string): Record<string, string> {
   };
 }
 
-function isAutoContextEnabled(config: PluginConfig): boolean {
-  if (config.sessionAutoContext !== undefined) return config.sessionAutoContext;
-  const v = (process.env.MEMSY_SESSION_AUTOCONTEXT ?? "").toLowerCase();
-  return ["on", "true", "1", "yes", "enabled"].includes(v);
+const TRUTHY = new Set(["on", "true", "1", "yes", "enabled"]);
+
+function isFlagEnabled(configVal: boolean | undefined, envVar: string): boolean {
+  if (configVal !== undefined) return configVal;
+  return TRUTHY.has((process.env[envVar] ?? "").toLowerCase());
 }
 
-function isProactiveEnabled(config: PluginConfig): boolean {
-  if (config.proactive !== undefined) return config.proactive;
-  const v = (process.env.MEMSY_PROACTIVE ?? "").toLowerCase();
-  return ["on", "true", "1", "yes", "enabled"].includes(v);
-}
+const isAutoContextEnabled = (c: PluginConfig) => isFlagEnabled(c.sessionAutoContext, "MEMSY_SESSION_AUTOCONTEXT");
+const isProactiveEnabled   = (c: PluginConfig) => isFlagEnabled(c.proactive,          "MEMSY_PROACTIVE");
+const isConfirmStoreEnabled = (c: PluginConfig) => isFlagEnabled(c.confirmStore,       "MEMSY_CONFIRM_STORE");
 
-function isConfirmStoreEnabled(config: PluginConfig): boolean {
-  if (config.confirmStore !== undefined) return config.confirmStore;
-  const v = (process.env.MEMSY_CONFIRM_STORE ?? "").toLowerCase();
-  return ["on", "true", "1", "yes", "enabled"].includes(v);
-}
+// Proactive mode instruction injected once per session into the agent's context.
+// Kept as a module-level constant so it isn't rebuilt on every heartbeat call.
+const PROACTIVE_INSTRUCTION_BASE =
+  `[memsy proactive mode — MEMSY_PROACTIVE=on]\n\n` +
+  `For the rest of this conversation, actively watch for content the user clearly wants remembered, ` +
+  `EVEN IF they don't say "remember that". Categories that qualify:\n` +
+  `  - Personal preferences: "I like X", "my favorite is Y", "I prefer Z"\n` +
+  `  - Intents / plans: "I want to do X", "I plan to Y", "we're going to Z"\n` +
+  `  - Decisions: "we decided X", "going with Y", "switching to Z", "we need X"\n` +
+  `  - Constraints: "X doesn't work because Y", "we can't do Z"\n` +
+  `  - Learnings: "turns out X", "the trick is Y", "found that Z"\n\n` +
+  `Pre-flight: skip if <20 chars; skip secret-shaped tokens (msy_/sk_/ghp_/Bearer); skip duplicates.\n` +
+  `Call memsy_ingest: kind="user_message", content=<substance>, ts=<ISO 8601>, ` +
+  `metadata={"source":"openclaw-proactive","safe_to_delete":true}\n` +
+  `Acknowledge after the primary answer: → saved to Memsy: "<first 60 chars>..." (event <id>)\n` +
+  `Hard rule: save things useful 3+ months from now. Do NOT ask permission every turn.`;
+
+const PROACTIVE_CONFIRM_NOTE =
+  `\n  confirm-before-store is also active — ask Save? (y / n / edit "...") before each ingest.`;
 
 function contextLimit(config: PluginConfig): number {
   const n = config.sessionContextLimit ?? parseInt(process.env.MEMSY_SESSION_CONTEXT_LIMIT ?? "", 10);
@@ -268,49 +281,37 @@ export default definePluginEntry({
     });
 
     // ── heartbeat_prompt_contribution — proactive + auto-context injection ────
-    // Fires each turn during the agent's prompt build cycle. Both blocks fire
-    // at most once per session (guarded by their respective fired flags).
+    // Fires each turn. Both blocks inject at most once per session, guarded by
+    // their respective fired flags. If both fire on the same first turn they
+    // are combined into a single prependContext return value.
     api.on("heartbeat_prompt_contribution", async (_event: unknown) => {
-      const parts: string[] = [];
+      let proactivePart: string | undefined;
+      let recallPart: string | undefined;
 
-      // ── Proactive mode instruction (fires once, no API call needed) ──────────
+      // ── Proactive mode instruction (no API call needed) ──────────────────────
       if (isProactiveEnabled(config) && !_state.proactiveFired) {
         _state.proactiveFired = true;
-        const confirmNote = isConfirmStoreEnabled(config)
-          ? "\n  confirm-before-store is also active — ask Save? (y / n / edit \"...\") before each ingest."
-          : "";
-        parts.push(
-          `[memsy proactive mode — MEMSY_PROACTIVE=on]\n\n` +
-          `For the rest of this conversation, actively watch for content the user clearly wants remembered, ` +
-          `EVEN IF they don't say "remember that". Categories that qualify:\n` +
-          `  - Personal preferences: "I like X", "my favorite is Y", "I prefer Z"\n` +
-          `  - Intents / plans: "I want to do X", "I plan to Y", "we're going to Z"\n` +
-          `  - Decisions: "we decided X", "going with Y", "switching to Z", "we need X"\n` +
-          `  - Constraints: "X doesn't work because Y", "we can't do Z"\n` +
-          `  - Learnings: "turns out X", "the trick is Y", "found that Z"\n\n` +
-          `Pre-flight: skip if <20 chars; skip secret-shaped tokens (msy_/sk_/ghp_/Bearer); skip duplicates.${confirmNote}\n` +
-          `Call memsy_ingest: kind="user_message", content=<substance>, ts=<ISO 8601>, ` +
-          `metadata={"source":"openclaw-proactive","safe_to_delete":true}\n` +
-          `Acknowledge after the primary answer: → saved to Memsy: "<first 60 chars>..." (event <id>)\n` +
-          `Hard rule: save things useful 3+ months from now. Do NOT ask permission every turn.`
+        const confirmNote = isConfirmStoreEnabled(config) ? PROACTIVE_CONFIRM_NOTE : "";
+        proactivePart = PROACTIVE_INSTRUCTION_BASE.replace(
+          "skip duplicates.\n",
+          `skip duplicates.${confirmNote}\n`,
         );
       }
 
-      // ── Auto-context recall (fires once, requires API call) ──────────────────
+      // ── Auto-context recall (requires API call) ──────────────────────────────
       if (isAutoContextEnabled(config) && !_state.autocontextFired) {
         _state.autocontextFired = true;
 
-        let apiKey: string;
+        let apiKey: string | undefined;
         try {
           apiKey = resolveApiKey(config);
         } catch {
           // No key configured — skip silently.
         }
 
-        if (apiKey!) {
+        if (apiKey) {
           const baseUrl = resolveBaseUrl(config);
           const limit = contextLimit(config);
-
           try {
             const qs = new URLSearchParams({ limit: String(limit), sort: "observed_at_desc" });
             const resp = await fetch(`${baseUrl}/console/memories?${qs.toString()}`, {
@@ -329,7 +330,7 @@ export default definePluginEntry({
                     return `${i + 1}. ${text}${date}`;
                   })
                   .join("\n");
-                parts.push(`[Memsy recall (top ${memories.length})]\n${lines}`);
+                recallPart = `[Memsy recall (top ${memories.length})]\n${lines}`;
               }
             }
           } catch {
@@ -338,8 +339,9 @@ export default definePluginEntry({
         }
       }
 
-      if (parts.length === 0) return;
-      return { prependContext: parts.join("\n\n") + "\n" };
+      const combined = [proactivePart, recallPart].filter(Boolean).join("\n\n");
+      if (!combined) return;
+      return { prependContext: combined + "\n" };
     });
   },
 });

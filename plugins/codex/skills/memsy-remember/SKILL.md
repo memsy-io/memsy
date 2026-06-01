@@ -25,18 +25,20 @@ Strip the leading verb / framing (`remember that`, `save this`, `note that`, `le
 
 ## 3. Confirm-before-store (if enabled)
 
-If your session context contains `[memsy modes: ... confirm-before-store ...]`, surface the proposed content and ask:
+If your session context contains the line `[memsy modes: ... confirm-before-store ...]` (emitted by the SessionStart hook when `MEMSY_CONFIRM_STORE=on`), surface the proposed content and ask before calling the tool:
 
 ```
 Memsy will store:
-  <stripped substance>
+  <stripped substance from step 1>
 
 Save? (y / n / edit "<new text>")
 ```
 
-- `y` → proceed. `n` → say "Not stored." and stop. `edit "..."` → use the new text.
+- `y` / "save it" → proceed to step 4.
+- `n` / "don't" → say "Not stored." and stop. **Do not** call `memsy_ingest`.
+- `edit "..."` → use the new text as the content and proceed.
 
-If the mode line isn't in context, skip this step.
+If the mode line isn't in context (default), skip this step — the auto-fire trigger already implies user intent.
 
 ## 4. Call memsy_ingest
 
