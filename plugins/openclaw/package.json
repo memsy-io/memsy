@@ -19,7 +19,9 @@
     "prepublishOnly": "npm run build"
   },
   "openclaw": {
-    "extensions": ["./dist/index.js"],
+    "extensions": [
+      "./dist/index.js"
+    ],
     "compat": {
       "pluginApi": ">=2026.3.24-beta.2",
       "minGatewayVersion": "2026.3.24-beta.2"
@@ -36,10 +38,17 @@
     "openclaw": "*"
   },
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "openclaw": "*",
     "typescript": "^5.5.0"
   },
-  "keywords": ["memsy", "memory", "openclaw", "long-term-memory", "recall"],
+  "keywords": [
+    "memsy",
+    "memory",
+    "openclaw",
+    "long-term-memory",
+    "recall"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
