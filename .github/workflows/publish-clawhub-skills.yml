@@ -7,7 +7,7 @@ on:
 
 jobs:
   publish:
-    name: Publish memsy-recall and memsy-remember to ClawHub
+    name: Publish Memsy skills to ClawHub
     runs-on: ubuntu-latest
 
     steps:
@@ -20,8 +20,9 @@ jobs:
       - name: Install clawhub CLI
         run: npm install -g clawhub
 
-      - name: Publish memsy-recall (OpenClaw)
-        working-directory: plugins/openclaw/skills/memsy-recall
+      # ── Claude Code skills ────────────────────────────────────────────────
+      - name: Publish memsy-recall (Claude Code)
+        working-directory: plugins/claude-code/skills/memsy-recall
         run: |
           clawhub publish . \
             --slug memsy-recall \
@@ -31,8 +32,8 @@ jobs:
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
 
-      - name: Publish memsy-remember (OpenClaw)
-        working-directory: plugins/openclaw/skills/memsy-remember
+      - name: Publish memsy-remember (Claude Code)
+        working-directory: plugins/claude-code/skills/memsy-remember
         run: |
           clawhub publish . \
             --slug memsy-remember \
@@ -42,23 +43,24 @@ jobs:
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
 
-      - name: Publish memsy-recall (Hermes)
-        working-directory: plugins/hermes/memsy_hermes_plugin/skills/memsy-recall
+      # ── OpenClaw skills ───────────────────────────────────────────────────
+      - name: Publish memsy-recall (OpenClaw)
+        working-directory: plugins/openclaw/skills/memsy-recall
         run: |
           clawhub publish . \
-            --slug memsy-recall-hermes \
-            --name "Memsy Recall (Hermes)" \
+            --slug memsy-recall-openclaw \
+            --name "Memsy Recall (OpenClaw)" \
             --version "${GITHUB_REF_NAME#skills-v}" \
             --changelog "Release ${GITHUB_REF_NAME}"
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
 
-      - name: Publish memsy-remember (Hermes)
-        working-directory: plugins/hermes/memsy_hermes_plugin/skills/memsy-remember
+      - name: Publish memsy-remember (OpenClaw)
+        working-directory: plugins/openclaw/skills/memsy-remember
         run: |
           clawhub publish . \
-            --slug memsy-remember-hermes \
-            --name "Memsy Remember (Hermes)" \
+            --slug memsy-remember-openclaw \
+            --name "Memsy Remember (OpenClaw)" \
             --version "${GITHUB_REF_NAME#skills-v}" \
             --changelog "Release ${GITHUB_REF_NAME}"
         env:
