@@ -5,11 +5,13 @@ description: Long-term shared memory for Hermes Agent (NousResearch) — org-wid
 
 <img src="/integrations/hermes.png" alt="Hermes Agent by NousResearch" style={{height: '52px', borderRadius: '8px', marginBottom: '1.5rem'}} />
 
-Add Memsy to [Hermes Agent](https://hermes-agent.nousresearch.com) to layer org-wide shared memory on top of Hermes's built-in experience-based learning. Memories stored from Codex, Claude Code, or a teammate's Hermes session are immediately searchable here.
+Add Memsy to [Hermes Agent](https://hermes-agent.nousresearch.com) as its native memory provider. Every turn is automatically synced to Memsy and relevant memories are injected before each LLM call — no MCP layer, no extra config.
+
+Memories stored from Codex, Claude Code, or a teammate's Hermes session are immediately searchable here.
 
 ## Requirements
 
-- Node.js 18+
+- Python 3.10+
 - [Hermes Agent](https://hermes-agent.nousresearch.com) (`npm install -g @nousresearch/hermes-agent`)
 - Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
 
@@ -23,71 +25,78 @@ Add Memsy to [Hermes Agent](https://hermes-agent.nousresearch.com) to layer org-
     ./install.sh
     ```
 
-    The installer adds `mcp_servers.memsy` to `~/.hermes/config.yaml`.
+    The installer copies the Memsy memory provider to `~/.hermes/plugins/memory/memsy/` and sets `memory.provider: memsy` in `~/.hermes/config.yaml`.
   </Step>
 
-  <Step title="Set your API key and start Hermes">
+  <Step title="Set your API key">
+    **Option 1 — environment variable** (add to `~/.zshrc` or `~/.bashrc`):
+
     ```bash
     export MEMSY_API_KEY=msy_...
-    hermes chat
+    ```
+
+    **Option 2 — interactive setup** (saves to `~/.hermes/.env`, survives restarts):
+
+    ```bash
+    hermes memory setup
     ```
 
     <Info>
-      Hermes reads `MEMSY_API_KEY` from the environment at startup. Set it in the same shell or add it to your `~/.profile` / `.zshrc`.
+      `hermes memory setup` prompts for your API key and writes it to `~/.hermes/.env` so Hermes picks it up on every start without needing a shell export.
     </Info>
   </Step>
 
-  <Step title="Verify">
-    In `hermes chat`, ask:
+  <Step title="Start Hermes and verify">
+    ```bash
+    hermes chat
+    ```
 
-    > *"What do we know about our rate limiter decisions?"*
+    Ask: *"What do we know about our rate limiter decisions?"*
 
-    Hermes should call `memsy_search`. If tools aren't available, try `/reload-mcp` to reload the MCP config without restarting.
+    Hermes will call `memsy_search` directly (native tool, no MCP). Check connectivity anytime:
+
+    ```bash
+    hermes memsy status
+    ```
   </Step>
 </Steps>
 
-## Manual config
+## How it works
 
-Add to `~/.hermes/config.yaml`:
+Memsy runs as Hermes's native memory backend — no MCP subprocess, no `npx`:
 
-```yaml
-mcp_servers:
-  memsy:
-    command: npx
-    args: ["-y", "@memsy-io/mcp"]
-    enabled: true
-    env:
-      MEMSY_API_KEY: "${MEMSY_API_KEY}"
-```
+| Hook | When | What it does |
+|---|---|---|
+| `prefetch` | Before each LLM call | Searches Memsy with the current query, injects relevant memories as context |
+| `queue_prefetch` | After each turn | Pre-warms the cache for the next turn's prefetch |
+| `sync_turn` | After each turn | Persists user + assistant content to Memsy in a background thread |
+| `on_pre_compress` | Before context compression | Saves a snapshot of the conversation before Hermes discards older context |
+| `on_memory_write` | When Hermes writes a built-in memory | Mirrors the write to Memsy for cross-agent access |
 
-Reload without restarting: `/reload-mcp` inside `hermes chat`.
+## Native tools
 
-## Available tools
-
-All 13 Memsy MCP tools are available. The most common:
+Four tools are injected directly into Hermes's tool registry:
 
 | Tool | When Hermes uses it |
 |---|---|
 | `memsy_search` | "What did we decide about X?", "Do we have anything on Y?" |
 | `memsy_ingest` | "Remember that…", "Save this decision…" |
 | `memsy_health` | Diagnosing connectivity issues |
-| `memsy_list_orgs` | "What Memsy orgs do I have?" |
-| `memsy_use_org` | "Switch to my work Memsy org" |
+| `memsy_list_memories` | "Show me recent memories" |
 
-### Limiting exposed tools (optional)
+## Manual config
 
-To expose only the core set and reduce noise:
+If you prefer to configure by hand, add to `~/.hermes/config.yaml`:
 
 ```yaml
-mcp_servers:
-  memsy:
-    command: npx
-    args: ["-y", "@memsy-io/mcp"]
-    enabled: true
-    env:
-      MEMSY_API_KEY: "${MEMSY_API_KEY}"
-    tools:
-      include: [memsy_search, memsy_ingest, memsy_health, memsy_status]
+memory:
+  provider: memsy
+```
+
+And set your API key in `~/.hermes/.env`:
+
+```
+MEMSY_API_KEY=msy_...
 ```
 
 ## Hermes learning loop + Memsy
@@ -109,32 +118,39 @@ Use Hermes skills for agent-specific workflows; use Memsy for decisions and cont
 |---|---|
 | Recall (memsy_search) | ✓ |
 | Store (memsy_ingest) | ✓ |
-| Tool filtering (`tools.include`) | ✓ |
+| Auto-prefetch before each LLM call | ✓ |
+| Auto-sync every turn | ✓ |
+| Pre-compress snapshot | ✓ |
+| Built-in memory mirroring | ✓ |
 | Multi-org / profiles | ✓ |
-| Dynamic tool reload (`/reload-mcp`) | ✓ |
 | SKILL.md skills | — (Hermes uses its own Skills Hub) |
-| SessionStart auto-recall hook | — |
 
 ## Troubleshooting
 
-### Tools not available after config change
+### `memsy_search` not available
 
-Use `/reload-mcp` in `hermes chat` to reload the MCP config without restarting.
+Run `hermes memsy status` to check connectivity. If `MEMSY_API_KEY` is missing, run `hermes memory setup`.
 
-### MCP shows "disconnected"
+### Provider not loading
 
-Run the server directly to see the error:
+Confirm the provider directory exists:
 
 ```bash
-MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp
+ls ~/.hermes/plugins/memory/memsy/
 ```
+
+If missing, re-run `./install.sh`.
 
 ### Wrong memories returned
 
-Ask Hermes to call `memsy_list_orgs` to check the active profile. Switch with `memsy_use_org { profile: "work" }`.
+The `actor_id` is derived from your environment. If memories from another machine or user are surfacing, set a stable override:
+
+```bash
+export MEMSY_ACTOR_ID=my-unique-id
+```
 
 ## See also
 
-- [MCP Server](/docs/mcp) — the universal layer that all integrations share
+- [MCP Server](/docs/mcp) — use instead if you prefer MCP-based tooling
 - [Actors and Sessions](/docs/actors-and-sessions) — identity and `actor_id`
 - [Plugin source](https://github.com/memsy-io/memsy/tree/main/plugins/hermes) on GitHub

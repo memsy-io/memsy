@@ -16,7 +16,7 @@ import urllib.request
 
 def _status() -> None:
     api_key = os.environ.get("MEMSY_API_KEY", "")
-    base_url = os.environ.get("MEMSY_BASE_URL", "https://api.memsy.io")
+    base_url = os.environ.get("MEMSY_BASE_URL", "https://api.memsy.io/v1")
 
     if not api_key:
         print("✗ MEMSY_API_KEY not set")
@@ -43,7 +43,7 @@ def _status() -> None:
 
 def _config() -> None:
     api_key = os.environ.get("MEMSY_API_KEY", "")
-    base_url = os.environ.get("MEMSY_BASE_URL", "https://api.memsy.io (default)")
+    base_url = os.environ.get("MEMSY_BASE_URL", "https://api.memsy.io/v1 (default)")
     print(f"MEMSY_API_KEY  : {'set (' + api_key[:8] + '...)' if api_key else 'not set'}")
     print(f"MEMSY_BASE_URL : {base_url}")
     print()

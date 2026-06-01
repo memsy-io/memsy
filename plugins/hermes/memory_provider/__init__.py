@@ -1,20 +1,19 @@
 """Memsy memory provider for Hermes Agent.
 
-Integrates Memsy as Hermes's native memory backend:
-  - prefetch()    called before every LLM call — injects relevant memories as context
-  - sync_turn()   called after every turn — persists conversation to Memsy (non-blocking)
-  - get_tool_schemas() / handle_tool_call() — exposes memsy_search / memsy_ingest / etc.
-    as native Hermes tools (no MCP layer needed)
+Installed to ~/.hermes/plugins/memory/memsy/ — discovered automatically by Hermes.
+Activate with: hermes memory setup
+Or manually add to ~/.hermes/config.yaml:
+  memory:
+    provider: memsy
 
-This is a companion to the general plugin (memsy_hermes_plugin). They can coexist:
-  - General plugin: MCP tools + skill triggers + pre_llm_call auto-context hook
-  - Memory provider: automatic turn sync + prefetch context injection + native tools
-
-Only one external memory provider can be active at a time. To activate:
-  hermes plugins  (interactive toggle)
-  # or in ~/.hermes/config.yaml:
-  # memory:
-  #   provider: memsy
+Lifecycle hooks implemented:
+  prefetch()         inject relevant memories before each LLM call
+  queue_prefetch()   pre-warm cache after each turn
+  sync_turn()        persist user+assistant turn to Memsy (non-blocking)
+  on_pre_compress()  save insights before Hermes discards context
+  on_memory_write()  mirror Hermes built-in memory writes to Memsy
+  on_session_end()   wait for pending sync before exit
+  shutdown()         cleanup on process exit
 """
 
 from __future__ import annotations
@@ -222,6 +221,51 @@ class MemsyMemoryProvider(MemoryProvider):
             self._sync_thread.join(timeout=5.0)
         self._sync_thread = threading.Thread(target=_sync, daemon=True)
         self._sync_thread.start()
+
+    def queue_prefetch(self, query: str) -> None:
+        """Pre-warm cache after each turn so the next prefetch() is faster."""
+        if not self._api_key or not query.strip():
+            return
+        def _warm() -> None:
+            try:
+                self._post("/search", {"query": query, "limit": 5, "threshold": 0.3})
+            except Exception:
+                pass
+        t = threading.Thread(target=_warm, daemon=True)
+        t.start()
+
+    def on_pre_compress(self, messages: list) -> None:
+        """Save a summary of the conversation before Hermes discards context."""
+        if not self._api_key or not messages:
+            return
+        # Extract the last few substantive turns to preserve before compression.
+        turns = [m for m in messages if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
+        if not turns:
+            return
+        snippet = " | ".join(
+            (m.get("content") or "")[:300]
+            for m in turns[-4:]
+            if m.get("content")
+        )
+        if len(snippet) < 40:
+            return
+        def _save() -> None:
+            try:
+                self._post("/ingest", {"events": [{"kind": "app_event", "content": f"[pre-compress] {snippet}"}]})
+            except Exception:
+                pass
+        threading.Thread(target=_save, daemon=True).start()
+
+    def on_memory_write(self, action: str, target: str, content: str) -> None:
+        """Mirror Hermes built-in memory writes to Memsy."""
+        if not self._api_key or not content:
+            return
+        def _mirror() -> None:
+            try:
+                self._post("/ingest", {"events": [{"kind": "app_event", "content": f"[hermes-memory:{action}:{target}] {content}"}]})
+            except Exception:
+                pass
+        threading.Thread(target=_mirror, daemon=True).start()
 
     def on_session_end(self, messages: list) -> None:
         if self._sync_thread and self._sync_thread.is_alive():
