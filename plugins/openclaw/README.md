@@ -21,24 +21,41 @@ Long-term memory for your OpenClaw agent. Recall decisions, store context, and s
 
 ## Install
 
-```bash
-openclaw plugins install clawhub:memsy-io/memsy-openclaw
-openclaw skills install memsy-recall
-openclaw skills install memsy-remember
-```
-
-Or run the convenience script:
+Clone the repo and run the install script — it builds the plugin from source and registers it with OpenClaw:
 
 ```bash
+git clone https://github.com/memsy-io/memsy
+cd memsy/plugins/openclaw
 ./install.sh
 ```
 
-Then set your API key before starting OpenClaw:
+## Set your API key
 
+Get a key from [app.memsy.io](https://app.memsy.io), then pick one of:
+
+**Persist in OpenClaw config (recommended):**
+```bash
+openclaw config set env.MEMSY_API_KEY "msy_..."
+```
+Writes the key to `~/.openclaw/openclaw.json`. Takes effect on next `openclaw start`.
+
+**Persist in `.env` file:**
+```bash
+echo "MEMSY_API_KEY=msy_..." >> ~/.openclaw/.env
+```
+OpenClaw loads `~/.openclaw/.env` automatically on every start.
+
+**Session only (not persisted):**
 ```bash
 export MEMSY_API_KEY=msy_...
 openclaw start
 ```
+
+**Secrets manager (1Password, Bitwarden, Vault, etc.):**
+```bash
+openclaw secrets configure
+```
+Interactively configure a SecretRef — keeps the key out of plaintext config entirely.
 
 ## Plugin structure
 
@@ -96,7 +113,7 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 **Skills not triggering** — Run `openclaw skills list` to verify the skills are installed.
 
-**API key error** — Ensure `MEMSY_API_KEY=msy_...` is set before starting the gateway. OpenClaw does not inherit shell env by default; set it in your gateway supervisor config.
+**API key error** — Run `openclaw config set env.MEMSY_API_KEY "msy_..."` to persist the key, then restart. If running as a daemon/service, set it via `~/.openclaw/.env` so it survives restarts without relying on shell env.
 
 **Wrong memories returned** — Ask your agent to call `memsy_list_orgs` and verify the active profile, then `memsy_health` to confirm connectivity.
 
