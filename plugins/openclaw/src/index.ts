@@ -9,6 +9,8 @@ interface PluginConfig {
   baseUrl?: string;
   sessionAutoContext?: boolean;
   sessionContextLimit?: number;
+  proactive?: boolean;
+  confirmStore?: boolean;
 }
 
 function resolveApiKey(config: PluginConfig): string {
@@ -35,6 +37,18 @@ function authHeaders(apiKey: string): Record<string, string> {
 function isAutoContextEnabled(config: PluginConfig): boolean {
   if (config.sessionAutoContext !== undefined) return config.sessionAutoContext;
   const v = (process.env.MEMSY_SESSION_AUTOCONTEXT ?? "").toLowerCase();
+  return ["on", "true", "1", "yes", "enabled"].includes(v);
+}
+
+function isProactiveEnabled(config: PluginConfig): boolean {
+  if (config.proactive !== undefined) return config.proactive;
+  const v = (process.env.MEMSY_PROACTIVE ?? "").toLowerCase();
+  return ["on", "true", "1", "yes", "enabled"].includes(v);
+}
+
+function isConfirmStoreEnabled(config: PluginConfig): boolean {
+  if (config.confirmStore !== undefined) return config.confirmStore;
+  const v = (process.env.MEMSY_CONFIRM_STORE ?? "").toLowerCase();
   return ["on", "true", "1", "yes", "enabled"].includes(v);
 }
 
@@ -95,9 +109,9 @@ export default definePluginEntry({
   register(api) {
     const config: PluginConfig = {};
 
-    // Fired-once flag for auto-context: reset on session_start so gateway
-    // /new and idle-rotation both get a fresh context block.
-    const _state = { autocontextFired: false };
+    // Fired-once flags: reset on session_start so /new and idle-rotation get
+    // fresh context blocks each session.
+    const _state = { autocontextFired: false, proactiveFired: false };
 
     // ── memsy_health ─────────────────────────────────────────────────────────
     api.registerTool({
@@ -247,56 +261,85 @@ export default definePluginEntry({
       },
     });
 
-    // ── session_start hook — reset auto-context flag ──────────────────────────
-    // Returns void. Context injection happens in heartbeat_prompt_contribution.
+    // ── session_start hook — reset per-session flags ─────────────────────────
     api.on("session_start", (_event: unknown) => {
       _state.autocontextFired = false;
+      _state.proactiveFired = false;
     });
 
-    // ── heartbeat_prompt_contribution — auto-context injection ─────────────────
-    // Fires each turn during the agent's prompt build cycle. Returns
-    // { prependContext } to inject text. We fire once per session (guarded by
-    // _state.autocontextFired) when MEMSY_SESSION_AUTOCONTEXT=on.
+    // ── heartbeat_prompt_contribution — proactive + auto-context injection ────
+    // Fires each turn during the agent's prompt build cycle. Both blocks fire
+    // at most once per session (guarded by their respective fired flags).
     api.on("heartbeat_prompt_contribution", async (_event: unknown) => {
-      if (!isAutoContextEnabled(config)) return;
-      if (_state.autocontextFired) return;
-      _state.autocontextFired = true;
+      const parts: string[] = [];
 
-      let apiKey: string;
-      try {
-        apiKey = resolveApiKey(config);
-      } catch {
-        return;
+      // ── Proactive mode instruction (fires once, no API call needed) ──────────
+      if (isProactiveEnabled(config) && !_state.proactiveFired) {
+        _state.proactiveFired = true;
+        const confirmNote = isConfirmStoreEnabled(config)
+          ? "\n  confirm-before-store is also active — ask Save? (y / n / edit \"...\") before each ingest."
+          : "";
+        parts.push(
+          `[memsy proactive mode — MEMSY_PROACTIVE=on]\n\n` +
+          `For the rest of this conversation, actively watch for content the user clearly wants remembered, ` +
+          `EVEN IF they don't say "remember that". Categories that qualify:\n` +
+          `  - Personal preferences: "I like X", "my favorite is Y", "I prefer Z"\n` +
+          `  - Intents / plans: "I want to do X", "I plan to Y", "we're going to Z"\n` +
+          `  - Decisions: "we decided X", "going with Y", "switching to Z", "we need X"\n` +
+          `  - Constraints: "X doesn't work because Y", "we can't do Z"\n` +
+          `  - Learnings: "turns out X", "the trick is Y", "found that Z"\n\n` +
+          `Pre-flight: skip if <20 chars; skip secret-shaped tokens (msy_/sk_/ghp_/Bearer); skip duplicates.${confirmNote}\n` +
+          `Call memsy_ingest: kind="user_message", content=<substance>, ts=<ISO 8601>, ` +
+          `metadata={"source":"openclaw-proactive","safe_to_delete":true}\n` +
+          `Acknowledge after the primary answer: → saved to Memsy: "<first 60 chars>..." (event <id>)\n` +
+          `Hard rule: save things useful 3+ months from now. Do NOT ask permission every turn.`
+        );
       }
 
-      const baseUrl = resolveBaseUrl(config);
-      const limit = contextLimit(config);
+      // ── Auto-context recall (fires once, requires API call) ──────────────────
+      if (isAutoContextEnabled(config) && !_state.autocontextFired) {
+        _state.autocontextFired = true;
 
-      try {
-        const qs = new URLSearchParams({ limit: String(limit), sort: "observed_at_desc" });
-        const resp = await fetch(`${baseUrl}/console/memories?${qs.toString()}`, {
-          headers: authHeaders(apiKey),
-        });
-        if (!resp.ok) return;
+        let apiKey: string;
+        try {
+          apiKey = resolveApiKey(config);
+        } catch {
+          // No key configured — skip silently.
+        }
 
-        type MemoryItem = { text?: string; content?: string; observed_at?: string };
-        const data = (await resp.json()) as { memories?: MemoryItem[] };
-        const memories = data.memories ?? [];
-        if (memories.length === 0) return;
+        if (apiKey!) {
+          const baseUrl = resolveBaseUrl(config);
+          const limit = contextLimit(config);
 
-        const lines = memories
-          .slice(0, limit)
-          .map((m, i) => {
-            const text = (m.text ?? m.content ?? "").slice(0, 200);
-            const date = m.observed_at ? ` — ${m.observed_at}` : "";
-            return `${i + 1}. ${text}${date}`;
-          })
-          .join("\n");
-
-        return { prependContext: `[Memsy recall (top ${memories.length})]\n${lines}\n` };
-      } catch {
-        // Network failure — never block the agent turn.
+          try {
+            const qs = new URLSearchParams({ limit: String(limit), sort: "observed_at_desc" });
+            const resp = await fetch(`${baseUrl}/console/memories?${qs.toString()}`, {
+              headers: authHeaders(apiKey),
+            });
+            if (resp.ok) {
+              type MemoryItem = { text?: string; content?: string; observed_at?: string };
+              const data = (await resp.json()) as { memories?: MemoryItem[] };
+              const memories = data.memories ?? [];
+              if (memories.length > 0) {
+                const lines = memories
+                  .slice(0, limit)
+                  .map((m, i) => {
+                    const text = (m.text ?? m.content ?? "").slice(0, 200);
+                    const date = m.observed_at ? ` — ${m.observed_at}` : "";
+                    return `${i + 1}. ${text}${date}`;
+                  })
+                  .join("\n");
+                parts.push(`[Memsy recall (top ${memories.length})]\n${lines}`);
+              }
+            }
+          } catch {
+            // Network failure — never block the agent turn.
+          }
+        }
       }
+
+      if (parts.length === 0) return;
+      return { prependContext: parts.join("\n\n") + "\n" };
     });
   },
 });

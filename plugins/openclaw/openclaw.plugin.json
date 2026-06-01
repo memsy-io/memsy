@@ -39,6 +39,16 @@
         "default": 6,
         "minimum": 1,
         "maximum": 20
+      },
+      "proactive": {
+        "type": "boolean",
+        "description": "Watch for save-worthy content (preferences, decisions, plans) and store without needing an explicit 'remember that'",
+        "default": false
+      },
+      "confirmStore": {
+        "type": "boolean",
+        "description": "Ask for confirmation before storing each memory",
+        "default": false
       }
     }
   }

@@ -24,7 +24,22 @@ Strip the leading verb / framing (`remember that`, `save this`, `note that`, `le
 - **Contains a secret-shaped token** (`msy_`, `sk_`, `ghp_`, `Bearer `, anything resembling an API key, password, or JWT): refuse. Say: "That looks like it contains a secret — Memsy stores in plain text. Either paraphrase without the secret, or use a real secret manager."
 - **Transient / scratch content** (TODOs for the current turn, half-formed debug output): ask if they really want to persist it.
 
-## 3. Call memsy_ingest
+## 3. Confirm-before-store (if enabled)
+
+If your session context contains `[memsy modes: ... confirm-before-store ...]`, surface the proposed content and ask:
+
+```
+Memsy will store:
+  <stripped substance>
+
+Save? (y / n / edit "<new text>")
+```
+
+- `y` → proceed. `n` → say "Not stored." and stop. `edit "..."` → use the new text.
+
+If the mode line isn't in context, skip this step.
+
+## 4. Call memsy_ingest
 
 A single event:
 - `kind`: `"user_message"`
@@ -33,7 +48,7 @@ A single event:
 
 Do NOT add `role_id` / `team_id` unless the user explicitly specified them.
 
-## 4. Confirm back
+## 5. Confirm back
 
 ```
 ✓ Stored in Memsy.
@@ -41,7 +56,7 @@ Do NOT add `role_id` / `team_id` unless the user explicitly specified them.
   Event:   <event_id, first 8 chars>
 ```
 
-## 5. If the tool errors out
+## 6. If the tool errors out
 
 Call `memsy_health` to diagnose. **Be explicit** that the memory was **NOT saved**. Do not silently swallow the failure.
 
