@@ -27,8 +27,15 @@ npm run build
 echo "✓ Plugin built."
 
 # ── Install plugin ────────────────────────────────────────────────────────────
+# openclaw plugins install copies the JS to ~/.openclaw/extensions/ and
+# registers the entry in openclaw.json. It does NOT copy openclaw.plugin.json,
+# so we copy the manifest manually to the same directory.
+OPENCLAW_HOME="${OPENCLAW_HOME:-${HOME}/.openclaw}"
+EXTENSIONS_DIR="${OPENCLAW_HOME}/extensions"
+
 echo "Installing plugin..."
 openclaw plugins install --force "${SCRIPT_DIR}/dist/index.js"
+cp "${SCRIPT_DIR}/openclaw.plugin.json" "${EXTENSIONS_DIR}/openclaw.plugin.json"
 echo "✓ Plugin installed."
 
 # ── Install skills ────────────────────────────────────────────────────────────
