@@ -93,17 +93,15 @@ function OpenAIIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
-/** OpenClaw logomark — lobster silhouette with prominent claws sized for small icons. */
+/** OpenClaw official logomark — lobster body + claws, gradient replaced with currentColor.
+ *  viewBox cropped to the claw/body region (y 10–80) to maximise claw visibility at small sizes. */
 function OpenClawIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <svg viewBox="0 10 120 70" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
       <title>OpenClaw</title>
-      {/* Body — narrow vertical pill */}
-      <path d="M12 2.5C10 2.5 8.5 3.8 8.5 5.5v13c0 1.7 1.5 3 3.5 3s3.5-1.3 3.5-3v-13c0-1.7-1.5-3-3.5-3z"/>
-      {/* Left claw — filled crescent extending to ~x=1 */}
-      <path d="M8.5 10C6 9 1.5 9.5 1 12c-.5 2.5 3 4 7.5 3z"/>
-      {/* Right claw — mirror of left */}
-      <path d="M15.5 10C18 9 22.5 9.5 23 12c.5 2.5-3 4-7.5 3z"/>
+      <path d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z" />
+      <path d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z" />
+      <path d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z" />
     </svg>
   )
 }
