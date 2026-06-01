@@ -14,7 +14,7 @@ echo "Adding Memsy marketplace to Codex..."
 codex plugin marketplace add memsy-io/memsy
 
 echo "Installing Memsy plugin..."
-codex plugin add memsy@memsy-io/memsy
+codex plugin add memsy@memsy
 
 echo ""
 echo "Memsy for Codex installed."

@@ -29,7 +29,7 @@ Documentation = "https://memsy.io/docs/hermes"
 # Memory provider — discovered by Hermes at ~/.hermes/plugins/memory/memsy/
 # Install manually via ./install.sh, or via pip which triggers the entry-point.
 [project.entry-points."hermes_agent.memory_providers"]
-memsy = "memory_provider"
+memsy = "memory_provider:register"
 
 [tool.hatch.build.targets.wheel]
 packages = ["memory_provider"]

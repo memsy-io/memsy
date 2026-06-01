@@ -113,6 +113,7 @@ export default definePluginEntry({
           headers: authHeaders(apiKey),
         });
         const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy health check failed (${resp.status}): ${JSON.stringify(data)}`);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
           details: data,
@@ -143,6 +144,7 @@ export default definePluginEntry({
           body: JSON.stringify(body),
         });
         const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy search failed (${resp.status}): ${JSON.stringify(data)}`);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
           details: data,
@@ -167,6 +169,7 @@ export default definePluginEntry({
           body: JSON.stringify({ events: p.events }),
         });
         const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy ingest failed (${resp.status}): ${JSON.stringify(data)}`);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
           details: data,
@@ -195,6 +198,7 @@ export default definePluginEntry({
         const url = `${baseUrl}/console/memories${qs.size > 0 ? "?" + qs.toString() : ""}`;
         const resp = await fetch(url, { headers: authHeaders(apiKey) });
         const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy list memories failed (${resp.status}): ${JSON.stringify(data)}`);
         return {
           content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
           details: data,
