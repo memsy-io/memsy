@@ -3,38 +3,28 @@
  *
  * Self-registers at import time (imported by src/modules/index.ts for side effects).
  *
- * Registers a 'memsy_ingest_turn' delivery action so agents can emit completed
- * turns to Memsy's memory extraction pipeline. When MEMSY_TURN_SYNC=on, the
- * memsy-turn-sync container skill instructs the agent to emit this action after
- * each response; the host catches it here and calls the Memsy ingest API.
+ * When MEMSY_TURN_SYNC=on, wraps the delivery adapter so every outbound chat
+ * message is mirrored to Memsy AFTER it has been delivered to the channel.
+ * This never blocks WhatsApp/Telegram/etc delivery — the ingest is fire-and-forget.
  *
  * Activation: set MEMSY_TURN_SYNC=on + MEMSY_API_KEY in host .env
  */
 
-import { registerDeliveryAction } from '../../delivery.js';
+import {
+  onDeliveryAdapterReady,
+  type ChannelDeliveryAdapter,
+} from '../../delivery.js';
 
 const TRUTHY = new Set(['on', 'true', '1', 'yes', 'enabled']);
 const BASE_URL = process.env.MEMSY_BASE_URL ?? 'https://api.memsy.io/v1';
-
-interface IngestTurnPayload {
-  user_content?: string;
-  assistant_content: string;
-  session_id?: string;
-}
 
 function isTurnSyncEnabled(): boolean {
   return TRUTHY.has((process.env.MEMSY_TURN_SYNC ?? '').toLowerCase());
 }
 
-async function handleIngestTurn(payload: IngestTurnPayload): Promise<void> {
+async function ingestMessage(kind: 'user_message' | 'assistant_message', content: string): Promise<void> {
   const apiKey = process.env.MEMSY_API_KEY;
-  if (!apiKey || !payload.assistant_content || payload.assistant_content.length < 40) return;
-
-  const events: Array<{ kind: string; content: string }> = [];
-  if (payload.user_content?.trim()) {
-    events.push({ kind: 'user_message', content: payload.user_content.slice(0, 32000) });
-  }
-  events.push({ kind: 'assistant_message', content: payload.assistant_content.slice(0, 32000) });
+  if (!apiKey) return;
 
   try {
     await fetch(`${BASE_URL}/ingest`, {
@@ -43,13 +33,29 @@ async function handleIngestTurn(payload: IngestTurnPayload): Promise<void> {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify({
+        events: [{ kind, content: content.slice(0, 32000) }],
+      }),
     });
   } catch {
-    // Fire and forget — never block NanoClaw delivery
+    // Fire and forget — never surface ingest failures to delivery
   }
 }
 
 if (isTurnSyncEnabled()) {
-  registerDeliveryAction('memsy_ingest_turn', handleIngestTurn);
+  onDeliveryAdapterReady((adapter: ChannelDeliveryAdapter) => {
+    const originalDeliver = adapter.deliver.bind(adapter);
+
+    // Wrap deliver: send to channel first, then mirror to Memsy in background.
+    // The ingest never blocks delivery — if it fails, delivery already succeeded.
+    adapter.deliver = async (channelType, platformId, threadId, kind, content, files) => {
+      const result = await originalDeliver(channelType, platformId, threadId, kind, content, files);
+
+      if (kind === 'chat' && content && content.length >= 40) {
+        ingestMessage('assistant_message', content).catch(() => {});
+      }
+
+      return result;
+    };
+  });
 }
