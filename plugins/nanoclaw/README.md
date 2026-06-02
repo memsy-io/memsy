@@ -17,6 +17,7 @@ Long-term memory for [NanoClaw](https://github.com/nanocoai/nanoclaw) — recall
 - NanoClaw v2 (container-based, `ncl` CLI available)
 - Node.js 20+ on the host
 - Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
+- A stable actor identifier — set `MEMSY_ACTOR_ID` to any unique string (e.g. your username). NanoClaw containers don't have `/etc/passwd`, so the MCP server can't derive one automatically.
 
 ## Install
 
@@ -34,7 +35,7 @@ ncl groups config add-mcp-server \
   --name memsy \
   --command npx \
   --args '["-y","@memsy-io/mcp"]' \
-  --env '{"MEMSY_API_KEY":"msy_..."}'
+  --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"your-username"}'
 ```
 
 Restart and verify:

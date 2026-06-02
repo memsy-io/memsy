@@ -11,6 +11,10 @@ Add Memsy to your [NanoClaw](https://github.com/nanocoai/nanoclaw) instance to g
 - Node.js 20+ on the host
 - Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
 
+<Warning>
+  NanoClaw containers don't have `/etc/passwd`, so the Memsy MCP server cannot derive an actor ID automatically. You **must** set `MEMSY_ACTOR_ID` in the server env (see Step 3 below), or the server will crash silently on startup and no memory will be captured.
+</Warning>
+
 ## Install
 
 <Steps>
@@ -35,19 +39,23 @@ Add Memsy to your [NanoClaw](https://github.com/nanocoai/nanoclaw) instance to g
   </Step>
 
   <Step title="Register the MCP server for each agent group">
+    Use `ncl groups list` to get the group ID, then:
+
     ```bash
     ncl groups config add-mcp-server \
-      --group <group-name> \
+      --id <group-id> \
       --name memsy \
       --command npx \
       --args '["-y","@memsy-io/mcp"]' \
-      --env '{"MEMSY_API_KEY":"msy_..."}'
+      --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"your-username"}'
     ```
 
-    Repeat for every group you want Memsy enabled in. Restart the container to pick up the new MCP server:
+    `MEMSY_ACTOR_ID` is required — NanoClaw containers don't expose OS user info, so the server can't derive it automatically. Use any stable unique string (your name, username, etc.).
+
+    Restart the container to pick up the new MCP server:
 
     ```bash
-    ncl restart <group-name>
+    ncl groups restart --id <group-id>
     ```
   </Step>
 

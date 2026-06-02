@@ -23,22 +23,30 @@ If any check fails, fix it before continuing.
 
 ## Phase 2 — Add MCP server to each group
 
-For each agent group, register the Memsy MCP server:
+NanoClaw containers don't expose OS user info, so `MEMSY_ACTOR_ID` must be set explicitly or the server crashes silently. Ask the user first:
+
+```
+AskUserQuestion: "What short identifier should tag your memories? (e.g. 'alice', 'neelshah')"
+```
+
+List groups to get IDs: `ncl groups list`
+
+For each group, register the Memsy MCP server:
 
 ```bash
 ncl groups config add-mcp-server \
-  --group <group-name> \
+  --id <group-id> \
   --name memsy \
   --command npx \
   --args '["-y","@memsy-io/mcp"]' \
-  --env '{"MEMSY_API_KEY":"msy_..."}'
+  --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"<chosen-id>"}'
 ```
 
-Repeat for every group. If the user has many groups, ask which ones to add Memsy to.
+Repeat for every group. If the user has many, ask which ones to enable Memsy in.
 
 Verify registration:
 ```bash
-ncl groups config get --group <group-name>
+ncl groups config get --id <group-id>
 ```
 
 ## Phase 3 — Deploy container skills
