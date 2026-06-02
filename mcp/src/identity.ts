@@ -77,9 +77,16 @@ export function resolveActorId(opts: ResolveOptions): {
     };
   }
 
-  const u = userInfo({ encoding: "utf8" });
+  // userInfo() throws in containers where /etc/passwd is unavailable.
+  // Fall back to process.env.USER, then hostname alone.
+  let username: string;
+  try {
+    username = userInfo({ encoding: "utf8" }).username;
+  } catch {
+    username = process.env.USER ?? process.env.USERNAME ?? "agent";
+  }
   return {
-    actorId: hashId(opts.profileName, `${u.username}@${hostname()}`),
+    actorId: hashId(opts.profileName, `${username}@${hostname()}`),
     source: "derived-os",
   };
 }
