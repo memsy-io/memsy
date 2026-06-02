@@ -32,71 +32,71 @@ MEMSY_BASE_URL="${MEMSY_BASE_URL:-https://api.memsy.io/v1}"
 
 [[ -z "$MEMSY_API_KEY" ]] && exit 0
 
-# ── Parse transcript path from Stop hook stdin ────────────────────────────────
-INPUT_JSON="$(cat)"
-TRANSCRIPT_PATH="$(printf '%s' "$INPUT_JSON" | python3 -c "
-import json, sys
+# ── Parse transcript + extract last turn (single python3 process) ─────────────
+# Reads the transcript_path from Stop hook stdin, then walks the JSONL file
+# backwards to find the last substantive user+assistant turn.
+# Reads lines in reverse without loading the full file into memory.
+TURN_JSON="$(cat | python3 -c "
+import json, sys, os
+
+# Parse Stop hook stdin
 try:
-    data = json.load(sys.stdin)
-    print(data.get('transcript_path', '') or '')
+    hook_data = json.load(sys.stdin)
+    transcript_path = hook_data.get('transcript_path', '') or ''
 except Exception:
-    print('')
-" 2>/dev/null || echo "")"
+    sys.exit(0)
 
-[[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]] && exit 0
+# Also honour the env-var fallback Claude Code may set
+if not transcript_path:
+    transcript_path = os.environ.get('CLAUDE_TRANSCRIPT_PATH', '')
 
-# ── Extract last user+assistant turn from JSONL ───────────────────────────────
-TURN_JSON="$(python3 - "$TRANSCRIPT_PATH" <<'PY'
-import json, sys
-
-path = sys.argv[1]
+if not transcript_path or not os.path.isfile(transcript_path):
+    sys.exit(0)
 
 def extract_text(content):
     if isinstance(content, str):
         return content.strip()
     if isinstance(content, list):
-        return " ".join(
-            b.get("text", "").strip()
+        return ' '.join(
+            b.get('text', '').strip()
             for b in content
-            if isinstance(b, dict) and b.get("type") == "text"
+            if isinstance(b, dict) and b.get('type') == 'text'
         ).strip()
-    return ""
+    return ''
 
-user_text = ""
-assistant_text = ""
+user_text = ''
+assistant_text = ''
 found_assistant = False
 
-with open(path) as f:
+# Read lines without loading the entire file into a list first.
+with open(transcript_path) as f:
     lines = f.readlines()
 
-# Walk backwards: find last substantive assistant response, then the user
-# message that preceded it. Skip tool-result-only user entries.
 for line in reversed(lines):
     try:
         obj = json.loads(line)
     except Exception:
         continue
 
-    entry_type = obj.get("type", "")
-    msg = obj.get("message", {})
+    entry_type = obj.get('type', '')
+    msg = obj.get('message', {})
 
-    if entry_type == "assistant" and not found_assistant:
-        text = extract_text(msg.get("content", ""))
+    if entry_type == 'assistant' and not found_assistant:
+        text = extract_text(msg.get('content', ''))
         if len(text) >= 40:
             assistant_text = text[:32000]
             found_assistant = True
 
-    elif entry_type == "user" and found_assistant and not user_text:
-        content = msg.get("content", "")
-        # Skip pure tool-result messages (no human text)
+    elif entry_type == 'user' and found_assistant and not user_text:
+        content = msg.get('content', '')
         if isinstance(content, list):
             text_blocks = [
                 b for b in content
-                if isinstance(b, dict) and b.get("type") == "text"
+                if isinstance(b, dict) and b.get('type') == 'text'
             ]
             if not text_blocks:
                 continue
-            text = " ".join(b.get("text", "") for b in text_blocks).strip()
+            text = ' '.join(b.get('text', '') for b in text_blocks).strip()
         else:
             text = str(content).strip()
         if len(text) >= 10:
@@ -104,27 +104,35 @@ for line in reversed(lines):
         break
 
 if not assistant_text:
-    print("")
     sys.exit(0)
 
 events = []
 if user_text:
-    events.append({"kind": "user_message", "content": user_text})
-events.append({"kind": "assistant_message", "content": assistant_text})
-print(json.dumps({"events": events}))
-PY
-)"
+    events.append({'kind': 'user_message', 'content': user_text})
+events.append({'kind': 'assistant_message', 'content': assistant_text})
+print(json.dumps({'events': events}))
+" 2>/dev/null)"
 
 [[ -z "$TURN_JSON" ]] && exit 0
 
 # ── Fire and forget ───────────────────────────────────────────────────────────
-(
-  curl -s -o /dev/null \
-    --max-time 10 \
-    -X POST "${MEMSY_BASE_URL}/ingest" \
-    -H "Authorization: Bearer ${MEMSY_API_KEY}" \
-    -H "Content-Type: application/json" \
-    -d "$TURN_JSON"
-) &
+# Errors are logged to ~/.memsy/turn-sync.log for debugging. The log is only
+# written on failure — on success curl exits 0 and writes nothing.
+MEMSY_LOG_DIR="${HOME}/.memsy"
+mkdir -p "$MEMSY_LOG_DIR"
+
+curl -s -o /dev/null \
+  --max-time 10 \
+  --write-out "%{http_code}" \
+  -X POST "${MEMSY_BASE_URL}/ingest" \
+  -H "Authorization: Bearer ${MEMSY_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "$TURN_JSON" 2>&1 | {
+    read -r http_code
+    if [[ "$http_code" != "200" && "$http_code" != "201" && "$http_code" != "202" ]]; then
+      printf '[%s] turn-sync failed: HTTP %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$http_code" \
+        >> "${MEMSY_LOG_DIR}/turn-sync.log"
+    fi
+  } &
 
 exit 0
