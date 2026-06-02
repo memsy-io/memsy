@@ -15,7 +15,7 @@
 # Or manually:
 #   ncl groups config add-mcp-server --group <name> --name memsy \
 #     --command npx --args '["-y","@memsy-io/mcp"]' \
-#     --env "MEMSY_API_KEY=<your-key>"
+#     --env '{"MEMSY_API_KEY":"<your-key>"}'
 
 set -euo pipefail
 
@@ -113,13 +113,13 @@ echo "  1. Add your API key to .env:"
 echo "       MEMSY_API_KEY=msy_..."
 echo "       (Get one at https://app.memsy.io → Settings → API Keys)"
 echo ""
-echo "  2. Register the MCP server for each agent group:"
+echo "  2. Register the MCP server for each agent group (use --id from: ncl groups list):"
 echo "       ncl groups config add-mcp-server \\"
-echo "         --group <group-name> \\"
+echo "         --id <group-id> \\"
 echo "         --name memsy \\"
 echo "         --command npx \\"
-echo "         --args \"-y,@memsy-io/mcp\" \\"
-echo "         --env \"MEMSY_API_KEY=\${MEMSY_API_KEY}\""
+echo "         --args '[\"-y\",\"@memsy-io/mcp\"]' \\"
+echo "         --env '{\"MEMSY_API_KEY\":\"'\${MEMSY_API_KEY}'\"}'"
 echo ""
 echo "  3. Restart NanoClaw and test:"
 echo "       \"Remember that we use Postgres for billing\""

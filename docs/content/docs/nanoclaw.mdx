@@ -41,7 +41,7 @@ Add Memsy to your [NanoClaw](https://github.com/nanocoai/nanoclaw) instance to g
       --name memsy \
       --command npx \
       --args '["-y","@memsy-io/mcp"]' \
-      --env "MEMSY_API_KEY=${MEMSY_API_KEY}"
+      --env '{"MEMSY_API_KEY":"msy_..."}'
     ```
 
     Repeat for every group you want Memsy enabled in. Restart the container to pick up the new MCP server:

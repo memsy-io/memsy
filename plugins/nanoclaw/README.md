@@ -34,7 +34,7 @@ ncl groups config add-mcp-server \
   --name memsy \
   --command npx \
   --args '["-y","@memsy-io/mcp"]' \
-  --env "MEMSY_API_KEY=${MEMSY_API_KEY}"
+  --env '{"MEMSY_API_KEY":"msy_..."}'
 ```
 
 Restart and verify:
