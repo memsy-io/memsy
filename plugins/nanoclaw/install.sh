@@ -14,7 +14,7 @@
 #
 # Or manually:
 #   ncl groups config add-mcp-server --group <name> --name memsy \
-#     --command npx --args "-y,@memsy-io/mcp" \
+#     --command npx --args '["-y","@memsy-io/mcp"]' \
 #     --env "MEMSY_API_KEY=<your-key>"
 
 set -euo pipefail

@@ -33,7 +33,7 @@ ncl groups config add-mcp-server \
   --group <group-name> \
   --name memsy \
   --command npx \
-  --args "-y,@memsy-io/mcp" \
+  --args '["-y","@memsy-io/mcp"]' \
   --env "MEMSY_API_KEY=${MEMSY_API_KEY}"
 ```
 
