@@ -3,31 +3,37 @@
  *
  * Self-registers at import time (imported by src/modules/index.ts for side effects).
  *
- * When MEMSY_TURN_SYNC=on, wraps the delivery adapter so every outbound chat
- * message is mirrored to Memsy AFTER it has been delivered to the channel.
+ * When MEMSY_TURN_SYNC=on in .env, wraps the delivery adapter so every outbound
+ * chat message is mirrored to Memsy AFTER it has been delivered to the channel.
  * This never blocks WhatsApp/Telegram/etc delivery — the ingest is fire-and-forget.
  *
- * Activation: set MEMSY_TURN_SYNC=on + MEMSY_API_KEY in host .env
+ * IMPORTANT: uses readEnvFile() — NanoClaw does NOT load .env into process.env.
+ * Using process.env here would always return undefined and silently disable sync.
  */
 
 import {
   onDeliveryAdapterReady,
   type ChannelDeliveryAdapter,
 } from '../../delivery.js';
+import { readEnvFile } from '../../env.js';
 
 const TRUTHY = new Set(['on', 'true', '1', 'yes', 'enabled']);
-const BASE_URL = process.env.MEMSY_BASE_URL ?? 'https://api.memsy.io/v1';
 
-function isTurnSyncEnabled(): boolean {
-  return TRUTHY.has((process.env.MEMSY_TURN_SYNC ?? '').toLowerCase());
+function getEnv() {
+  const env = readEnvFile(['MEMSY_TURN_SYNC', 'MEMSY_API_KEY', 'MEMSY_BASE_URL']);
+  return {
+    turnSync: TRUTHY.has((env.MEMSY_TURN_SYNC ?? '').toLowerCase()),
+    apiKey: env.MEMSY_API_KEY ?? '',
+    baseUrl: env.MEMSY_BASE_URL ?? 'https://api.memsy.io/v1',
+  };
 }
 
 async function ingestMessage(kind: 'user_message' | 'assistant_message', content: string): Promise<void> {
-  const apiKey = process.env.MEMSY_API_KEY;
+  const { apiKey, baseUrl } = getEnv();
   if (!apiKey) return;
 
   try {
-    await fetch(`${BASE_URL}/ingest`, {
+    await fetch(`${baseUrl}/ingest`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -42,7 +48,7 @@ async function ingestMessage(kind: 'user_message' | 'assistant_message', content
   }
 }
 
-if (isTurnSyncEnabled()) {
+if (getEnv().turnSync) {
   onDeliveryAdapterReady((adapter: ChannelDeliveryAdapter) => {
     const originalDeliver = adapter.deliver.bind(adapter);
 
