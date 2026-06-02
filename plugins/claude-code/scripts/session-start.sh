@@ -40,6 +40,9 @@ fi
 if is_truthy "${MEMSY_PROACTIVE:-}"; then
   modes="${modes} proactive"
 fi
+if is_truthy "${MEMSY_TURN_SYNC:-}"; then
+  modes="${modes} turn-sync"
+fi
 if [[ -n "$modes" ]]; then
   printf '[memsy modes:%s]\n\n' "$modes"
 fi
