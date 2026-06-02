@@ -106,6 +106,19 @@ function OpenClawIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+/** NanoClaw — three curved claw marks, readable at 14px. */
+function NanoClawIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <title>NanoClaw</title>
+      <path d="M7 3 C5 7 6 12 10 14" />
+      <path d="M12 2 C11 6 12 11 14 14" />
+      <path d="M17 3 C19 7 18 12 15 14" />
+      <path d="M8 14 C9 18 11 20 12 21 C13 20 15 18 16 14" />
+    </svg>
+  )
+}
+
 /** Hermes Agent official logomark by NousResearch. */
 function NousResearchIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -152,6 +165,7 @@ const PAGE_ICONS: Record<string, IconComponent> = {
   codex: OpenAIIcon,
   openclaw: OpenClawIcon,
   hermes: NousResearchIcon,
+  nanoclaw: NanoClawIcon,
 
   // API Reference
   'memsy-client': Code,

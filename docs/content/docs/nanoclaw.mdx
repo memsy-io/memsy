@@ -1,0 +1,138 @@
+---
+title: NanoClaw
+description: Long-term memory for NanoClaw — recall past decisions and store context across every connected channel (WhatsApp, Telegram, Discord, Slack, Signal, and more).
+---
+
+Add Memsy to your [NanoClaw](https://github.com/nanocoai/nanoclaw) instance to give every agent group persistent memory across all connected channels. Store a decision from WhatsApp, recall it from Telegram — memory is channel-agnostic.
+
+## Requirements
+
+- NanoClaw v2 (container-based, `ncl` CLI available)
+- Node.js 20+ on the host
+- Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
+
+## Install
+
+<Steps>
+  <Step title="Clone and run the installer">
+    ```bash
+    git clone https://github.com/memsy-io/memsy
+    cd memsy/plugins/nanoclaw
+    ./install.sh /path/to/your-nanoclaw-fork
+    ```
+
+    The installer copies container skills and the setup guide into your NanoClaw fork.
+  </Step>
+
+  <Step title="Add your API key">
+    Add to your NanoClaw `.env`:
+
+    ```bash
+    MEMSY_API_KEY=msy_...
+    ```
+
+    Get your key at [app.memsy.io](https://app.memsy.io) → Settings → API Keys.
+  </Step>
+
+  <Step title="Register the MCP server for each agent group">
+    ```bash
+    ncl groups config add-mcp-server \
+      --group <group-name> \
+      --name memsy \
+      --command npx \
+      --args "-y,@memsy-io/mcp" \
+      --env "MEMSY_API_KEY=${MEMSY_API_KEY}"
+    ```
+
+    Repeat for every group you want Memsy enabled in. Restart the container to pick up the new MCP server:
+
+    ```bash
+    ncl restart <group-name>
+    ```
+  </Step>
+
+  <Step title="Verify">
+    In any connected channel, send:
+
+    > *"Remember that we use Postgres for billing"*
+
+    Then:
+
+    > *"What did we decide about billing?"*
+
+    The agent should call `memsy_search` and surface the stored memory.
+  </Step>
+</Steps>
+
+## Turn sync (auto-capture every turn)
+
+Enable `MEMSY_TURN_SYNC=on` to have every conversation turn automatically ingested — no "remember that" needed:
+
+1. Answer `y` when `./install.sh` asks about turn sync (or re-run it)
+2. Set `MEMSY_TURN_SYNC=on` in `.env`
+3. Rebuild and restart:
+   ```bash
+   pnpm build
+   ncl restart <group-name>
+   ```
+
+When active, agents emit a `memsy_ingest_turn` delivery action after each response. The host module catches it and forwards the turn to Memsy's extraction pipeline, which decides what's memory-worthy.
+
+## Skills
+
+Two skills install to `container/skills/` and are automatically available to every agent group:
+
+| Skill | Trigger phrases |
+|---|---|
+| `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" |
+| `memsy-remember` | "remember that", "save this decision", "note that", "for future reference" |
+
+Skills work across all connected channels — store from one, recall from any other.
+
+## Multi-org
+
+If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org)), then ask the agent:
+
+- *"What orgs do I have?"* → calls `memsy_list_orgs`
+- *"Switch to my work org"* → calls `memsy_use_org`
+
+## Capabilities
+
+| Capability | Supported |
+|---|---|
+| Recall (memsy_search) | ✓ |
+| Store (memsy_ingest) | ✓ |
+| Turn sync (auto-capture) | ✓ (opt-in via MEMSY_TURN_SYNC=on) |
+| Multi-channel memory | ✓ |
+| Multi-org / profiles | ✓ |
+| Skills (SKILL.md) | ✓ |
+
+## Troubleshooting
+
+### MCP tools not available
+
+Verify the MCP server is registered:
+
+```bash
+ncl groups config get --group <name>
+```
+
+If missing, re-run the `add-mcp-server` command and restart the container.
+
+### Recall returns nothing
+
+Check the active org — the memory may be in a different profile:
+
+```
+What Memsy orgs do I have?
+```
+
+### Turn sync not working
+
+Check that `MEMSY_TURN_SYNC=on` is in `.env`, that `pnpm build` ran after adding the module, and that `import './memsy/index.js';` exists in `src/modules/index.ts`.
+
+## See also
+
+- [MCP Server](/docs/mcp) — the universal layer all integrations share
+- [Actors and Sessions](/docs/actors-and-sessions) — identity and `actor_id`
+- [Plugin source](https://github.com/memsy-io/memsy/tree/main/plugins/nanoclaw) on GitHub
