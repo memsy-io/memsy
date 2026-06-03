@@ -73,7 +73,7 @@ print("1" if (env_set or defaults_set(gpath, active) or defaults_set(ppath, acti
 PY
 )" || configured=0
 
-  [[ "${configured:-0}" == "1" ]] && return 0
+  [[ "$configured" == "1" ]] && return 0
 
   mkdir -p "${HOME}/.memsy"
   : > "$marker"

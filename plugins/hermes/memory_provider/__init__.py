@@ -518,15 +518,16 @@ class MemsyMemoryProvider(MemoryProvider):
         )
 
         gslc, pslc = _slice(gcfg), _slice(pcfg)
-        self._default_role_ids = (
-            _list(pslc, "default_role_ids", "defaultRoleIds")
-            or _list(gslc, "default_role_ids", "defaultRoleIds")
-            or _env_list("MEMSY_DEFAULT_ROLE_IDS")
+
+        # Precedence for list defaults: project profile → global profile → env var.
+        def _resolve(snake: str, camel: str, env: str) -> list[str]:
+            return _list(pslc, snake, camel) or _list(gslc, snake, camel) or _env_list(env)
+
+        self._default_role_ids = _resolve(
+            "default_role_ids", "defaultRoleIds", "MEMSY_DEFAULT_ROLE_IDS"
         )
-        self._default_team_ids = (
-            _list(pslc, "default_team_ids", "defaultTeamIds")
-            or _list(gslc, "default_team_ids", "defaultTeamIds")
-            or _env_list("MEMSY_DEFAULT_TEAM_IDS")
+        self._default_team_ids = _resolve(
+            "default_team_ids", "defaultTeamIds", "MEMSY_DEFAULT_TEAM_IDS"
         )
         self._config_actor_id = (
             pslc.get("actor_id")
@@ -626,9 +627,13 @@ class MemsyMemoryProvider(MemoryProvider):
         if not isinstance(cfg.get("active_profile"), str) or not cfg.get("active_profile"):
             cfg["active_profile"] = self._profile_name
 
+        # Atomic write: serialize to a temp file then rename, so a crash
+        # mid-write can't corrupt the config (it holds API keys). Enforce 0600.
         os.makedirs(config_dir, exist_ok=True)
-        Path(path).write_text(json.dumps(cfg, indent=2))
-        os.chmod(path, 0o600)
+        tmp = f"{path}.tmp"
+        Path(tmp).write_text(json.dumps(cfg, indent=2))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
 
         # Refresh in-memory defaults so subsequent search/ingest use them.
         self._read_shared_defaults()

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { join } from "node:path";
 
@@ -91,19 +91,20 @@ function sharedDefaults(): SharedDefaults {
   const p = profileSlice(project, profileName);
   const pick = <T>(...vals: T[]): T | undefined => vals.find((v) => v !== undefined);
 
-  const roles =
-    parseStringList(p.default_role_ids ?? p.defaultRoleIds);
-  const gRoles = parseStringList(g.default_role_ids ?? g.defaultRoleIds);
-  const teams = parseStringList(p.default_team_ids ?? p.defaultTeamIds);
-  const gTeams = parseStringList(g.default_team_ids ?? g.defaultTeamIds);
-  const envRoles = parseStringList((process.env.MEMSY_DEFAULT_ROLE_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
-  const envTeams = parseStringList((process.env.MEMSY_DEFAULT_TEAM_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  // Precedence for list defaults: project profile → global profile → env var.
+  const envList = (name: string): string[] =>
+    parseStringList((process.env[name] ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  const resolveList = (snake: string, camel: string, env: string): string[] => {
+    const proj = parseStringList(p[snake] ?? p[camel]);
+    const glob = parseStringList(g[snake] ?? g[camel]);
+    return proj.length ? proj : glob.length ? glob : envList(env);
+  };
 
   _sharedDefaults = {
     profileName,
     actorId: pick(p.actor_id, p.actorId, g.actor_id, g.actorId) as string | undefined,
-    roleIds: roles.length ? roles : gRoles.length ? gRoles : envRoles,
-    teamIds: teams.length ? teams : gTeams.length ? gTeams : envTeams,
+    roleIds: resolveList("default_role_ids", "defaultRoleIds", "MEMSY_DEFAULT_ROLE_IDS"),
+    teamIds: resolveList("default_team_ids", "defaultTeamIds", "MEMSY_DEFAULT_TEAM_IDS"),
   };
   return _sharedDefaults;
 }
@@ -218,9 +219,12 @@ function persistDefaults(update: { roleIds?: string[]; teamIds?: string[]; actor
   }
 
   mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-  // mode on writeFileSync only applies when CREATING — this file usually
-  // pre-exists (it holds API keys), so enforce 0600 explicitly.
+  // Atomic write: serialize to a temp file then rename, so a crash mid-write
+  // can't corrupt the config (it holds API keys). writeFileSync's mode only
+  // applies on create and the file usually pre-exists, so chmod explicitly.
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  renameSync(tmp, path);
   chmodSync(path, 0o600);
   // Invalidate caches so subsequent search/ingest pick up the new defaults.
   _sharedDefaults = undefined;
