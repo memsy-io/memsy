@@ -1,37 +1,69 @@
 ---
 name: add-memsy
-description: Install Memsy long-term memory into a NanoClaw instance. Run when the user wants to add persistent memory, recall past decisions across channels, or enable turn-by-turn memory sync. Guides through MCP server registration, container skill deployment, and optional turn sync setup.
+description: Install Memsy long-term memory into a NanoClaw instance. Run when the user wants persistent memory, automatic conversation capture, or cross-channel recall. Sets up the MCP server, the recall skill, and the host-side turn-sync hooks.
 ---
 
-Install Memsy into NanoClaw. Work through these phases:
+Install Memsy into NanoClaw using the **turn-sync** model: every user and assistant message is captured automatically by host-side hooks, and the agent uses `memsy_search` for recall. Work through these phases.
 
 ## Phase 1 — Pre-flight
 
-Check prerequisites:
-
-1. Verify `ncl` CLI is available: `ncl --version`
-2. Check `MEMSY_API_KEY` is set: `echo ${MEMSY_API_KEY:-NOT SET}`
-3. If not set, ask the user:
+1. `ncl --version` — confirm the CLI is available.
+2. `ncl groups list` — confirm at least one agent group; note the `--id` values.
+3. Ask the user for two values:
 
 ```
-AskUserQuestion: "What is your Memsy API key? Get one at https://app.memsy.io → Settings → API Keys"
+AskUserQuestion: "Your Memsy API key? (app.memsy.io → Settings → API Keys)"
+AskUserQuestion: "A short identifier to tag your memories? (e.g. 'alice') — used as MEMSY_ACTOR_ID. Required: NanoClaw containers can't derive an identity."
 ```
 
-4. Confirm at least one agent group exists: `ncl groups list`
+## Phase 2 — .env
 
-If any check fails, fix it before continuing.
-
-## Phase 2 — Add MCP server to each group
-
-NanoClaw containers don't expose OS user info, so `MEMSY_ACTOR_ID` must be set explicitly or the server crashes silently. Ask the user first:
+Add to the fork's `.env`:
 
 ```
-AskUserQuestion: "What short identifier should tag your memories? (e.g. 'alice', 'neelshah')"
+MEMSY_API_KEY=msy_...
+MEMSY_ACTOR_ID=<chosen-id>
+MEMSY_TURN_SYNC=on
 ```
 
-List groups to get IDs: `ncl groups list`
+NanoClaw does NOT load `.env` into `process.env` — the helper reads it via `readEnvFile()`, so these only need to be in `.env`, not exported.
 
-For each group, register the Memsy MCP server:
+## Phase 3 — Shared helper + recall skill
+
+```bash
+cp <memsy-plugin-dir>/src/memsy-sync.ts src/memsy-sync.ts
+cp -r <memsy-plugin-dir>/container/skills/memsy-recall container/skills/
+```
+
+Do NOT install a `memsy-remember` skill — under turn sync it would make the agent call `memsy_ingest`, duplicating memories and sometimes swallowing replies.
+
+## Phase 4 — Host hooks (the core of turn sync)
+
+Add two fire-and-forget calls. Read each file, find the anchor, insert the hook.
+
+**`src/router.ts`** — import at top, then after the `'Message routed'` log inside the routing function:
+
+```typescript
+import { memsyIngest } from './memsy-sync.js';
+// ...after writeSessionMessage(...) and the 'Message routed' log:
+if (event.message.kind === 'chat' || event.message.kind === 'chat-sdk') {
+  memsyIngest('user_message', event.message.content, session.id).catch(() => {});
+}
+```
+
+**`src/delivery.ts`** — import at top, then after the `'Message delivered'` log inside `deliverMessage`:
+
+```typescript
+import { memsyIngest } from './memsy-sync.js';
+// ...after the 'Message delivered' log:
+if (msg.kind === 'chat') {
+  memsyIngest('assistant_message', msg.content, session.id).catch(() => {});
+}
+```
+
+## Phase 5 — MCP server per group
+
+Register for each group the user wants (use `--id` from Phase 1). `MEMSY_DISABLED_TOOLS=memsy_ingest` is what stops the agent double-writing:
 
 ```bash
 ncl groups config add-mcp-server \
@@ -39,80 +71,32 @@ ncl groups config add-mcp-server \
   --name memsy \
   --command npx \
   --args '["-y","@memsy-io/mcp"]' \
-  --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"<chosen-id>"}'
+  --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"<chosen-id>","MEMSY_DISABLED_TOOLS":"memsy_ingest"}'
 ```
 
-Repeat for every group. If the user has many, ask which ones to enable Memsy in.
+Verify: `ncl groups config get --id <group-id>`.
 
-Verify registration:
-```bash
-ncl groups config get --id <group-id>
-```
+Also add a belt-and-braces line to each group's `groups/<folder>/CLAUDE.local.md`:
 
-## Phase 3 — Deploy container skills
+> Memory capture is automatic. Never call memsy_ingest. Use memsy_search only when the user asks to recall.
 
-Copy the Memsy container skills into the NanoClaw repo's `container/skills/` directory and restart:
+## Phase 6 — Build, restart, verify
 
 ```bash
-cp -r <memsy-plugin-dir>/container/skills/memsy-recall  container/skills/
-cp -r <memsy-plugin-dir>/container/skills/memsy-remember container/skills/
+pnpm build
+# restart the NanoClaw host process
 ```
 
-The skills will be synced to running containers on next restart or `ncl restart`.
-
-## Phase 4 — Optional: turn sync
-
-Ask the user:
+Send a message in a connected channel, then ask *"what do you know about me?"*. The agent calls `memsy_search`; the logs show:
 
 ```
-AskUserQuestion: "Enable automatic turn sync? When on, Memsy captures every conversation turn so nothing is missed. Set MEMSY_TURN_SYNC=on in your .env"
+Memsy turn synced kind=user_message status=200
+Memsy turn synced kind=assistant_message status=200
 ```
-
-If yes:
-
-1. Add to `.env`:
-   ```
-   MEMSY_TURN_SYNC=on
-   ```
-
-2. Add the turn-sync container skill:
-   ```bash
-   cp -r <memsy-plugin-dir>/container/skills/memsy-turn-sync container/skills/
-   ```
-
-3. Add the host module to `src/modules/index.ts`:
-   ```typescript
-   import './memsy/index.js';
-   ```
-
-4. Copy the module:
-   ```bash
-   cp -r <memsy-plugin-dir>/src/modules/memsy src/modules/
-   ```
-
-5. Rebuild:
-   ```bash
-   pnpm build
-   ```
-
-## Phase 5 — Verify
-
-Restart NanoClaw and send a test message in any connected channel:
-
-> *"Remember that we use Postgres for billing"*
-
-Then in another message:
-
-> *"What did we decide about billing?"*
-
-The agent should call `memsy_search` and surface the stored memory.
-
-If `memsy_search` is unavailable, run `ncl groups config get` to confirm the MCP server is registered and `MEMSY_API_KEY` is set.
 
 ## Troubleshooting
 
-**MCP tools not available after config**: Restart the agent container — `ncl restart <group>`.
-
-**`memsy_search` returns no results**: Check the active org with `memsy_list_orgs`. Memories may be in a different profile.
-
-**Turn sync not ingesting**: Check `~/.memsy/turn-sync.log` (if it exists) for API errors. Verify `MEMSY_TURN_SYNC=on` in `.env` and that the host was rebuilt after adding the module.
+- **Ingest 422** → event missing `actor_id`/`session_id` (the helper sets both; check it copied correctly).
+- **Nothing synced** → `MEMSY_TURN_SYNC`/key/actor not in `.env`, or host not rebuilt/restarted. Config is read via `readEnvFile`, never `process.env`.
+- **Duplicates / no reply** → agent still has `memsy_ingest`; ensure `MEMSY_DISABLED_TOOLS=memsy_ingest` and no `memsy-remember` skill.
+- **MCP tools missing** → `ncl groups config get --id <id>`; restart container `ncl groups restart --id <id>`.

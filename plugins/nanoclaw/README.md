@@ -1,23 +1,28 @@
 # Memsy for NanoClaw
 
-Long-term memory for [NanoClaw](https://github.com/nanocoai/nanoclaw) — recall past decisions and store context across every connected channel (WhatsApp, Telegram, Discord, Slack, Signal, and more). Memories from one channel are immediately searchable from any other.
+Long-term memory for [NanoClaw](https://github.com/nanocoai/nanoclaw) — automatic capture of every conversation turn, plus on-demand recall, across every connected channel (WhatsApp, Telegram, Discord, Slack, Signal, …). Memory stored from one channel is searchable from any other.
 
-## What you get
+## How it works (turn sync)
 
-| Feature | How |
-|---|---|
-| **Recall** | Ask "what did we decide about X?" — agent calls `memsy_search` via MCP |
-| **Store** | Say "remember that…" — agent calls `memsy_ingest` via MCP |
-| **Turn sync** | `MEMSY_TURN_SYNC=on` — every turn auto-ingested via host delivery action |
-| **Multi-channel** | One memory store, all channels — store in WhatsApp, recall in Telegram |
-| **Multi-org** | `memsy_list_orgs` / `memsy_use_org` to switch profiles |
+Capture is **automatic and host-side** — the agent never has to decide what to remember:
+
+```
+inbound user message  → src/router.ts hook   → memsyIngest('user_message')   ┐
+                                                                              ├─→ POST /ingest → Memsy
+outbound agent reply  → src/delivery.ts hook → memsyIngest('assistant_message')┘
+                         (both via src/memsy-sync.ts, fire-and-forget)
+```
+
+Each event carries `actor_id` (from `MEMSY_ACTOR_ID`) and `session_id` (the NanoClaw session) — both **required** by `/ingest`. Memsy's extraction pipeline decides what's memory-worthy.
+
+The agent keeps `memsy_search` for recall but **must not** call `memsy_ingest` (turn sync already captures everything; a duplicate write can also swallow the reply). We enforce that with `MEMSY_DISABLED_TOOLS=memsy_ingest`.
 
 ## Requirements
 
-- NanoClaw v2 (container-based, `ncl` CLI available)
+- NanoClaw v2 (container-based, `ncl` CLI)
 - Node.js 20+ on the host
 - Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
-- A stable actor identifier — set `MEMSY_ACTOR_ID` to any unique string (e.g. your username). NanoClaw containers don't have `/etc/passwd`, so the MCP server can't derive one automatically.
+- `MEMSY_ACTOR_ID` — any stable string (e.g. your username). Containers have no `/etc/passwd`, so the server can't derive an identity.
 
 ## Install
 
@@ -27,71 +32,63 @@ cd memsy/plugins/nanoclaw
 ./install.sh /path/to/your-nanoclaw-fork
 ```
 
-Then register the MCP server for each agent group:
+The installer copies `src/memsy-sync.ts`, the `memsy-recall` skill, and the `add-memsy` guide, then prints the two hooks to add to `src/router.ts` and `src/delivery.ts` (or run `/add-memsy` in Claude Code to apply them for you).
+
+Then in `.env`:
+
+```bash
+MEMSY_API_KEY=msy_...
+MEMSY_ACTOR_ID=your-username
+MEMSY_TURN_SYNC=on
+```
+
+Register the MCP server per group (`--id` from `ncl groups list`):
 
 ```bash
 ncl groups config add-mcp-server \
-  --group <group-name> \
+  --id <group-id> \
   --name memsy \
   --command npx \
   --args '["-y","@memsy-io/mcp"]' \
-  --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"your-username"}'
+  --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"your-username","MEMSY_DISABLED_TOOLS":"memsy_ingest"}'
 ```
 
-Restart and verify:
+Build + restart the host (`pnpm build`, then restart your NanoClaw process).
+
+## Verify
+
+Send any message in a connected channel, then ask *"what do you know about me?"*. Logs should show:
 
 ```
-Remember that we use Postgres for billing
-What did we decide about billing?
+Memsy turn synced kind=user_message status=200
+Memsy turn synced kind=assistant_message status=200
 ```
 
 ## What gets installed
 
 | Path (in your NanoClaw fork) | Purpose |
 |---|---|
-| `container/skills/memsy-recall/` | Recall skill — synced to every agent container |
-| `container/skills/memsy-remember/` | Store skill — synced to every agent container |
-| `.claude/skills/add-memsy/` | `/add-memsy` operational skill for guided setup |
-| `container/skills/memsy-turn-sync/` | Turn sync skill (optional, requires `MEMSY_TURN_SYNC=on`) |
-| `src/modules/memsy/index.ts` | Host delivery action for turn sync (optional) |
+| `src/memsy-sync.ts` | Shared ingest helper (reads `.env` via `readEnvFile`, sends `actor_id`+`session_id`) |
+| `container/skills/memsy-recall/` | Recall skill — fires on "what do you know about me", "what did we decide" |
+| `.claude/skills/add-memsy/` | `/add-memsy` guided-setup skill for Claude Code |
+| `src/router.ts` (patched) | User-message capture hook |
+| `src/delivery.ts` (patched) | Assistant-message capture hook |
 
-## Turn sync
+## Gotchas (learned the hard way)
 
-For fully automatic memory capture (no "remember that" needed), enable turn sync:
-
-1. Set `MEMSY_TURN_SYNC=on` in `.env`
-2. Re-run `./install.sh` and answer `y` to the turn sync prompt (or manually copy `src/modules/memsy/` and add the import to `src/modules/index.ts`)
-3. `pnpm build && restart NanoClaw`
-
-When active, agents emit a `memsy_ingest_turn` delivery action after each response. The host module catches it and forwards the turn to Memsy's ingest API. Memsy's async extraction pipeline decides what's memory-worthy — no filtering needed in NanoClaw.
-
-## Architecture
-
-```
-NanoClaw container (Bun)
-  └── Claude Agent SDK
-        ├── @memsy-io/mcp (registered via ncl groups config)
-        │     ├── memsy_search
-        │     ├── memsy_ingest
-        │     ├── memsy_health
-        │     └── memsy_list_orgs / memsy_use_org
-        └── Container skills
-              ├── memsy-recall     ← fires on "what did we decide..."
-              ├── memsy-remember   ← fires on "remember that..."
-              └── memsy-turn-sync  ← emits memsy_ingest_turn after each response
-
-NanoClaw host (Node)
-  └── Delivery module (src/modules/memsy/index.ts)
-        └── registerDeliveryAction('memsy_ingest_turn')
-              └── POST /ingest → api.memsy.io/v1
-```
+- **NanoClaw does NOT load `.env` into `process.env`.** Read config via `readEnvFile()` — `process.env.MEMSY_*` is always `undefined`. The shipped helper already does this.
+- **`/ingest` requires `actor_id` AND `session_id`** on every event, or it returns 422. The MCP server fills these from its identity layer; direct HTTP callers (the hooks) must supply them.
+- **Don't install a `memsy-remember` skill** alongside turn sync — it makes the agent call `memsy_ingest`, duplicating memories and sometimes eating the reply.
+- **WhatsApp re-asks for QR on restart?** That's a NanoClaw core bug — its WhatsApp adapter clears auth on any shutdown, not just real logouts. Patch `src/channels/whatsapp.ts` to clear auth only when `reason === DisconnectReason.loggedOut`.
 
 ## Troubleshooting
 
-**MCP tools not available**: Run `ncl groups config get --group <name>` to verify the MCP server is registered. Restart the container: `ncl restart <group>`.
+**MCP tools not available** — `ncl groups config get --id <id>` to confirm registration; `ncl groups restart --id <id>`.
 
-**Recall returns nothing**: Check the active org — `memsy_list_orgs`. Memories may be in a different profile.
+**Ingest 422** — missing `actor_id`/`session_id` on the event (see gotchas).
 
-**Turn sync not working**: Check `.env` for `MEMSY_TURN_SYNC=on`, verify `pnpm build` ran after adding the module, and confirm the import exists in `src/modules/index.ts`.
+**Duplicate memories / agent stops replying** — agent is calling `memsy_ingest`. Set `MEMSY_DISABLED_TOOLS=memsy_ingest`, remove any `memsy-remember` skill, restart.
+
+**Turn sync silent** — confirm `MEMSY_TURN_SYNC=on` + key + actor id in `.env`, rebuild, restart; check logs for `Memsy turn synced`.
 
 Full docs: [memsy.io/docs/nanoclaw](https://memsy.io/docs/nanoclaw)

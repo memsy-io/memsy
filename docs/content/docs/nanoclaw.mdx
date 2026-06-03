@@ -47,10 +47,13 @@ Add Memsy to your [NanoClaw](https://github.com/nanocoai/nanoclaw) instance to g
       --name memsy \
       --command npx \
       --args '["-y","@memsy-io/mcp"]' \
-      --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"your-username"}'
+      --env '{"MEMSY_API_KEY":"msy_...","MEMSY_ACTOR_ID":"your-username","MEMSY_DISABLED_TOOLS":"memsy_ingest"}'
     ```
 
-    `MEMSY_ACTOR_ID` is required — NanoClaw containers don't expose OS user info, so the server can't derive it automatically. Use any stable unique string (your name, username, etc.).
+    Three env values matter:
+    - `MEMSY_API_KEY` — your key.
+    - `MEMSY_ACTOR_ID` — **required**. NanoClaw containers don't expose OS user info, so the server can't derive an identity. Use any stable string (your name/username).
+    - `MEMSY_DISABLED_TOOLS=memsy_ingest` — **recommended with turn sync** (below). Turn sync captures every message automatically, so the agent should not call `memsy_ingest` itself — doing so creates duplicate memories and can swallow its own reply.
 
     Restart the container to pick up the new MCP server:
 
@@ -60,42 +63,53 @@ Add Memsy to your [NanoClaw](https://github.com/nanocoai/nanoclaw) instance to g
   </Step>
 
   <Step title="Verify">
-    In any connected channel, send:
+    In any connected channel, send a message, then ask:
 
-    > *"Remember that we use Postgres for billing"*
+    > *"What do you know about me?"*
 
-    Then:
-
-    > *"What did we decide about billing?"*
-
-    The agent should call `memsy_search` and surface the stored memory.
+    The agent calls `memsy_search` and surfaces what's been captured. (With turn sync on, your messages are already being saved — you don't need to say "remember that".)
   </Step>
 </Steps>
 
 ## Turn sync (auto-capture every turn)
 
-Enable `MEMSY_TURN_SYNC=on` to have every conversation turn automatically ingested — no "remember that" needed:
+Turn sync captures every message — both the user's and the agent's — with no "remember that" needed. It runs entirely on the **host**, not the agent.
 
-1. Answer `y` when `./install.sh` asks about turn sync (or re-run it)
-2. Set `MEMSY_TURN_SYNC=on` in `.env`
-3. Rebuild and restart:
+Two host-level hooks do the work:
+- the inbound router captures each **user** message
+- the outbound delivery loop captures each **assistant** message
+
+Both fire-and-forget *after* the message is processed, so they never block or duplicate the agent's reply. Each event is tagged with `actor_id` (from `MEMSY_ACTOR_ID`) and `session_id` (the NanoClaw session), then handed to Memsy's extraction pipeline, which decides what's memory-worthy.
+
+### Enable it
+
+The installer copies `src/memsy-sync.ts` and patches `src/router.ts` + `src/delivery.ts` with the two hooks. Then:
+
+1. Set in `.env`:
+   ```bash
+   MEMSY_TURN_SYNC=on
+   MEMSY_API_KEY=msy_...
+   MEMSY_ACTOR_ID=your-username
+   ```
+2. Rebuild and restart the host:
    ```bash
    pnpm build
-   ncl restart <group-name>
+   # then restart your NanoClaw host process (launchd/systemd/manual)
    ```
 
-When active, agents emit a `memsy_ingest_turn` delivery action after each response. The host module catches it and forwards the turn to Memsy's extraction pipeline, which decides what's memory-worthy.
+<Warning>
+  With turn sync on, the agent must **not** call `memsy_ingest` itself — that double-writes and can swallow its reply. Two things prevent it: set `MEMSY_DISABLED_TOOLS=memsy_ingest` in the MCP env (hard block), and do **not** install the `memsy-remember` skill (it instructs the agent to ingest). Add a line to the group's `CLAUDE.local.md` as a belt-and-braces reminder: *"Memory capture is automatic; never call memsy_ingest."*
+</Warning>
 
 ## Skills
 
-Two skills install to `container/skills/` and are automatically available to every agent group:
+The installer adds **one** skill to `container/skills/`, available to every agent group across all channels:
 
-| Skill | Trigger phrases |
-|---|---|
-| `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" |
-| `memsy-remember` | "remember that", "save this decision", "note that", "for future reference" |
+| Skill | Trigger phrases | Tool |
+|---|---|---|
+| `memsy-recall` | "what did we decide", "what do you know about me", "context on X" | `memsy_search` |
 
-Skills work across all connected channels — store from one, recall from any other.
+> **Why no `memsy-remember` skill?** With turn sync on, capture is automatic and host-side — a skill that makes the agent call `memsy_ingest` would duplicate every memory and can block responses. If you instead want *agent-driven* capture (no turn sync), skip turn sync and add a `memsy-remember` skill that calls `memsy_ingest`; the two models are mutually exclusive.
 
 ## Multi-org
 
@@ -109,11 +123,11 @@ If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.j
 | Capability | Supported |
 |---|---|
 | Recall (memsy_search) | ✓ |
-| Store (memsy_ingest) | ✓ |
-| Turn sync (auto-capture) | ✓ (opt-in via MEMSY_TURN_SYNC=on) |
-| Multi-channel memory | ✓ |
+| Automatic turn capture (user + assistant) | ✓ via `MEMSY_TURN_SYNC=on` (host hooks) |
+| Multi-channel memory | ✓ store from one channel, recall from any |
 | Multi-org / profiles | ✓ |
-| Skills (SKILL.md) | ✓ |
+| Recall skill (SKILL.md) | ✓ |
+| Agent-driven store (`memsy_ingest`) | Disabled under turn sync (see warning above) |
 
 ## Troubleshooting
 
@@ -135,9 +149,24 @@ Check the active org — the memory may be in a different profile:
 What Memsy orgs do I have?
 ```
 
-### Turn sync not working
+### Ingest returns 422
 
-Check that `MEMSY_TURN_SYNC=on` is in `.env`, that `pnpm build` ran after adding the module, and that `import './memsy/index.js';` exists in `src/modules/index.ts`.
+The `/ingest` endpoint requires `actor_id` **and** `session_id` on every event. The turn-sync hooks set both automatically (actor from `MEMSY_ACTOR_ID`, session from the NanoClaw session id). If you wired a custom ingest path and see 422, you're missing one of those fields.
+
+### Turn sync not capturing
+
+- Confirm `MEMSY_TURN_SYNC=on` and `MEMSY_API_KEY` / `MEMSY_ACTOR_ID` are in `.env`.
+- NanoClaw does **not** load `.env` into `process.env` — config is read via `readEnvFile()`. The shipped hooks already do this; custom code using `process.env.MEMSY_*` will silently see `undefined`.
+- Rebuild (`pnpm build`) and restart the host after any change.
+- Check the log for `Memsy turn synced kind=... status=200`.
+
+### Duplicate memories / agent stops replying
+
+The agent is calling `memsy_ingest` itself on top of turn sync. Set `MEMSY_DISABLED_TOOLS=memsy_ingest` in the MCP env, remove the `memsy-remember` skill, and add the "never call memsy_ingest" note to `CLAUDE.local.md`. Restart the container.
+
+### WhatsApp re-asks for QR on every restart
+
+This is a NanoClaw core behaviour: its WhatsApp adapter clears auth on shutdown unless the disconnect reason is a real logout. Patch `src/channels/whatsapp.ts` so it only clears auth when `reason === DisconnectReason.loggedOut` (otherwise log "auth preserved"). Then restarts keep the linked session.
 
 ## See also
 
