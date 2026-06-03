@@ -15,6 +15,69 @@ is_truthy() {
   esac
 }
 
+# First-run onboarding nudge (one-time, network-free). If the active profile has
+# no default roles/teams configured, surface a single pointer to the setup flow,
+# then never again (marker file). Reads only ~/.memsy/config.json (+ a project
+# .memsy/config.json) — no network on this session-start path. The flow itself
+# (memsy_list_roles/teams → create-or-pick → memsy_set_defaults) surfaces the
+# org's existing roles/teams or offers to create them; this just gets the user
+# there once. Defaults are optional, so this is a nudge, not a gate.
+memsy_onboarding_nudge() {
+  local marker="${HOME}/.memsy/.onboard-nudged"
+  [[ -f "$marker" ]] && return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  local configured
+  configured="$(python3 - <<'PY' 2>/dev/null
+import json, os
+
+def defaults_set(path, active):
+    try:
+        with open(path) as f:
+            cfg = json.load(f)
+    except Exception:
+        return False
+    profs = cfg.get("profiles")
+    p = (profs.get(active) or {}) if isinstance(profs, dict) else cfg
+    roles = p.get("default_role_ids") or p.get("defaultRoleIds")
+    teams = p.get("default_team_ids") or p.get("defaultTeamIds")
+    return bool(roles) or bool(teams)
+
+home = os.path.expanduser("~")
+gpath = os.path.join(home, ".memsy", "config.json")
+ppath = os.path.join(os.getcwd(), ".memsy", "config.json")
+
+active = os.environ.get("MEMSY_PROFILE") or ""
+if not active:
+    try:
+        with open(gpath) as f:
+            active = json.load(f).get("active_profile") or "default"
+    except Exception:
+        active = "default"
+
+env_set = bool(os.environ.get("MEMSY_DEFAULT_ROLE_IDS") or os.environ.get("MEMSY_DEFAULT_TEAM_IDS"))
+print("1" if (env_set or defaults_set(gpath, active) or defaults_set(ppath, active)) else "0")
+PY
+)" || configured=0
+
+  [[ "${configured:-0}" == "1" ]] && return 0
+
+  mkdir -p "${HOME}/.memsy"
+  : > "$marker"
+  cat <<'EOF'
+[memsy setup — first run]
+
+No default Memsy roles/teams are configured yet (optional — they sharpen recall
+and attribution). Tell the user once, in one line, that you can set this up. If
+they agree (or say "set up my memsy defaults", or invoke the setup-defaults
+prompt): call memsy_list_roles and memsy_list_teams — show what their org
+already has, or offer to create some via memsy_create_role / memsy_create_team —
+then memsy_set_defaults (persist:"global"). If they decline, drop it; this won't repeat.
+
+EOF
+}
+memsy_onboarding_nudge
+
 # Mode block — emitted whenever any mode is active. Skills read this to learn
 # the user's runtime preferences.
 modes=""
