@@ -68,7 +68,7 @@ user_text = ''
 assistant_text = ''
 found_assistant = False
 
-# Read lines without loading the entire file into a list first.
+# Load the transcript, then scan newest-first for the last full turn.
 with open(transcript_path) as f:
     lines = f.readlines()
 
@@ -143,12 +143,14 @@ if not actor_id:
 # that. Recall is actor-based, so it need not match the MCP's per-process id.
 session_id = 'cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16]
 
+def _event(kind, content):
+    return {'kind': kind, 'content': content,
+            'actor_id': actor_id, 'session_id': session_id}
+
 events = []
 if user_text:
-    events.append({'kind': 'user_message', 'content': user_text,
-                   'actor_id': actor_id, 'session_id': session_id})
-events.append({'kind': 'assistant_message', 'content': assistant_text,
-               'actor_id': actor_id, 'session_id': session_id})
+    events.append(_event('user_message', user_text))
+events.append(_event('assistant_message', assistant_text))
 print(json.dumps({'events': events}))
 " 2>/dev/null)"
 
@@ -165,22 +167,20 @@ print(json.dumps({'events': events}))
 MEMSY_LOG_DIR="${HOME}/.memsy"
 mkdir -p "$MEMSY_LOG_DIR"
 
-# `|| true` is load-bearing under `set -e`: curl exits 0 on HTTP errors
-# (422/500 still populate http_code and log below), but nonzero on TRANSPORT
-# failures (timeout=28, DNS=6, refused=7). Without `|| true`, a bare
+# The `|| http_code="000"` is load-bearing under `set -e`: curl exits 0 on HTTP
+# errors (422/500 still populate http_code and log below), but nonzero on
+# TRANSPORT failures (timeout=28, DNS=6, refused=7). Without the `||`, a bare
 # `var=$(curl …)` assignment would propagate that nonzero status and `set -e`
 # would abort the script HERE — skipping the failure log, which is the exact
-# silent-failure mode this hook is meant to fix. On transport failure curl
-# writes nothing to stdout, so http_code becomes "000" and falls through to
-# the log block.
+# silent-failure mode this hook is meant to fix. On transport failure we fall
+# through to the log block with a sentinel "000".
 http_code="$(curl -s -o /dev/null \
   --max-time 10 \
   --write-out '%{http_code}' \
   -X POST "${MEMSY_BASE_URL}/ingest" \
   -H "Authorization: Bearer ${MEMSY_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "$TURN_JSON" 2>>"${MEMSY_LOG_DIR}/turn-sync.log")" || true
-http_code="${http_code:-000}"
+  -d "$TURN_JSON" 2>>"${MEMSY_LOG_DIR}/turn-sync.log")" || http_code="000"
 
 if [[ "$http_code" != "200" && "$http_code" != "201" && "$http_code" != "202" ]]; then
   printf '[%s] turn-sync failed: HTTP %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$http_code" \
