@@ -165,13 +165,22 @@ print(json.dumps({'events': events}))
 MEMSY_LOG_DIR="${HOME}/.memsy"
 mkdir -p "$MEMSY_LOG_DIR"
 
+# `|| true` is load-bearing under `set -e`: curl exits 0 on HTTP errors
+# (422/500 still populate http_code and log below), but nonzero on TRANSPORT
+# failures (timeout=28, DNS=6, refused=7). Without `|| true`, a bare
+# `var=$(curl …)` assignment would propagate that nonzero status and `set -e`
+# would abort the script HERE — skipping the failure log, which is the exact
+# silent-failure mode this hook is meant to fix. On transport failure curl
+# writes nothing to stdout, so http_code becomes "000" and falls through to
+# the log block.
 http_code="$(curl -s -o /dev/null \
   --max-time 10 \
   --write-out '%{http_code}' \
   -X POST "${MEMSY_BASE_URL}/ingest" \
   -H "Authorization: Bearer ${MEMSY_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "$TURN_JSON" 2>>"${MEMSY_LOG_DIR}/turn-sync.log")"
+  -d "$TURN_JSON" 2>>"${MEMSY_LOG_DIR}/turn-sync.log")" || true
+http_code="${http_code:-000}"
 
 if [[ "$http_code" != "200" && "$http_code" != "201" && "$http_code" != "202" ]]; then
   printf '[%s] turn-sync failed: HTTP %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$http_code" \
