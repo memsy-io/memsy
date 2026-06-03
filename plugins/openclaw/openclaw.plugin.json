@@ -9,7 +9,12 @@
       "memsy_health",
       "memsy_list_memories",
       "memsy_list_orgs",
-      "memsy_use_org"
+      "memsy_use_org",
+      "memsy_list_roles",
+      "memsy_create_role",
+      "memsy_list_teams",
+      "memsy_create_team",
+      "memsy_set_defaults"
     ]
   },
   "activation": {

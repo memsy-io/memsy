@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { join } from "node:path";
 
@@ -159,6 +159,73 @@ function resolveActorId(): string {
     ? hashId(sd.profileName, email)
     : hashId(sd.profileName, `${userInfo().username}@${hostname()}`);
   return _actorId;
+}
+
+// ── Org / roles / teams management ───────────────────────────────────────────
+// Roles & teams need an explicit org_id, resolved from the control plane:
+// the hot-path base ends in /v1; the control plane is the sibling /api. We
+// GET /api/me once and cache the org_id (immutable for an API key).
+function deriveControlUrl(baseUrl: string): string | null {
+  return baseUrl.endsWith("/v1") ? `${baseUrl.slice(0, -3)}/api` : null;
+}
+
+let _orgId: string | undefined;
+async function resolveOrgId(apiKey: string, baseUrl: string): Promise<string> {
+  if (_orgId) return _orgId;
+  const controlUrl = deriveControlUrl(baseUrl);
+  if (!controlUrl) {
+    throw new Error(
+      `Cannot derive the Memsy control-plane URL from base_url="${baseUrl}" ` +
+        `(it must end in "/v1"). Needed to look up your org_id for roles/teams.`,
+    );
+  }
+  const resp = await fetch(`${controlUrl}/me`, { headers: authHeaders(apiKey) });
+  const data = (await resp.json()) as { org_id?: string };
+  if (!resp.ok || !data.org_id) {
+    throw new Error(`Memsy /me failed (${resp.status}): ${JSON.stringify(data)}`);
+  }
+  _orgId = data.org_id;
+  return _orgId;
+}
+
+// Persist chosen defaults to the SHARED Memsy config (~/.memsy/config.json) —
+// the same file the apply layer reads and the MCP writes — so a choice made
+// here applies everywhere. Read-modify-write the active profile; preserve the
+// rest. There is no OpenClaw-native disk store (createPluginRuntimeStore holds
+// an in-memory runtime ref only), and defaults are Memsy-global, so the shared
+// config is the correct home.
+function persistDefaults(update: { roleIds?: string[]; teamIds?: string[]; actorId?: string }): string {
+  const dir = join(homedir(), ".memsy");
+  const path = join(dir, "config.json");
+  const cfg = (readJson(path) ?? {}) as Record<string, unknown>;
+  const profileName = sharedDefaults().profileName;
+
+  const profiles =
+    cfg.profiles && typeof cfg.profiles === "object"
+      ? (cfg.profiles as Record<string, Record<string, unknown>>)
+      : {};
+  const prof =
+    profiles[profileName] && typeof profiles[profileName] === "object"
+      ? profiles[profileName]
+      : {};
+  if (update.roleIds !== undefined) prof.default_role_ids = update.roleIds;
+  if (update.teamIds !== undefined) prof.default_team_ids = update.teamIds;
+  if (update.actorId !== undefined) prof.actor_id = update.actorId;
+  profiles[profileName] = prof;
+  cfg.profiles = profiles;
+  if (typeof cfg.active_profile !== "string" || !cfg.active_profile) {
+    cfg.active_profile = profileName;
+  }
+
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  // mode on writeFileSync only applies when CREATING — this file usually
+  // pre-exists (it holds API keys), so enforce 0600 explicitly.
+  chmodSync(path, 0o600);
+  // Invalidate caches so subsequent search/ingest pick up the new defaults.
+  _sharedDefaults = undefined;
+  _actorId = undefined;
+  return path;
 }
 
 const TRUTHY = new Set(["on", "true", "1", "yes", "enabled"]);
@@ -422,6 +489,160 @@ export default definePluginEntry({
           content: [{ type: "text" as const, text }],
           details: { profile: p.profile },
         };
+      },
+    });
+
+    // ── memsy_list_roles ─────────────────────────────────────────────────────
+    api.registerTool({
+      name: "memsy_list_roles",
+      label: "Memsy List Roles",
+      description:
+        "List roles defined in the active Memsy org. Use during onboarding so the user can pick which role(s) to set as defaults via memsy_set_defaults.",
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
+        offset: Type.Optional(Type.Number({ minimum: 0 })),
+      }),
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as { limit?: number; offset?: number };
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        const orgId = await resolveOrgId(apiKey, baseUrl);
+        const qs = new URLSearchParams({
+          org_id: orgId,
+          limit: String(p.limit ?? 100),
+          offset: String(p.offset ?? 0),
+        });
+        const resp = await fetch(`${baseUrl}/roles?${qs.toString()}`, { headers: authHeaders(apiKey) });
+        const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy list roles failed (${resp.status}): ${JSON.stringify(data)}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+      },
+    });
+
+    // ── memsy_create_role ────────────────────────────────────────────────────
+    api.registerTool({
+      name: "memsy_create_role",
+      label: "Memsy Create Role",
+      description:
+        "Create a new role in the active Memsy org. Call memsy_list_roles first to avoid duplicates. Returns the new role_id, which can be passed to memsy_set_defaults.",
+      parameters: Type.Object({
+        name: Type.String({ minLength: 1, maxLength: 100, description: "Role name, e.g. 'Software Engineer'." }),
+        focus: Type.String({
+          minLength: 1,
+          maxLength: 500,
+          description:
+            "One sentence on what this role's memories should emphasize. If the user didn't give one, draft a plausible focus from the name.",
+        }),
+      }),
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as { name: string; focus: string };
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        const orgId = await resolveOrgId(apiKey, baseUrl);
+        const resp = await fetch(`${baseUrl}/roles`, {
+          method: "POST",
+          headers: authHeaders(apiKey),
+          body: JSON.stringify({ org_id: orgId, name: p.name, focus: p.focus }),
+        });
+        const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy create role failed (${resp.status}): ${JSON.stringify(data)}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+      },
+    });
+
+    // ── memsy_list_teams ─────────────────────────────────────────────────────
+    api.registerTool({
+      name: "memsy_list_teams",
+      label: "Memsy List Teams",
+      description:
+        "List teams defined in the active Memsy org. Use during onboarding so the user can pick which team(s) to set as defaults via memsy_set_defaults.",
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
+        offset: Type.Optional(Type.Number({ minimum: 0 })),
+      }),
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as { limit?: number; offset?: number };
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        const orgId = await resolveOrgId(apiKey, baseUrl);
+        const qs = new URLSearchParams({
+          org_id: orgId,
+          limit: String(p.limit ?? 100),
+          offset: String(p.offset ?? 0),
+        });
+        const resp = await fetch(`${baseUrl}/teams?${qs.toString()}`, { headers: authHeaders(apiKey) });
+        const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy list teams failed (${resp.status}): ${JSON.stringify(data)}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+      },
+    });
+
+    // ── memsy_create_team ────────────────────────────────────────────────────
+    api.registerTool({
+      name: "memsy_create_team",
+      label: "Memsy Create Team",
+      description:
+        "Create a new team in the active Memsy org. Call memsy_list_teams first to avoid duplicates. Returns the new team_id, which can be passed to memsy_set_defaults.",
+      parameters: Type.Object({
+        name: Type.String({ minLength: 1, maxLength: 100, description: "Team name, e.g. 'Platform'." }),
+        focus: Type.String({
+          minLength: 1,
+          maxLength: 500,
+          description:
+            "One sentence on what this team's memories should emphasize. If the user didn't give one, draft a plausible focus from the name.",
+        }),
+      }),
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as { name: string; focus: string };
+        const apiKey = resolveApiKey(config);
+        const baseUrl = resolveBaseUrl(config);
+        const orgId = await resolveOrgId(apiKey, baseUrl);
+        const resp = await fetch(`${baseUrl}/teams`, {
+          method: "POST",
+          headers: authHeaders(apiKey),
+          body: JSON.stringify({ org_id: orgId, name: p.name, focus: p.focus }),
+        });
+        const data = (await resp.json()) as unknown;
+        if (!resp.ok) throw new Error(`Memsy create team failed (${resp.status}): ${JSON.stringify(data)}`);
+        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+      },
+    });
+
+    // ── memsy_set_defaults ───────────────────────────────────────────────────
+    api.registerTool({
+      name: "memsy_set_defaults",
+      label: "Memsy Set Defaults",
+      description:
+        "Set the default role_ids / team_ids / actor_id for this Memsy profile, persisted to the shared ~/.memsy/config.json. They become search filters + ingest attribution here AND in every other Memsy host. Omit a field to leave it unchanged; pass [] to clear roles/teams.",
+      parameters: Type.Object({
+        role_ids: Type.Optional(Type.Array(Type.String())),
+        team_ids: Type.Optional(Type.Array(Type.String())),
+        actor_id: Type.Optional(Type.String({ minLength: 1 })),
+      }),
+      async execute(_toolCallId: string, params: unknown) {
+        const p = params as { role_ids?: string[]; team_ids?: string[]; actor_id?: string };
+        if (p.role_ids === undefined && p.team_ids === undefined && p.actor_id === undefined) {
+          throw new Error("Provide at least one of role_ids, team_ids, or actor_id.");
+        }
+        const path = persistDefaults({
+          roleIds: p.role_ids,
+          teamIds: p.team_ids,
+          actorId: p.actor_id?.trim() || undefined,
+        });
+        const sd = sharedDefaults();
+        const result: Record<string, unknown> = {
+          persisted_to: path,
+          profile: sd.profileName,
+          default_role_ids: sd.roleIds,
+          default_team_ids: sd.teamIds,
+          actor_id: resolveActorId(),
+        };
+        if (p.actor_id && process.env.MEMSY_ACTOR_ID?.trim()) {
+          result.warning =
+            "MEMSY_ACTOR_ID env is set and overrides the persisted actor_id at runtime. " +
+            "Unset it for the persisted value to take effect.";
+        }
+        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }], details: result };
       },
     });
 

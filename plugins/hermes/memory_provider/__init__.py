@@ -51,6 +51,7 @@ class MemsyMemoryProvider(MemoryProvider):
         self._api_key = os.environ.get("MEMSY_API_KEY", "")
         self._base_url = os.environ.get("MEMSY_BASE_URL", _DEFAULT_BASE_URL)
         self._sync_thread: threading.Thread | None = None
+        self._org_id = ""  # cached after first control-plane /me lookup
 
         # Merge config file values (non-secret fields saved by save_config)
         hermes_home = kwargs.get("hermes_home", "")
@@ -169,6 +170,98 @@ class MemsyMemoryProvider(MemoryProvider):
                     },
                 },
             },
+            {
+                "name": "memsy_list_roles",
+                "description": (
+                    "List roles in the active org. Use during onboarding so the user can pick "
+                    "which role(s) to set as defaults via memsy_set_defaults."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "default": 100},
+                        "offset": {"type": "integer", "default": 0},
+                    },
+                },
+            },
+            {
+                "name": "memsy_create_role",
+                "description": (
+                    "Create a role in the active org. Call memsy_list_roles first to avoid "
+                    "duplicates. Returns role_id, usable with memsy_set_defaults."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Role name, e.g. 'Software Engineer'.",
+                        },
+                        "focus": {
+                            "type": "string",
+                            "description": (
+                                "One sentence on what this role's memories emphasize. "
+                                "If the user didn't give one, draft a plausible "
+                                "focus from the name."
+                            ),
+                        },
+                    },
+                    "required": ["name", "focus"],
+                },
+            },
+            {
+                "name": "memsy_list_teams",
+                "description": (
+                    "List teams in the active org. Use during onboarding so the user can pick "
+                    "which team(s) to set as defaults via memsy_set_defaults."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "default": 100},
+                        "offset": {"type": "integer", "default": 0},
+                    },
+                },
+            },
+            {
+                "name": "memsy_create_team",
+                "description": (
+                    "Create a team in the active org. Call memsy_list_teams first to avoid "
+                    "duplicates. Returns team_id, usable with memsy_set_defaults."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Team name, e.g. 'Platform'."},
+                        "focus": {
+                            "type": "string",
+                            "description": (
+                                "One sentence on what this team's memories emphasize. "
+                                "If the user didn't give one, draft a plausible "
+                                "focus from the name."
+                            ),
+                        },
+                    },
+                    "required": ["name", "focus"],
+                },
+            },
+            {
+                "name": "memsy_set_defaults",
+                "description": (
+                    "Set default role_ids / team_ids / actor_id for this profile, persisted to "
+                    "the shared ~/.memsy/config.json. They become search filters + ingest "
+                    "attribution here AND in every other Memsy host. Omit a field to leave it "
+                    "unchanged; pass [] to clear roles/teams."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "role_ids": {"type": "array", "items": {"type": "string"}},
+                        "team_ids": {"type": "array", "items": {"type": "string"}},
+                        "actor_id": {"type": "string"},
+                    },
+                },
+            },
         ]
 
     def handle_tool_call(self, tool_name: str, args: dict, **kwargs: Any) -> str:
@@ -184,6 +277,50 @@ class MemsyMemoryProvider(MemoryProvider):
             elif tool_name == "memsy_list_memories":
                 qs = f"?limit={args.get('limit', 20)}&sort={args.get('sort', 'observed_at_desc')}"
                 return self._get(f"/console/memories{qs}")
+            elif tool_name == "memsy_list_roles":
+                org_id = self._resolve_org_id()
+                limit, offset = args.get("limit", 100), args.get("offset", 0)
+                qs = f"?org_id={org_id}&limit={limit}&offset={offset}"
+                return self._get(f"/roles{qs}")
+            elif tool_name == "memsy_create_role":
+                org_id = self._resolve_org_id()
+                return self._post(
+                    "/roles",
+                    {"org_id": org_id, "name": args["name"], "focus": args["focus"]},
+                )
+            elif tool_name == "memsy_list_teams":
+                org_id = self._resolve_org_id()
+                limit, offset = args.get("limit", 100), args.get("offset", 0)
+                qs = f"?org_id={org_id}&limit={limit}&offset={offset}"
+                return self._get(f"/teams{qs}")
+            elif tool_name == "memsy_create_team":
+                org_id = self._resolve_org_id()
+                return self._post(
+                    "/teams",
+                    {"org_id": org_id, "name": args["name"], "focus": args["focus"]},
+                )
+            elif tool_name == "memsy_set_defaults":
+                if "role_ids" not in args and "team_ids" not in args and "actor_id" not in args:
+                    raise ValueError("Provide at least one of role_ids, team_ids, or actor_id.")
+                actor = args.get("actor_id")
+                path = self._persist_defaults(
+                    role_ids=args.get("role_ids"),
+                    team_ids=args.get("team_ids"),
+                    actor_id=(actor.strip() or None) if isinstance(actor, str) else None,
+                )
+                result = {
+                    "persisted_to": path,
+                    "profile": self._profile_name,
+                    "default_role_ids": self._default_role_ids,
+                    "default_team_ids": self._default_team_ids,
+                    "actor_id": self._actor_id,
+                }
+                if actor and os.environ.get("MEMSY_ACTOR_ID", "").strip():
+                    result["warning"] = (
+                        "MEMSY_ACTOR_ID env is set and overrides the persisted actor_id at "
+                        "runtime. Unset it for the persisted value to take effect."
+                    )
+                return json.dumps(result)
             else:
                 return json.dumps({"error": f"Unknown Memsy tool: {tool_name}"})
         except Exception as exc:
@@ -427,6 +564,76 @@ class MemsyMemoryProvider(MemoryProvider):
         if self._default_team_ids:
             body["team_ids"] = self._default_team_ids
         return body
+
+    # ── Roles / teams management ────────────────────────────────────────────────
+
+    def _resolve_org_id(self) -> str:
+        """Roles/teams need an explicit org_id, resolved from the control plane:
+        the hot-path base ends in /v1; the control plane is the sibling /api.
+        GET /api/me once and cache (org_id is immutable for an API key)."""
+        if self._org_id:
+            return self._org_id
+        base = self._base_url.rstrip("/")
+        if not base.endswith("/v1"):
+            raise ValueError(
+                f'Cannot derive the Memsy control-plane URL from base_url="{self._base_url}" '
+                "(it must end in /v1). Needed to look up org_id for roles/teams."
+            )
+        control_url = base[:-3] + "/api"
+        req = urllib.request.Request(f"{control_url}/me", headers=self._headers())
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+        org_id = data.get("org_id")
+        if not org_id:
+            raise ValueError(f"Memsy /me returned no org_id: {data}")
+        self._org_id = str(org_id)
+        return self._org_id
+
+    def _persist_defaults(
+        self,
+        role_ids: list | None = None,
+        team_ids: list | None = None,
+        actor_id: str | None = None,
+    ) -> str:
+        """Write defaults to the SHARED Memsy config (~/.memsy/config.json) — the
+        same file the apply layer reads and the MCP writes — so a choice made here
+        applies everywhere. Read-modify-write the active profile; preserve the
+        rest. The file holds API keys, so enforce 0600."""
+        config_dir = os.path.join(os.path.expanduser("~"), ".memsy")
+        path = os.path.join(config_dir, "config.json")
+        try:
+            cfg = json.loads(Path(path).read_text())
+        except Exception:
+            cfg = {}
+        if not isinstance(cfg, dict):
+            cfg = {}
+
+        profiles = cfg.get("profiles")
+        if not isinstance(profiles, dict):
+            profiles = {}
+        prof = profiles.get(self._profile_name)
+        if not isinstance(prof, dict):
+            prof = {}
+
+        if role_ids is not None:
+            prof["default_role_ids"] = role_ids
+        if team_ids is not None:
+            prof["default_team_ids"] = team_ids
+        if actor_id is not None:
+            prof["actor_id"] = actor_id
+        profiles[self._profile_name] = prof
+        cfg["profiles"] = profiles
+        if not isinstance(cfg.get("active_profile"), str) or not cfg.get("active_profile"):
+            cfg["active_profile"] = self._profile_name
+
+        os.makedirs(config_dir, exist_ok=True)
+        Path(path).write_text(json.dumps(cfg, indent=2))
+        os.chmod(path, 0o600)
+
+        # Refresh in-memory defaults so subsequent search/ingest use them.
+        self._read_shared_defaults()
+        self._actor_id = self._resolve_actor_id()
+        return path
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
 
