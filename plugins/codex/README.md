@@ -78,6 +78,8 @@ Set environment variables before starting Codex:
 
 > Hooks are reviewed and trusted once by the user on first run — this is a Codex security feature for plugin-bundled hooks.
 
+**First-run setup.** On your first session without default roles/teams configured, the SessionStart hook shows a **one-time** nudge offering to set them up (self-suppressing — it writes `~/.memsy/.onboard-nudged` and stays silent once defaults exist). Run it anytime by asking *"set up my memsy defaults"* or invoking the `setup-defaults` prompt: it surfaces your org's existing roles/teams, or offers to create them, then persists your choice. Defaults are optional — they sharpen recall and attribution.
+
 ## Capabilities
 
 | Capability | Supported |

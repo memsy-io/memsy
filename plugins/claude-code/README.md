@@ -109,6 +109,18 @@ Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude
 
 > **Identity alignment (important).** Turn sync must tag each event with the same `actor_id` that `memsy_search` reads, or your captured memories won't surface in recall. The hook mirrors the MCP's derivation exactly: `MEMSY_ACTOR_ID` if set, otherwise `sha256("<profile>|<git-email>")`. They can diverge in one case: if you select a profile via `active_profile` in `~/.memsy/config.json` (rather than the `MEMSY_PROFILE` env var) **and** don't set `MEMSY_ACTOR_ID`, the hook assumes the `default` profile while the MCP uses your file's active profile — so writes and reads land under different actors. **Fix: set `MEMSY_ACTOR_ID` explicitly** — it pins both sides to the same value.
 
+### First-run setup (onboarding)
+
+The first time you start a session without default roles/teams configured, the `SessionStart` hook emits a **one-time** nudge offering to set them up. It's gentle and self-suppressing — it writes `~/.memsy/.onboard-nudged` after the first show and never repeats, and it stays silent once any defaults exist (or `MEMSY_DEFAULT_ROLE_IDS`/`MEMSY_DEFAULT_TEAM_IDS` is set). The check is purely local (`~/.memsy/config.json`); no network call on session start.
+
+To run setup anytime — it surfaces the roles/teams your org already has, or offers to create them, then persists your chosen defaults:
+
+```
+/memsy:setup-defaults
+```
+
+(or just ask: *"set up my memsy defaults"*). Defaults are optional — memory works fine without them; roles/teams sharpen recall and attribution.
+
 ## Subagents
 
 | Agent | Trigger | Purpose |

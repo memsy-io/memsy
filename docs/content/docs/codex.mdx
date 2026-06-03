@@ -90,6 +90,12 @@ cat plugins/codex/AGENTS.md.snippet >> AGENTS.md
 
 Codex reads `AGENTS.md` automatically at the start of every session in that directory.
 
+## First-run setup
+
+On your first session with no default roles/teams configured, the SessionStart hook emits a **one-time** nudge offering to set them up. It self-suppresses (writes `~/.memsy/.onboard-nudged` after the first show) and stays silent once any defaults exist or `MEMSY_DEFAULT_ROLE_IDS`/`MEMSY_DEFAULT_TEAM_IDS` is set — the check is purely local, no network on session start.
+
+Run setup anytime by asking *"set up my memsy defaults"* (or invoking the `setup-defaults` prompt): it surfaces the roles/teams your org already has, or offers to create them, then persists your chosen defaults. Defaults are optional — memory works without them; roles/teams sharpen recall and attribution.
+
 ## Multi-org
 
 If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org)), then ask Codex:
