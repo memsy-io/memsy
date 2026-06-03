@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { hostname, userInfo } from "node:os";
+import { readFileSync } from "node:fs";
+import { homedir, hostname, userInfo } from "node:os";
+import { join } from "node:path";
 
 import { Type, type Static } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
@@ -38,12 +40,80 @@ function authHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+// ── Shared defaults (READ-ONLY) ──────────────────────────────────────────────
+// Read default role_ids / team_ids / actor_id from the shared Memsy config —
+// ~/.memsy/config.json, overridden per-project by ./.memsy/config.json — the
+// SAME file the MCP and the `setup-defaults` flow write. So defaults configured
+// once in any host apply here too. We never WRITE this file: managing defaults
+// (create/list roles+teams, set_defaults) stays with the MCP hosts / dashboard
+// (see README). Read once and cache.
+interface SharedDefaults {
+  profileName: string;
+  actorId?: string;
+  roleIds: string[];
+  teamIds: string[];
+}
+
+function parseStringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+}
+
+function readJson(path: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function profileSlice(cfg: Record<string, unknown> | null, profile: string): Record<string, unknown> {
+  if (!cfg) return {};
+  const profs = cfg.profiles;
+  if (profs && typeof profs === "object") {
+    const p = (profs as Record<string, unknown>)[profile];
+    return p && typeof p === "object" ? (p as Record<string, unknown>) : {};
+  }
+  return cfg; // legacy flat config == the single default profile
+}
+
+let _sharedDefaults: SharedDefaults | undefined;
+function sharedDefaults(): SharedDefaults {
+  if (_sharedDefaults) return _sharedDefaults;
+  const global = readJson(join(homedir(), ".memsy", "config.json"));
+  const project = readJson(join(process.cwd(), ".memsy", "config.json"));
+
+  // Active profile: MEMSY_PROFILE env → global active_profile → "default".
+  const envProfile = process.env.MEMSY_PROFILE?.trim();
+  const fileActive = typeof global?.active_profile === "string" ? (global.active_profile as string) : "";
+  const profileName = envProfile || fileActive || "default";
+
+  const g = profileSlice(global, profileName);
+  const p = profileSlice(project, profileName);
+  const pick = <T>(...vals: T[]): T | undefined => vals.find((v) => v !== undefined);
+
+  const roles =
+    parseStringList(p.default_role_ids ?? p.defaultRoleIds);
+  const gRoles = parseStringList(g.default_role_ids ?? g.defaultRoleIds);
+  const teams = parseStringList(p.default_team_ids ?? p.defaultTeamIds);
+  const gTeams = parseStringList(g.default_team_ids ?? g.defaultTeamIds);
+  const envRoles = parseStringList((process.env.MEMSY_DEFAULT_ROLE_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  const envTeams = parseStringList((process.env.MEMSY_DEFAULT_TEAM_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+
+  _sharedDefaults = {
+    profileName,
+    actorId: pick(p.actor_id, p.actorId, g.actor_id, g.actorId) as string | undefined,
+    roleIds: roles.length ? roles : gRoles.length ? gRoles : envRoles,
+    teamIds: teams.length ? teams : gTeams.length ? gTeams : envTeams,
+  };
+  return _sharedDefaults;
+}
+
 // ── Identity ─────────────────────────────────────────────────────────────────
 // actor_id MUST match what the MCP server derives (mcp/src/identity.ts:
 // resolveActorId), or memories written here land under a different actor than
 // memsy_search reads — and recall silently finds nothing. Precedence:
-// MEMSY_ACTOR_ID env, else sha256('<profile>|<git-email>')[:16],
-// else sha256('<profile>|<user>@<host>')[:16]. Cached: git is forked once.
+// MEMSY_ACTOR_ID env → shared-config profile actor_id → sha256('<profile>|<git-email>')
+// → sha256('<profile>|<user>@<host>'). Cached: git is forked once.
 function gitEmail(): string | null {
   for (const args of [
     ["config", "--global", "--get", "user.email"],
@@ -75,11 +145,19 @@ function resolveActorId(): string {
     _actorId = explicit;
     return _actorId;
   }
-  const profile = process.env.MEMSY_PROFILE?.trim() || "default";
+  const sd = sharedDefaults();
+  const fromConfig = sd.actorId?.trim();
+  if (fromConfig) {
+    _actorId = fromConfig;
+    return _actorId;
+  }
+  // Use the resolved active profile name (env → config active_profile → default)
+  // as the hash component, matching the MCP exactly even when the profile is
+  // selected via ~/.memsy/config.json rather than MEMSY_PROFILE.
   const email = gitEmail();
   _actorId = email
-    ? hashId(profile, email)
-    : hashId(profile, `${userInfo().username}@${hostname()}`);
+    ? hashId(sd.profileName, email)
+    : hashId(sd.profileName, `${userInfo().username}@${hostname()}`);
   return _actorId;
 }
 
@@ -215,6 +293,11 @@ export default definePluginEntry({
           threshold: p.threshold ?? 0.0,
           actor_id: resolveActorId(),
         };
+        // Apply default role/team filters from shared config (only when set —
+        // never send empty arrays, which would change query semantics).
+        const sd = sharedDefaults();
+        if (sd.roleIds.length) body.role_ids = sd.roleIds;
+        if (sd.teamIds.length) body.team_ids = sd.teamIds;
         if (p.since) body.since = p.since;
         const resp = await fetch(`${baseUrl}/search`, {
           method: "POST",
@@ -245,10 +328,18 @@ export default definePluginEntry({
         // fields /ingest requires (actor_id + session_id) so the agent never
         // has to — mirroring how the MCP server fills them. Without this every
         // ingest 422s and nothing is stored.
+        // Auto-tag role_id/team_id ONLY when exactly one default is configured
+        // (mirrors the MCP's singleOrUndef — a multi-value default can't pick
+        // one to attribute). No defaults → nothing added (today's behavior).
+        const sd = sharedDefaults();
+        const roleId = sd.roleIds.length === 1 ? sd.roleIds[0] : undefined;
+        const teamId = sd.teamIds.length === 1 ? sd.teamIds[0] : undefined;
         const events = p.events.map((e) => ({
           ...e,
           actor_id: resolveActorId(),
           session_id: _state.sessionId,
+          ...(roleId ? { role_id: roleId } : {}),
+          ...(teamId ? { team_id: teamId } : {}),
         }));
         const resp = await fetch(`${baseUrl}/ingest`, {
           method: "POST",

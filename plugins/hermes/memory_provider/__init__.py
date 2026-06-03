@@ -66,11 +66,18 @@ class MemsyMemoryProvider(MemoryProvider):
                 except Exception:
                     pass
 
+        # Read default role_ids / team_ids / actor_id + active profile from the
+        # shared Memsy config (~/.memsy/config.json, overridden by a project
+        # ./.memsy/config.json) — the same file the MCP and setup-defaults flow
+        # write. So defaults set once in any host apply here too. Read-only:
+        # Hermes never writes it (managing defaults is the MCP/dashboard's job).
+        self._read_shared_defaults()
+
         # actor_id MUST match what the MCP server derives (mcp/src/identity.ts:
         # resolveActorId), or memories written here land under a different actor
         # than memsy_search reads — and recall silently finds nothing. Precedence:
-        # MEMSY_ACTOR_ID env, else sha256('<profile>|<git-email>')[:16] with
-        # profile = MEMSY_PROFILE or 'default', else sha256('<profile>|<user>@<host>').
+        # MEMSY_ACTOR_ID env → shared-config profile actor_id →
+        # sha256('<profile>|<git-email>') → sha256('<profile>|<user>@<host>').
         self._actor_id = self._resolve_actor_id()
 
     def get_config_schema(self) -> list[dict]:
@@ -167,13 +174,7 @@ class MemsyMemoryProvider(MemoryProvider):
     def handle_tool_call(self, tool_name: str, args: dict, **kwargs: Any) -> str:
         try:
             if tool_name == "memsy_search":
-                body: dict = {
-                    "query": args["query"],
-                    "limit": args.get("limit", 8),
-                    "actor_id": self._actor_id,
-                }
-                if "threshold" in args:
-                    body["threshold"] = args["threshold"]
+                body = self._search_body(args["query"], args.get("limit", 8), args.get("threshold"))
                 return self._post("/search", body)
             elif tool_name == "memsy_ingest":
                 event = self._event(args.get("kind", "user_message"), args["content"])
@@ -203,12 +204,7 @@ class MemsyMemoryProvider(MemoryProvider):
         if not self._api_key or not query.strip():
             return ""
         try:
-            data = json.loads(
-                self._post(
-                    "/search",
-                    {"query": query, "limit": 5, "threshold": 0.3, "actor_id": self._actor_id},
-                )
-            )
+            data = json.loads(self._post("/search", self._search_body(query, 5, 0.3)))
             memories = data.get("memories", [])
             if not memories:
                 return ""
@@ -256,10 +252,7 @@ class MemsyMemoryProvider(MemoryProvider):
 
         def _warm() -> None:
             try:
-                self._post(
-                    "/search",
-                    {"query": query, "limit": 5, "threshold": 0.3, "actor_id": self._actor_id},
-                )
+                self._post("/search", self._search_body(query, 5, 0.3))
             except Exception:
                 pass
 
@@ -340,23 +333,100 @@ class MemsyMemoryProvider(MemoryProvider):
         explicit = os.environ.get("MEMSY_ACTOR_ID", "").strip()
         if explicit:
             return explicit
-        profile = os.environ.get("MEMSY_PROFILE", "").strip() or "default"
+        if self._config_actor_id:
+            return self._config_actor_id
         email = self._git_email()
         if email:
-            return self._hash_id(profile, email)
+            return self._hash_id(self._profile_name, email)
         import getpass
         import socket
 
-        return self._hash_id(profile, f"{getpass.getuser()}@{socket.gethostname()}")
+        return self._hash_id(self._profile_name, f"{getpass.getuser()}@{socket.gethostname()}")
+
+    def _read_shared_defaults(self) -> None:
+        """Populate active-profile name + default role_ids/team_ids/actor_id from
+        the shared Memsy config. Read-only. Falls back to MEMSY_DEFAULT_* env and
+        a 'default' profile so a fresh user with no config still works."""
+
+        def _load(path: str) -> dict | None:
+            try:
+                return json.loads(Path(path).read_text())
+            except Exception:
+                return None
+
+        def _slice(cfg: dict | None) -> dict:
+            if not isinstance(cfg, dict):
+                return {}
+            profs = cfg.get("profiles")
+            if isinstance(profs, dict):
+                p = profs.get(self._profile_name)
+                return p if isinstance(p, dict) else {}
+            return cfg  # legacy flat config == the single default profile
+
+        def _list(slc: dict, key_snake: str, key_camel: str) -> list[str]:
+            v = slc.get(key_snake) or slc.get(key_camel)
+            return [x for x in v if isinstance(x, str) and x] if isinstance(v, list) else []
+
+        def _env_list(name: str) -> list[str]:
+            return [x.strip() for x in os.environ.get(name, "").split(",") if x.strip()]
+
+        home = os.path.expanduser("~")
+        gcfg = _load(os.path.join(home, ".memsy", "config.json"))
+        pcfg = _load(os.path.join(os.getcwd(), ".memsy", "config.json"))
+
+        env_profile = os.environ.get("MEMSY_PROFILE", "").strip()
+        file_active = gcfg.get("active_profile") if isinstance(gcfg, dict) else None
+        self._profile_name = env_profile or (
+            file_active if isinstance(file_active, str) and file_active else "default"
+        )
+
+        gslc, pslc = _slice(gcfg), _slice(pcfg)
+        self._default_role_ids = (
+            _list(pslc, "default_role_ids", "defaultRoleIds")
+            or _list(gslc, "default_role_ids", "defaultRoleIds")
+            or _env_list("MEMSY_DEFAULT_ROLE_IDS")
+        )
+        self._default_team_ids = (
+            _list(pslc, "default_team_ids", "defaultTeamIds")
+            or _list(gslc, "default_team_ids", "defaultTeamIds")
+            or _env_list("MEMSY_DEFAULT_TEAM_IDS")
+        )
+        self._config_actor_id = (
+            pslc.get("actor_id")
+            or pslc.get("actorId")
+            or gslc.get("actor_id")
+            or gslc.get("actorId")
+            or ""
+        )
 
     def _event(self, kind: str, content: str) -> dict:
-        """Build an ingest event with the identity fields /ingest requires."""
-        return {
+        """Build an ingest event with the identity fields /ingest requires, plus
+        default role/team attribution when exactly one default is configured
+        (mirrors the MCP's single-default semantic — a multi-value default can't
+        pick one to attribute)."""
+        ev = {
             "kind": kind,
             "content": content,
             "actor_id": self._actor_id,
             "session_id": self._session_id,
         }
+        if len(self._default_role_ids) == 1:
+            ev["role_id"] = self._default_role_ids[0]
+        if len(self._default_team_ids) == 1:
+            ev["team_id"] = self._default_team_ids[0]
+        return ev
+
+    def _search_body(self, query: str, limit: int, threshold: float | None = None) -> dict:
+        """Build a /search body with actor scoping + default role/team filters
+        (only when set — never send empty arrays, which change query semantics)."""
+        body: dict = {"query": query, "limit": limit, "actor_id": self._actor_id}
+        if threshold is not None:
+            body["threshold"] = threshold
+        if self._default_role_ids:
+            body["role_ids"] = self._default_role_ids
+        if self._default_team_ids:
+            body["team_ids"] = self._default_team_ids
+        return body
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
 
