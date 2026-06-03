@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { hostname, userInfo } from "node:os";
+
 import { Type, type Static } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 
@@ -32,6 +36,51 @@ function authHeaders(apiKey: string): Record<string, string> {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
   };
+}
+
+// ── Identity ─────────────────────────────────────────────────────────────────
+// actor_id MUST match what the MCP server derives (mcp/src/identity.ts:
+// resolveActorId), or memories written here land under a different actor than
+// memsy_search reads — and recall silently finds nothing. Precedence:
+// MEMSY_ACTOR_ID env, else sha256('<profile>|<git-email>')[:16],
+// else sha256('<profile>|<user>@<host>')[:16]. Cached: git is forked once.
+function gitEmail(): string | null {
+  for (const args of [
+    ["config", "--global", "--get", "user.email"],
+    ["config", "--get", "user.email"],
+  ]) {
+    try {
+      const out = execFileSync("git", args, {
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+        timeout: 1500,
+      }).trim();
+      if (out) return out;
+    } catch {
+      // git missing or no email at this scope — fall through.
+    }
+  }
+  return null;
+}
+
+function hashId(...parts: string[]): string {
+  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
+}
+
+let _actorId: string | undefined;
+function resolveActorId(): string {
+  if (_actorId) return _actorId;
+  const explicit = process.env.MEMSY_ACTOR_ID?.trim();
+  if (explicit) {
+    _actorId = explicit;
+    return _actorId;
+  }
+  const profile = process.env.MEMSY_PROFILE?.trim() || "default";
+  const email = gitEmail();
+  _actorId = email
+    ? hashId(profile, email)
+    : hashId(profile, `${userInfo().username}@${hostname()}`);
+  return _actorId;
 }
 
 const TRUTHY = new Set(["on", "true", "1", "yes", "enabled"]);
@@ -123,8 +172,9 @@ export default definePluginEntry({
     const config: PluginConfig = {};
 
     // Fired-once flags: reset on session_start so /new and idle-rotation get
-    // fresh context blocks each session.
-    const _state = { autocontextFired: false, proactiveFired: false };
+    // fresh context blocks each session. sessionId is sent on every ingest
+    // event (required by /ingest) and likewise rotates per session.
+    const _state = { autocontextFired: false, proactiveFired: false, sessionId: randomUUID() };
 
     // ── memsy_health ─────────────────────────────────────────────────────────
     api.registerTool({
@@ -163,6 +213,7 @@ export default definePluginEntry({
           query: p.query,
           limit: p.limit ?? 8,
           threshold: p.threshold ?? 0.0,
+          actor_id: resolveActorId(),
         };
         if (p.since) body.since = p.since;
         const resp = await fetch(`${baseUrl}/search`, {
@@ -190,10 +241,19 @@ export default definePluginEntry({
         const p = params as IngestParamsType;
         const apiKey = resolveApiKey(config);
         const baseUrl = resolveBaseUrl(config);
+        // The agent supplies kind/content/ts/metadata; inject the identity
+        // fields /ingest requires (actor_id + session_id) so the agent never
+        // has to — mirroring how the MCP server fills them. Without this every
+        // ingest 422s and nothing is stored.
+        const events = p.events.map((e) => ({
+          ...e,
+          actor_id: resolveActorId(),
+          session_id: _state.sessionId,
+        }));
         const resp = await fetch(`${baseUrl}/ingest`, {
           method: "POST",
           headers: authHeaders(apiKey),
-          body: JSON.stringify({ events: p.events }),
+          body: JSON.stringify({ events }),
         });
         const data = (await resp.json()) as unknown;
         if (!resp.ok) throw new Error(`Memsy ingest failed (${resp.status}): ${JSON.stringify(data)}`);
@@ -278,6 +338,7 @@ export default definePluginEntry({
     api.on("session_start", (_event: unknown) => {
       _state.autocontextFired = false;
       _state.proactiveFired = false;
+      _state.sessionId = randomUUID();
     });
 
     // ── heartbeat_prompt_contribution — proactive + auto-context injection ────
