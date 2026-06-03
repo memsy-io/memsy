@@ -37,7 +37,7 @@ MEMSY_BASE_URL="${MEMSY_BASE_URL:-https://api.memsy.io/v1}"
 # backwards to find the last substantive user+assistant turn.
 # Reads lines in reverse without loading the full file into memory.
 TURN_JSON="$(cat | python3 -c "
-import json, sys, os
+import json, sys, os, hashlib, subprocess
 
 # Parse Stop hook stdin
 try:
@@ -106,33 +106,76 @@ for line in reversed(lines):
 if not assistant_text:
     sys.exit(0)
 
+# Identity MUST match what the MCP server derives (mcp/src/identity.ts:
+# resolveActorId), or turn-synced memories land under a different actor_id
+# than the one memsy_search / memsy_list_memories read — and recall silently
+# finds nothing. Precedence mirrored here: MEMSY_ACTOR_ID env wins; otherwise
+# sha256('<profile>|<git-email>')[:16] with profile = MEMSY_PROFILE or 'default'.
+def _git_email():
+    for scope in (['--global'], []):
+        try:
+            out = subprocess.run(
+                ['git', 'config', *scope, '--get', 'user.email'],
+                capture_output=True, text=True, timeout=2,
+            )
+            v = out.stdout.strip()
+            if v:
+                return v
+        except Exception:
+            pass
+    return ''
+
+def _hash_id(*parts):
+    return hashlib.sha256('|'.join(parts).encode()).hexdigest()[:16]
+
+actor_id = os.environ.get('MEMSY_ACTOR_ID', '').strip()
+if not actor_id:
+    profile = os.environ.get('MEMSY_PROFILE', '').strip() or 'default'
+    email = _git_email()
+    if email:
+        actor_id = _hash_id(profile, email)
+    else:
+        import getpass, socket
+        actor_id = _hash_id(profile, getpass.getuser() + '@' + socket.gethostname())
+
+# session_id only needs to be non-empty and stable across the Stop hook's
+# repeated fires within one Claude session — the transcript path is exactly
+# that. Recall is actor-based, so it need not match the MCP's per-process id.
+session_id = 'cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16]
+
 events = []
 if user_text:
-    events.append({'kind': 'user_message', 'content': user_text})
-events.append({'kind': 'assistant_message', 'content': assistant_text})
+    events.append({'kind': 'user_message', 'content': user_text,
+                   'actor_id': actor_id, 'session_id': session_id})
+events.append({'kind': 'assistant_message', 'content': assistant_text,
+               'actor_id': actor_id, 'session_id': session_id})
 print(json.dumps({'events': events}))
 " 2>/dev/null)"
 
 [[ -z "$TURN_JSON" ]] && exit 0
 
-# ── Fire and forget ───────────────────────────────────────────────────────────
-# Errors are logged to ~/.memsy/turn-sync.log for debugging. The log is only
-# written on failure — on success curl exits 0 and writes nothing.
+# ── Deliver ───────────────────────────────────────────────────────────────────
+# The Stop hook is registered async:true (see hooks.json), so Claude Code does
+# NOT block the response on this script — we can run curl synchronously here
+# without adding user-facing latency. We deliberately do NOT background curl
+# with `& exit 0`: a detached grandchild gets reaped by Claude Code's process
+# group teardown before its 10s curl returns, so the request never completes
+# and the failure never reaches the log. Running it in the foreground of the
+# (already async) hook is what makes both the ingest and its log reliable.
 MEMSY_LOG_DIR="${HOME}/.memsy"
 mkdir -p "$MEMSY_LOG_DIR"
 
-curl -s -o /dev/null \
+http_code="$(curl -s -o /dev/null \
   --max-time 10 \
-  --write-out "%{http_code}" \
+  --write-out '%{http_code}' \
   -X POST "${MEMSY_BASE_URL}/ingest" \
   -H "Authorization: Bearer ${MEMSY_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "$TURN_JSON" 2>&1 | {
-    read -r http_code
-    if [[ "$http_code" != "200" && "$http_code" != "201" && "$http_code" != "202" ]]; then
-      printf '[%s] turn-sync failed: HTTP %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$http_code" \
-        >> "${MEMSY_LOG_DIR}/turn-sync.log"
-    fi
-  } &
+  -d "$TURN_JSON" 2>>"${MEMSY_LOG_DIR}/turn-sync.log")"
+
+if [[ "$http_code" != "200" && "$http_code" != "201" && "$http_code" != "202" ]]; then
+  printf '[%s] turn-sync failed: HTTP %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$http_code" \
+    >> "${MEMSY_LOG_DIR}/turn-sync.log"
+fi
 
 exit 0
