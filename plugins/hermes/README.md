@@ -105,4 +105,4 @@ Hermes Agent has a built-in learning loop that extracts skills from experience. 
 
 **Wrong memories returned** — Set a stable `MEMSY_ACTOR_ID` if you work across multiple machines.
 
-Full docs: [memsy.io/docs/hermes](https://memsy.io/docs/hermes)
+Full docs: [docs.memsy.io/docs/hermes](https://docs.memsy.io/docs/hermes)

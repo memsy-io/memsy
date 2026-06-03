@@ -120,4 +120,4 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 **Wrong memories returned** — Ask your agent to call `memsy_list_orgs` and verify the active profile, then `memsy_health` to confirm connectivity.
 
-Full docs: [memsy.io/docs/openclaw](https://memsy.io/docs/openclaw)
+Full docs: [docs.memsy.io/docs/openclaw](https://docs.memsy.io/docs/openclaw)

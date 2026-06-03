@@ -102,4 +102,4 @@ Set environment variables before starting Codex:
 
 **Wrong memories returned** — Ask Codex to call `memsy_list_orgs` and verify the active profile.
 
-Full docs: [memsy.io/docs/codex](https://memsy.io/docs/codex)
+Full docs: [docs.memsy.io/docs/codex](https://docs.memsy.io/docs/codex)

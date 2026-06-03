@@ -28,4 +28,4 @@ echo "  export MEMSY_PROACTIVE=on             # proactively store decisions/pref
 echo "  export MEMSY_CONFIRM_STORE=on         # ask before storing"
 echo ""
 echo "Verify: start codex, then ask 'What do we know about X?' to test recall."
-echo "Docs: https://memsy.io/docs/codex"
+echo "Docs: https://docs.memsy.io/docs/codex"

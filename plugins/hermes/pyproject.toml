@@ -22,9 +22,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://memsy.io/docs/hermes"
+Homepage = "https://docs.memsy.io/docs/hermes"
 Repository = "https://github.com/memsy-io/memsy"
-Documentation = "https://memsy.io/docs/hermes"
+Documentation = "https://docs.memsy.io/docs/hermes"
 
 # Memory provider — discovered by Hermes at ~/.hermes/plugins/memsy/
 # Install manually via ./install.sh, or via pip which triggers the entry-point.
