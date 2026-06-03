@@ -6,7 +6,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HERMES_DIR="${HOME}/.hermes"
 HERMES_CONFIG="${HERMES_DIR}/config.yaml"
-HERMES_MEMORY_DIR="${HERMES_DIR}/plugins/memory"
+# Hermes scans $HERMES_HOME/plugins/<name>/ DIRECTLY for user-installed memory
+# providers (it descends into each child and detects MemoryProvider via a text
+# heuristic) — NOT plugins/memory/<name>/. The plugins/memory/<name>/ layout in
+# the docs is the BUNDLED location inside the hermes-agent repo. Confirmed in
+# the installed loader: plugins/memory/__init__.py:_get_user_plugins_dir() →
+# get_hermes_home()/"plugins", iterated flat. Installing under a memory/ subdir
+# leaves the provider undiscovered.
+HERMES_PLUGINS_DIR="${HERMES_DIR}/plugins"
 
 # ── 1. Pre-flight checks ──────────────────────────────────────────────────────
 if ! command -v hermes &>/dev/null; then
@@ -20,17 +27,17 @@ if ! command -v python3 &>/dev/null; then
   exit 1
 fi
 
-mkdir -p "${HERMES_DIR}" "${HERMES_MEMORY_DIR}"
+mkdir -p "${HERMES_DIR}" "${HERMES_PLUGINS_DIR}"
 
 if [[ ! -f "${HERMES_CONFIG}" ]]; then
   touch "${HERMES_CONFIG}"
 fi
 
 # ── 2. Install memory provider ────────────────────────────────────────────────
-# Copies memory_provider/ into ~/.hermes/plugins/memory/memsy/ — the directory
-# Hermes scans for memory provider plugins.
+# Copies memory_provider/ into ~/.hermes/plugins/memsy/ — the directory Hermes
+# scans for user-installed memory provider plugins.
 PROVIDER_SRC="${SCRIPT_DIR}/memory_provider"
-PROVIDER_DST="${HERMES_MEMORY_DIR}/memsy"
+PROVIDER_DST="${HERMES_PLUGINS_DIR}/memsy"
 
 if [[ -d "${PROVIDER_DST}" ]]; then
   echo "  Updating existing provider at ${PROVIDER_DST}"
@@ -44,9 +51,12 @@ cp "${SCRIPT_DIR}/README.md" "${PROVIDER_DST}/README.md"
 echo "✓ Memory provider installed to ${PROVIDER_DST}"
 
 # ── 2b. Remove stale installs from old paths ──────────────────────────────────
-if [[ -d "${HERMES_DIR}/plugins/memsy" ]]; then
-  rm -rf "${HERMES_DIR}/plugins/memsy"
-  echo "  Removed stale install at ${HERMES_DIR}/plugins/memsy"
+# Earlier installers wrongly nested the provider under plugins/memory/memsy,
+# where Hermes never scans. Clean it up so discovery isn't confused.
+if [[ -d "${HERMES_DIR}/plugins/memory/memsy" ]]; then
+  rm -rf "${HERMES_DIR}/plugins/memory/memsy"
+  rmdir "${HERMES_DIR}/plugins/memory" 2>/dev/null || true
+  echo "  Removed stale install at ${HERMES_DIR}/plugins/memory/memsy"
 fi
 
 # ── 3. Update config.yaml ─────────────────────────────────────────────────────

@@ -28,7 +28,7 @@ cd memsy/plugins/hermes
 ```
 
 The installer:
-1. Copies `memory_provider/` to `~/.hermes/plugins/memory/memsy/`
+1. Copies `memory_provider/` to `~/.hermes/plugins/memsy/`
 2. Sets `memory.provider: memsy` in `~/.hermes/config.yaml`
 
 Then set your API key:
@@ -52,7 +52,7 @@ hermes chat
 ```
 plugins/hermes/
 ├── install.sh
-├── memory_provider/              # Dropped into ~/.hermes/plugins/memory/memsy/
+├── memory_provider/              # Dropped into ~/.hermes/plugins/memsy/
 │   ├── plugin.yaml               # Declares hooks
 │   ├── __init__.py               # MemsyMemoryProvider + register(ctx)
 │   └── cli.py                    # hermes memsy status / config
@@ -99,7 +99,7 @@ Hermes Agent has a built-in learning loop that extracts skills from experience. 
 
 ## Troubleshooting
 
-**Provider not loading** — Check `~/.hermes/plugins/memory/memsy/` exists. Re-run `./install.sh`.
+**Provider not loading** — Check `~/.hermes/plugins/memsy/` exists. Re-run `./install.sh`.
 
 **`memsy_search` not available** — Run `hermes memsy status` to check connectivity and API key.
 

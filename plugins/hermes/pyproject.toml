@@ -26,7 +26,7 @@ Homepage = "https://memsy.io/docs/hermes"
 Repository = "https://github.com/memsy-io/memsy"
 Documentation = "https://memsy.io/docs/hermes"
 
-# Memory provider — discovered by Hermes at ~/.hermes/plugins/memory/memsy/
+# Memory provider — discovered by Hermes at ~/.hermes/plugins/memsy/
 # Install manually via ./install.sh, or via pip which triggers the entry-point.
 [project.entry-points."hermes_agent.memory_providers"]
 memsy = "memory_provider:register"

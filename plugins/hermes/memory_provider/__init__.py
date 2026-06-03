@@ -1,6 +1,6 @@
 """Memsy memory provider for Hermes Agent.
 
-Installed to ~/.hermes/plugins/memory/memsy/ — discovered automatically by Hermes.
+Installed to ~/.hermes/plugins/memsy/ — discovered automatically by Hermes.
 Activate with: hermes memory setup
 Or manually add to ~/.hermes/config.yaml:
   memory:
