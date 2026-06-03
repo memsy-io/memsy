@@ -38,6 +38,9 @@ if [[ -d "${PROVIDER_DST}" ]]; then
 fi
 
 cp -r "${PROVIDER_SRC}" "${PROVIDER_DST}"
+# The spec's provider layout includes README.md (setup instructions) alongside
+# __init__.py/plugin.yaml/cli.py — ship it into the installed provider dir.
+cp "${SCRIPT_DIR}/README.md" "${PROVIDER_DST}/README.md"
 echo "✓ Memory provider installed to ${PROVIDER_DST}"
 
 # ── 2b. Remove stale installs from old paths ──────────────────────────────────

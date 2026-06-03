@@ -18,9 +18,11 @@ Lifecycle hooks implemented:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import subprocess
 import threading
 import urllib.error
 import urllib.request
@@ -43,7 +45,9 @@ class MemsyMemoryProvider(MemoryProvider):
         return bool(os.environ.get("MEMSY_API_KEY"))
 
     def initialize(self, session_id: str, **kwargs: Any) -> None:
-        self._session_id = session_id
+        # session_id is sent on every ingest event (required by /ingest). Hermes
+        # always supplies one; fall back defensively so we never POST an empty id.
+        self._session_id = session_id or "hermes-session"
         self._api_key = os.environ.get("MEMSY_API_KEY", "")
         self._base_url = os.environ.get("MEMSY_BASE_URL", _DEFAULT_BASE_URL)
         self._sync_thread: threading.Thread | None = None
@@ -61,6 +65,13 @@ class MemsyMemoryProvider(MemoryProvider):
                         self._base_url = cfg.get("base_url", self._base_url)
                 except Exception:
                     pass
+
+        # actor_id MUST match what the MCP server derives (mcp/src/identity.ts:
+        # resolveActorId), or memories written here land under a different actor
+        # than memsy_search reads — and recall silently finds nothing. Precedence:
+        # MEMSY_ACTOR_ID env, else sha256('<profile>|<git-email>')[:16] with
+        # profile = MEMSY_PROFILE or 'default', else sha256('<profile>|<user>@<host>').
+        self._actor_id = self._resolve_actor_id()
 
     def get_config_schema(self) -> list[dict]:
         return [
@@ -113,7 +124,10 @@ class MemsyMemoryProvider(MemoryProvider):
             },
             {
                 "name": "memsy_ingest",
-                "description": "Store a memory in Memsy. Use when the user explicitly asks to remember something.",
+                "description": (
+                    "Store a memory in Memsy. Use when the user explicitly asks "
+                    "to remember something."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -130,12 +144,16 @@ class MemsyMemoryProvider(MemoryProvider):
             },
             {
                 "name": "memsy_health",
-                "description": "Check Memsy service health. Call this when other Memsy tools error.",
+                "description": (
+                    "Check Memsy service health. Call this when other Memsy tools error."
+                ),
                 "parameters": {"type": "object", "properties": {}},
             },
             {
                 "name": "memsy_list_memories",
-                "description": "Browse stored memories without a query. Use when memsy_search returns nothing.",
+                "description": (
+                    "Browse stored memories without a query. Use when memsy_search returns nothing."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -149,15 +167,16 @@ class MemsyMemoryProvider(MemoryProvider):
     def handle_tool_call(self, tool_name: str, args: dict, **kwargs: Any) -> str:
         try:
             if tool_name == "memsy_search":
-                body: dict = {"query": args["query"], "limit": args.get("limit", 8)}
+                body: dict = {
+                    "query": args["query"],
+                    "limit": args.get("limit", 8),
+                    "actor_id": self._actor_id,
+                }
                 if "threshold" in args:
                     body["threshold"] = args["threshold"]
                 return self._post("/search", body)
             elif tool_name == "memsy_ingest":
-                event = {
-                    "kind": args.get("kind", "user_message"),
-                    "content": args["content"],
-                }
+                event = self._event(args.get("kind", "user_message"), args["content"])
                 return self._post("/ingest", {"events": [event]})
             elif tool_name == "memsy_health":
                 return self._get("/health")
@@ -184,7 +203,12 @@ class MemsyMemoryProvider(MemoryProvider):
         if not self._api_key or not query.strip():
             return ""
         try:
-            data = json.loads(self._post("/search", {"query": query, "limit": 5, "threshold": 0.3}))
+            data = json.loads(
+                self._post(
+                    "/search",
+                    {"query": query, "limit": 5, "threshold": 0.3, "actor_id": self._actor_id},
+                )
+            )
             memories = data.get("memories", [])
             if not memories:
                 return ""
@@ -206,19 +230,22 @@ class MemsyMemoryProvider(MemoryProvider):
         session_id: str = "",
         messages: list | None = None,
     ) -> None:
-        """Called after every completed turn. Persists the exchange in a background thread."""
+        """Called after every completed turn. Persists the exchange in a daemon
+        thread. The Hermes contract requires this be NON-BLOCKING, so we fire the
+        thread and return immediately — we do NOT join the previous sync here (that
+        could block the caller for seconds on a slow network). on_session_end and
+        shutdown best-effort join the most recent thread to flush before exit."""
+
         def _sync() -> None:
             try:
                 events = [
-                    {"kind": "user_message", "content": user_content[:32000]},
-                    {"kind": "assistant_message", "content": assistant_content[:32000]},
+                    self._event("user_message", user_content[:32000]),
+                    self._event("assistant_message", assistant_content[:32000]),
                 ]
                 self._post("/ingest", {"events": events})
             except Exception as exc:
                 logger.debug("Memsy sync_turn failed: %s", exc)
 
-        if self._sync_thread and self._sync_thread.is_alive():
-            self._sync_thread.join(timeout=5.0)
         self._sync_thread = threading.Thread(target=_sync, daemon=True)
         self._sync_thread.start()
 
@@ -226,11 +253,16 @@ class MemsyMemoryProvider(MemoryProvider):
         """Pre-warm cache after each turn so the next prefetch() is faster."""
         if not self._api_key or not query.strip():
             return
+
         def _warm() -> None:
             try:
-                self._post("/search", {"query": query, "limit": 5, "threshold": 0.3})
+                self._post(
+                    "/search",
+                    {"query": query, "limit": 5, "threshold": 0.3, "actor_id": self._actor_id},
+                )
             except Exception:
                 pass
+
         t = threading.Thread(target=_warm, daemon=True)
         t.start()
 
@@ -239,32 +271,38 @@ class MemsyMemoryProvider(MemoryProvider):
         if not self._api_key or not messages:
             return
         # Extract the last few substantive turns to preserve before compression.
-        turns = [m for m in messages if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
+        turns = [
+            m for m in messages if isinstance(m, dict) and m.get("role") in ("user", "assistant")
+        ]
         if not turns:
             return
-        snippet = " | ".join(
-            (m.get("content") or "")[:300]
-            for m in turns[-4:]
-            if m.get("content")
-        )
+        snippet = " | ".join((m.get("content") or "")[:300] for m in turns[-4:] if m.get("content"))
         if len(snippet) < 40:
             return
+
         def _save() -> None:
             try:
-                self._post("/ingest", {"events": [{"kind": "app_event", "content": f"[pre-compress] {snippet}"}]})
+                self._post(
+                    "/ingest",
+                    {"events": [self._event("app_event", f"[pre-compress] {snippet}")]},
+                )
             except Exception:
                 pass
+
         threading.Thread(target=_save, daemon=True).start()
 
     def on_memory_write(self, action: str, target: str, content: str) -> None:
         """Mirror Hermes built-in memory writes to Memsy."""
         if not self._api_key or not content:
             return
+        payload = f"[hermes-memory:{action}:{target}] {content}"
+
         def _mirror() -> None:
             try:
-                self._post("/ingest", {"events": [{"kind": "app_event", "content": f"[hermes-memory:{action}:{target}] {content}"}]})
+                self._post("/ingest", {"events": [self._event("app_event", payload)]})
             except Exception:
                 pass
+
         threading.Thread(target=_mirror, daemon=True).start()
 
     def on_session_end(self, messages: list) -> None:
@@ -274,6 +312,51 @@ class MemsyMemoryProvider(MemoryProvider):
     def shutdown(self) -> None:
         if self._sync_thread and self._sync_thread.is_alive():
             self._sync_thread.join(timeout=5.0)
+
+    # ── Identity ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _git_email() -> str:
+        for scope in (["--global"], []):
+            try:
+                out = subprocess.run(
+                    ["git", "config", *scope, "--get", "user.email"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                value = out.stdout.strip()
+                if value:
+                    return value
+            except Exception:
+                pass
+        return ""
+
+    @staticmethod
+    def _hash_id(*parts: str) -> str:
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+    def _resolve_actor_id(self) -> str:
+        explicit = os.environ.get("MEMSY_ACTOR_ID", "").strip()
+        if explicit:
+            return explicit
+        profile = os.environ.get("MEMSY_PROFILE", "").strip() or "default"
+        email = self._git_email()
+        if email:
+            return self._hash_id(profile, email)
+        import getpass
+        import socket
+
+        return self._hash_id(profile, f"{getpass.getuser()}@{socket.gethostname()}")
+
+    def _event(self, kind: str, content: str) -> dict:
+        """Build an ingest event with the identity fields /ingest requires."""
+        return {
+            "kind": kind,
+            "content": content,
+            "actor_id": self._actor_id,
+            "session_id": self._session_id,
+        }
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
 
