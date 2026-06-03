@@ -97,7 +97,17 @@ When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Cod
 
 Turn it off by unsetting the env var and restarting Claude Code. The hook is silent unless explicitly opted in.
 
-> **Why no auto-save-on-end hook?** Claude Code's `SessionEnd` and `Stop` hooks don't pipe their stdout back into Claude, so an auto-save hook can't actually call MCP tools to store anything. We ship `/memsy-checkpoint` as a user-initiated command instead — safer (no surprise noise) and actually functional.
+### Turn sync (opt-in)
+
+When `MEMSY_TURN_SYNC=on` is set in the shell that launches Claude Code, the plugin's `Stop` hook ships the last user+assistant turn to Memsy after every response. The extraction pipeline decides what's worth keeping — no "remember that" needed, and nothing for Claude to judge mid-turn.
+
+Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude, so the hook **can't** call MCP tools to store anything. Instead it POSTs the turn directly to `/ingest` over HTTPS (the hook is registered `async`, so zero latency is added to your responses). Failures are logged to `~/.memsy/turn-sync.log`.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MEMSY_TURN_SYNC` | `off` | Set to `on` to capture every turn automatically. |
+
+> **Identity alignment (important).** Turn sync must tag each event with the same `actor_id` that `memsy_search` reads, or your captured memories won't surface in recall. The hook mirrors the MCP's derivation exactly: `MEMSY_ACTOR_ID` if set, otherwise `sha256("<profile>|<git-email>")`. They can diverge in one case: if you select a profile via `active_profile` in `~/.memsy/config.json` (rather than the `MEMSY_PROFILE` env var) **and** don't set `MEMSY_ACTOR_ID`, the hook assumes the `default` profile while the MCP uses your file's active profile — so writes and reads land under different actors. **Fix: set `MEMSY_ACTOR_ID` explicitly** — it pins both sides to the same value.
 
 ## Subagents
 
@@ -136,6 +146,7 @@ These are exposed by the `@memsy-io/mcp` server itself, so they work in any MCP 
 | `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
 | `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
 | `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the SessionStart hook surfaces. Default: `6`, clamped 1–20. |
+| `MEMSY_TURN_SYNC` | `on` to auto-capture every user+assistant turn via the `Stop` hook (POSTs to `/ingest` over HTTPS). Default: `off`. **Set `MEMSY_ACTOR_ID` alongside it** if you use a `~/.memsy/config.json` `active_profile`, so captured memories surface in recall (see Turn sync above). Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_CONFIRM_STORE` | `on` to require confirmation before every single-item memory store (`/memsy:memsy-remember`, the `memsy-remember` auto-fire skill, and the `/memsy remember` smart-router branch). Default: `off` (stores directly — deliberate slash invocation implies intent). Bulk operations (`/memsy:memsy-checkpoint`, `/memsy:memsy-index`) always confirm regardless. Accepts truthy variants: `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_PROACTIVE` | `on` to make Claude actively watch the conversation for save-worthy content — preferences, intents, plans, decisions, learnings — and store them via `memsy_ingest` **without** requiring explicit save verbs like "remember that". This is the equivalent of running `/memsy:proactive-mode` once per session, but turned into the default behavior. Combine with `MEMSY_CONFIRM_STORE=on` to get "watch + ask before storing each one." Default: `off` (conservative — only explicit save verbs / slash invocations / `/memsy-checkpoint` save). Accepts the same truthy variants. |
 

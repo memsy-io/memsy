@@ -112,6 +112,18 @@ When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Cod
 
 Turn it off by unsetting `MEMSY_SESSION_AUTOCONTEXT` and restarting Claude Code. The hook is silent unless explicitly opted in.
 
+### Turn sync (auto-capture every turn, opt-in)
+
+When `MEMSY_TURN_SYNC=on` is set in the launch shell, the plugin's `Stop` hook ships the last user+assistant turn to Memsy after every response — so the extraction pipeline captures decisions, conclusions, and preferences buried in long answers that proactive mode's mid-turn heuristics would miss. No "remember that" needed.
+
+Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude, so the hook can't call MCP tools to store anything. Instead it POSTs the turn directly to `/ingest` over HTTPS. The hook is registered `async`, so it adds zero latency to your responses; failures are logged to `~/.memsy/turn-sync.log`.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MEMSY_TURN_SYNC` | `off` | Set to `on` to capture every turn automatically. |
+
+> **Identity alignment (important).** Turn sync must tag each event with the same `actor_id` that `memsy_search` reads, or captured memories won't surface in recall. The hook mirrors the MCP's derivation exactly — `MEMSY_ACTOR_ID` if set, otherwise `sha256("<profile>|<git-email>")`. They can diverge in one case: if you select a profile via `active_profile` in `~/.memsy/config.json` (rather than the `MEMSY_PROFILE` env var) **and** don't set `MEMSY_ACTOR_ID`, the hook assumes the `default` profile while the MCP uses your file's active profile. **Fix: set `MEMSY_ACTOR_ID` explicitly** so both sides agree.
+
 ### Proactive mode (opt-in)
 
 When `MEMSY_PROACTIVE=on` is set in the launch shell, the SessionStart hook tells Claude to actively watch the conversation for save-worthy content — preferences, intents, plans, decisions, learnings — and store it without you having to say "remember that".
@@ -181,6 +193,7 @@ Do a deep memsy dive on rate limiting decisions across all our services.
 | `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
 | `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
 | `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the auto-context surfaces. Default: `6`, clamped 1–20. |
+| `MEMSY_TURN_SYNC` | `on` to auto-capture every user+assistant turn via the `Stop` hook (POSTs directly to `/ingest`). Default: `off`. Set `MEMSY_ACTOR_ID` alongside it if you use a `~/.memsy/config.json` `active_profile` (see Turn sync above). Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_CONFIRM_STORE` | `on` to ask for confirmation before every single-item memory store (the auto-fire `memsy-remember` skill, the `/memsy:memsy-remember` command, and the `/memsy remember <text>` smart-router branch). Bulk operations like `/memsy:memsy-checkpoint` and `/memsy:memsy-index` already confirm by design, regardless of this flag. Default: `off`. Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_PROACTIVE` | `on` to make Claude actively watch the conversation for save-worthy content — preferences, intents, plans, decisions, learnings — and store them via `memsy_ingest` **without** requiring explicit verbs like "remember that". Equivalent to running `/memsy:proactive-mode` once per session, but turned into the default. Combine with `MEMSY_CONFIRM_STORE=on` to get "watch + ask before storing each one." Default: `off`. |
 
@@ -217,6 +230,8 @@ Switch back to the published npm version:
 | Long delay before tools load | `dist/server.js` missing (local-dev mode) | `cd mcp && npm install && npm run build`, restart Claude Code. |
 | `command not found: node` in MCP logs | `install.sh --dev` not run, Node not on PATH | Re-run `./install.sh --dev /path/to/memsy` and restart Claude Code. |
 | SessionStart auto-context not appearing | `MEMSY_SESSION_AUTOCONTEXT` not set, or session not restarted after setting | `export MEMSY_SESSION_AUTOCONTEXT=on && claude` — child inherits launch env. |
+| Turn sync captures nothing | `MEMSY_TURN_SYNC` not set, no API key in launch shell, or transcript turn too short | `export MEMSY_TURN_SYNC=on` and restart from that shell; check `~/.memsy/turn-sync.log` for HTTP errors. |
+| Turn-synced memories not surfacing in recall | `actor_id` mismatch — hook wrote under a different actor than search reads (config-file `active_profile` without `MEMSY_ACTOR_ID`) | `export MEMSY_ACTOR_ID=<stable-id>` so the `Stop` hook and the MCP agree. |
 | Wrong org's memories surfacing | Active profile mismatch | `/memsy switch <profile>` or set `MEMSY_PROFILE` in your shell. |
 
 ## Uninstall
