@@ -10,6 +10,7 @@ Long-term memory for [Hermes Agent](https://hermes-agent.nousresearch.com) (Nous
 | **Auto-sync** | Every user+assistant turn saved to Memsy via `sync_turn()` |
 | **Pre-compress snapshot** | Conversation snapshot saved before Hermes discards context |
 | **Native tools** | `memsy_search`, `memsy_ingest`, `memsy_health`, `memsy_list_memories` |
+| **Onboarding** | `memsy_list_roles` / `memsy_create_role` / `memsy_list_teams` / `memsy_create_team` / `memsy_set_defaults` — surface or create roles/teams and set defaults (persisted to the shared `~/.memsy/config.json`, honored everywhere) |
 | **CLI** | `hermes memsy status` / `hermes memsy config` |
 
 ## Requirements

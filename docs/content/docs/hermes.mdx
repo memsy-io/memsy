@@ -81,6 +81,9 @@ Four tools are injected directly into Hermes's tool registry:
 | `memsy_ingest` | "Remember that…", "Save this decision…" |
 | `memsy_health` | Diagnosing connectivity issues |
 | `memsy_list_memories` | "Show me recent memories" |
+| `memsy_list_roles` / `memsy_create_role` | "What roles do we have?", "Create a Software Engineer role" |
+| `memsy_list_teams` / `memsy_create_team` | "What teams exist?", "Create a Platform team" |
+| `memsy_set_defaults` | "Set up my Memsy defaults" — persists role/team/actor defaults to the shared `~/.memsy/config.json` |
 
 ## Manual config
 
@@ -120,6 +123,8 @@ Use Hermes skills for agent-specific workflows; use Memsy for decisions and cont
 | Auto-sync every turn | ✓ |
 | Pre-compress snapshot | ✓ |
 | Built-in memory mirroring | ✓ |
+| Honors default roles/teams | ✓ (read from `~/.memsy/config.json`; filters search + attributes ingest) |
+| Onboarding (create/list roles+teams, set defaults) | ✓ (`memsy_set_defaults` persists to shared config) |
 | Multi-org / profiles | ✓ |
 | SKILL.md skills | — (Hermes uses its own Skills Hub) |
 

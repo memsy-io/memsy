@@ -10,6 +10,7 @@ Long-term memory for your OpenClaw agent. Recall decisions, store context, and s
 | **Store** | Say "remember that…" — skill extracts and persists the substance |
 | **Auto-context** | `MEMSY_SESSION_AUTOCONTEXT=on` — recent memories injected at session start |
 | **Native tools** | `memsy_search`, `memsy_ingest`, `memsy_health`, `memsy_list_memories` |
+| **Onboarding** | `memsy_list_roles` / `memsy_create_role` / `memsy_list_teams` / `memsy_create_team` / `memsy_set_defaults` — surface or create roles/teams and set defaults |
 | **Channel-agnostic** | Store from Telegram, recall from Slack — memory follows the agent, not the channel |
 | **Multi-org** | `memsy_list_orgs` / `memsy_use_org` to check active profile |
 
@@ -102,6 +103,8 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 | Store (`memsy_ingest`) | ✓ |
 | Skills (`SKILL.md`) | ✓ |
 | Session start auto-context | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`) |
+| Honors default roles/teams | ✓ (read from `~/.memsy/config.json`; filters search + attributes ingest) |
+| Onboarding (create/list roles+teams, set defaults) | ✓ (`memsy_set_defaults` persists to shared config) |
 | Channel-agnostic memory | ✓ |
 | Multi-org / profiles | ✓ (via env var, full multi-profile requires config layer) |
 
