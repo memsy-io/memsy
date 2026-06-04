@@ -32,7 +32,7 @@ Or run the convenience script:
 ./install.sh
 ```
 
-Then set your API key:
+Then set your API key. `install.sh` **prompts for it interactively** and saves it to `~/.memsy/config.json` (`chmod 600`) — the MCP reads it from there, so no `export` is needed (and it's shared with any other MCP host like Cursor). To set it manually instead:
 
 ```bash
 export MEMSY_API_KEY=msy_...

@@ -28,8 +28,10 @@ Add Memsy to Codex CLI to persist decisions and context across sessions. The Mem
     ```
   </Step>
 
-  <Step title="Add your API key to the MCP env block">
-    Codex does not inherit shell environment variables. The key must live in `~/.codex/config.toml`:
+  <Step title="Set your API key">
+    The installer **prompts for your key interactively** and saves it to `~/.memsy/config.json` (`chmod 600`). The MCP server reads it from that file on launch, so nothing else is needed — and the same file is shared with every other MCP host (Cursor, Cline, …).
+
+    Codex does not pass your shell environment to MCP servers, so a bare `export MEMSY_API_KEY=...` may not reach the server. If you'd rather configure it by hand, add it to the MCP env block in `~/.codex/config.toml` instead:
 
     ```toml
     [mcp_servers.memsy.env]
