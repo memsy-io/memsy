@@ -10,10 +10,12 @@ This plugin wraps [`@memsy-io/mcp`](https://www.npmjs.com/package/@memsy-io/mcp)
 ## Install
 
 1. **Get an API key** at <https://app.memsy.io>.
-2. **Set it in your shell** (e.g. `~/.zshrc` / `~/.bashrc`):
-   ```sh
-   export MEMSY_API_KEY=msy_...
-   ```
+2. **Provide the key** — either way works (Claude Code passes the launching shell's env to the MCP server, [confirmed in the docs](https://code.claude.com/docs/en/mcp)):
+   - **Export it** in the shell that launches Claude Code (add to `~/.zshrc` / `~/.bashrc` to persist):
+     ```sh
+     export MEMSY_API_KEY=msy_...
+     ```
+   - **Or, if you cloned the repo, run `./install.sh`** — it prompts for the key and saves it to `~/.memsy/config.json` (`chmod 600`). The MCP reads it from there, so no re-export is needed, and the same file is shared with other MCP hosts (Cursor, Codex).
 3. **Add the Memsy marketplace + install the plugin:**
    ```sh
    claude plugin marketplace add memsy-io/memsy
