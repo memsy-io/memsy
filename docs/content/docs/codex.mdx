@@ -114,12 +114,12 @@ If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.j
 | Skills (SKILL.md) | ✓ |
 | AGENTS.md context injection | ✓ |
 | Multi-org / profiles | ✓ |
-| SessionStart auto-context hook | ✓ † (`MEMSY_SESSION_AUTOCONTEXT=on`) |
-| Proactive store mode | ✓ † (`MEMSY_PROACTIVE=on`) |
-| Confirm-before-store mode | ✓ † (`MEMSY_CONFIRM_STORE=on`) |
+| SessionStart auto-context hook | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`) |
+| Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
+| Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
 | First-run onboarding nudge | ✓ |
 
-† Toggled by env vars read in the **SessionStart hook** (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). They work provided your Codex build forwards the launching shell's environment to hook commands — the [hooks docs](https://developers.openai.com/codex/hooks) don't document shell-env inheritance, so treat it as assumed-pending-confirmation. Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` (see Set your API key above).
+These modes are toggled by env vars read in the **SessionStart hook** (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). Verified on Codex v0.137: Codex forwards your shell environment to hook commands, and the hook emits its context using the JSON envelope Codex requires (`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`). Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` — the MCP server gets a curated env (see Set your API key above).
 
 ## Troubleshooting
 

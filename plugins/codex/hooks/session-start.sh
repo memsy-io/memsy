@@ -4,7 +4,12 @@
 # OPT-IN: does nothing unless MEMSY_SESSION_AUTOCONTEXT=on, MEMSY_PROACTIVE=on,
 # or MEMSY_CONFIRM_STORE=on is set in the environment. All modes default OFF.
 #
-# Codex injects SessionStart stdout as context before the first user message.
+# Codex injects SessionStart hook output as developer context — but it requires
+# the output to be a JSON object of the form
+#   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}
+# Plain text is rejected at runtime ("hook returned invalid session start JSON
+# output"), which silently drops every block below. So we build the
+# human-readable text exactly as before, then JSON-encode it once at the end.
 
 set -eu
 
@@ -76,25 +81,29 @@ then memsy_set_defaults (persist:"global"). If they decline, drop it; this won't
 
 EOF
 }
-memsy_onboarding_nudge
 
-# Mode block — emitted whenever any mode is active. Skills read this to learn
-# the user's runtime preferences.
-modes=""
-if is_truthy "${MEMSY_CONFIRM_STORE:-}"; then
-  modes="${modes} confirm-before-store"
-fi
-if is_truthy "${MEMSY_PROACTIVE:-}"; then
-  modes="${modes} proactive"
-fi
-if [[ -n "$modes" ]]; then
-  printf '[memsy modes:%s]\n\n' "$modes"
-fi
+# Build the full session-start context as plain text on stdout. Captured by the
+# caller and JSON-wrapped before being handed to Codex.
+generate_context() {
+  memsy_onboarding_nudge
 
-# Proactive mode — watch the conversation for save-worthy content and store
-# via memsy_ingest without requiring an explicit "remember that" verb.
-if is_truthy "${MEMSY_PROACTIVE:-}"; then
-  cat <<'EOF'
+  # Mode block — emitted whenever any mode is active. Skills read this to learn
+  # the user's runtime preferences.
+  local modes=""
+  if is_truthy "${MEMSY_CONFIRM_STORE:-}"; then
+    modes="${modes} confirm-before-store"
+  fi
+  if is_truthy "${MEMSY_PROACTIVE:-}"; then
+    modes="${modes} proactive"
+  fi
+  if [[ -n "$modes" ]]; then
+    printf '[memsy modes:%s]\n\n' "$modes"
+  fi
+
+  # Proactive mode — watch the conversation for save-worthy content and store
+  # via memsy_ingest without requiring an explicit "remember that" verb.
+  if is_truthy "${MEMSY_PROACTIVE:-}"; then
+    cat <<'EOF'
 [memsy proactive mode — MEMSY_PROACTIVE=on]
 
 For the rest of this conversation, actively watch for content the user
@@ -137,25 +146,25 @@ Hard rules:
 To disable: unset MEMSY_PROACTIVE and restart Codex.
 
 EOF
-fi
+  fi
 
-# Auto-context recall — fires only when MEMSY_SESSION_AUTOCONTEXT is on.
-if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}"; then
-  exit 0
-fi
+  # Auto-context recall — fires only when MEMSY_SESSION_AUTOCONTEXT is on.
+  if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}"; then
+    return 0
+  fi
 
-LIMIT="${MEMSY_SESSION_CONTEXT_LIMIT:-6}"
-if ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
-  LIMIT=6                      # non-numeric (typo, empty) → safe default
-elif (( 10#$LIMIT < 1 )); then
-  LIMIT=1                      # clamp up to the floor
-elif (( 10#$LIMIT > 20 )); then
-  LIMIT=20                     # clamp down to the ceiling (e.g. 25 → 20)
-else
-  LIMIT="$((10#$LIMIT))"
-fi
+  local LIMIT="${MEMSY_SESSION_CONTEXT_LIMIT:-6}"
+  if ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
+    LIMIT=6                      # non-numeric (typo, empty) → safe default
+  elif (( 10#$LIMIT < 1 )); then
+    LIMIT=1                      # clamp up to the floor
+  elif (( 10#$LIMIT > 20 )); then
+    LIMIT=20                     # clamp down to the ceiling (e.g. 25 → 20)
+  else
+    LIMIT="$((10#$LIMIT))"
+  fi
 
-cat <<EOF
+  cat <<EOF
 [memsy auto-context — MEMSY_SESSION_AUTOCONTEXT=on]
 
 Before processing the user's first message in this session, call the
@@ -176,3 +185,14 @@ Rules:
 
 To disable: unset MEMSY_SESSION_AUTOCONTEXT and restart Codex.
 EOF
+}
+
+content="$(generate_context)"
+
+# Emit ONLY when there's something to say, wrapped in the JSON envelope Codex
+# requires for SessionStart hooks. python3 (already used above) does the JSON
+# encoding so embedded quotes/newlines are escaped correctly; if it's somehow
+# unavailable we stay silent rather than emit text Codex would reject.
+if [ -n "$(printf '%s' "$content" | tr -d '[:space:]')" ] && command -v python3 >/dev/null 2>&1; then
+  printf '%s' "$content" | python3 -c 'import json, sys; print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": sys.stdin.read()}}))'
+fi
