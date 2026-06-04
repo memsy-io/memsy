@@ -109,8 +109,11 @@ if not assistant_text:
 # Identity MUST match what the MCP server derives (mcp/src/identity.ts:
 # resolveActorId), or turn-synced memories land under a different actor_id
 # than the one memsy_search / memsy_list_memories read — and recall silently
-# finds nothing. Precedence mirrored here: MEMSY_ACTOR_ID env wins; otherwise
-# sha256('<profile>|<git-email>')[:16] with profile = MEMSY_PROFILE or 'default'.
+# finds nothing. FULL precedence mirrored: MEMSY_ACTOR_ID env → the active
+# profile's actor_id pinned in ~/.memsy/config.json (this is what
+# /memsy:memsy-setup writes via memsy_set_defaults) → sha256('<profile>|<git-
+# email>')[:16] → sha256('<profile>|user@host')[:16]. Profile name resolves
+# MEMSY_PROFILE env → config active_profile → 'default', same as the MCP.
 def _git_email():
     for scope in (['--global'], []):
         try:
@@ -128,15 +131,47 @@ def _git_email():
 def _hash_id(*parts):
     return hashlib.sha256('|'.join(parts).encode()).hexdigest()[:16]
 
+def _load_config():
+    # Mirror the MCP's findConfigFile (config.ts): a per-project
+    # .memsy/config.json overrides the per-user one, WHOLE-FILE — the project
+    # file is used exclusively when present, never merged key-by-key.
+    base = os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd()
+    for path in (os.path.join(base, '.memsy', 'config.json'),
+                 os.path.expanduser('~/.memsy/config.json')):
+        try:
+            if os.path.isfile(path):
+                with open(path) as f:
+                    raw = json.load(f)
+                return raw if isinstance(raw, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def _resolve_profile(cfg):
+    # profiles map, or legacy flat file wrapped as 'default'; active-name
+    # precedence (MEMSY_PROFILE → active_profile → 'default') matches the MCP.
+    profs = cfg.get('profiles') if isinstance(cfg.get('profiles'), dict) else None
+    if profs is None and (cfg.get('api_key') or cfg.get('apiKey')):
+        profs = {'default': cfg}
+    active = (os.environ.get('MEMSY_PROFILE', '').strip()
+              or (cfg.get('active_profile') if isinstance(cfg.get('active_profile'), str) else '')
+              or 'default')
+    prof = profs.get(active) if isinstance(profs, dict) else None
+    return active, (prof if isinstance(prof, dict) else {})
+
 actor_id = os.environ.get('MEMSY_ACTOR_ID', '').strip()
 if not actor_id:
-    profile = os.environ.get('MEMSY_PROFILE', '').strip() or 'default'
-    email = _git_email()
-    if email:
-        actor_id = _hash_id(profile, email)
-    else:
-        import getpass, socket
-        actor_id = _hash_id(profile, getpass.getuser() + '@' + socket.gethostname())
+    _cfg = _load_config()
+    profile, _prof = _resolve_profile(_cfg)
+    # Tier 2: a pinned actor_id in the config file (matches MCP identity.ts:68).
+    actor_id = (_prof.get('actor_id') or _prof.get('actorId') or '').strip()
+    if not actor_id:
+        email = _git_email()
+        if email:
+            actor_id = _hash_id(profile, email)
+        else:
+            import getpass, socket
+            actor_id = _hash_id(profile, getpass.getuser() + '@' + socket.gethostname())
 
 # session_id only needs to be non-empty and stable across the Stop hook's
 # repeated fires within one Claude session — the transcript path is exactly

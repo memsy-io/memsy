@@ -32,11 +32,14 @@ Or run the convenience script:
 ./install.sh
 ```
 
-Then set your API key. `install.sh` **prompts for it interactively** and saves it to `~/.memsy/config.json` (`chmod 600`) — the MCP reads it from there, so no `export` is needed (and it's shared with any other MCP host like Cursor). To set it manually instead:
+Then set your API key. `install.sh` **prompts for it interactively** and saves it to `~/.memsy/config.json` (`chmod 600`) — the MCP reads it from there, and it's shared with any other MCP host like Cursor.
 
-```bash
-export MEMSY_API_KEY=msy_...
-```
+> **Don't use a shell `export` for the key on Codex.** Codex launches the MCP server with a curated environment and does **not** pass your login shell's variables to it, so `export MEMSY_API_KEY=...` never reaches the server. Persist it instead — either re-run `./install.sh` (writes `~/.memsy/config.json`) or add it to `~/.codex/config.toml`:
+>
+> ```toml
+> [mcp_servers.memsy.env]
+> MEMSY_API_KEY = "msy_..."
+> ```
 
 ## Plugin structure
 
@@ -67,7 +70,7 @@ Invoke via `/skills` in Codex or type `$memsy-recall` to mention inline.
 
 ## Modes
 
-Set environment variables before starting Codex:
+Set these as environment variables before starting Codex (e.g. `export MEMSY_SESSION_AUTOCONTEXT=on`). Unlike the API key, the mode flags are read by the **SessionStart hook**, not the MCP server, so a shell `export` is the intended way to set them — provided your Codex build forwards the launching environment to hook commands (the [hooks docs](https://developers.openai.com/codex/hooks) guarantee `PLUGIN_ROOT`/`PLUGIN_DATA` but don't document shell-env inheritance, so verify with `/skills` output or the doctor flow if a mode seems ignored). The API key is different — see the install note above; never rely on `export` for it.
 
 | Variable | Effect |
 |---|---|
@@ -87,10 +90,12 @@ Set environment variables before starting Codex:
 | Recall (memsy_search) | ✓ |
 | Store (memsy_ingest) | ✓ |
 | Skills (SKILL.md) | ✓ |
-| SessionStart auto-context hook | ✓ |
-| Proactive store mode | ✓ |
-| Confirm-before-store mode | ✓ |
+| SessionStart auto-context hook | ✓ † |
+| Proactive store mode | ✓ † |
+| Confirm-before-store mode | ✓ † |
 | Multi-org / profiles | ✓ |
+
+† These are toggled by env vars read in the **SessionStart hook**. They work provided your Codex build forwards the launching shell's environment to hook commands — the [hooks docs](https://developers.openai.com/codex/hooks) don't document shell-env inheritance, so treat it as assumed-pending-confirmation (verify via the doctor/`/skills` flow if a mode seems ignored). The API key does **not** travel this way — set it in `~/.memsy/config.json` or `config.toml`, never via `export` (see install note).
 
 ## Troubleshooting
 

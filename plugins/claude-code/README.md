@@ -109,7 +109,7 @@ Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude
 |---|---|---|
 | `MEMSY_TURN_SYNC` | `off` | Set to `on` to capture every turn automatically. |
 
-> **Identity alignment (important).** Turn sync must tag each event with the same `actor_id` that `memsy_search` reads, or your captured memories won't surface in recall. The hook mirrors the MCP's derivation exactly: `MEMSY_ACTOR_ID` if set, otherwise `sha256("<profile>|<git-email>")`. They can diverge in one case: if you select a profile via `active_profile` in `~/.memsy/config.json` (rather than the `MEMSY_PROFILE` env var) **and** don't set `MEMSY_ACTOR_ID`, the hook assumes the `default` profile while the MCP uses your file's active profile — so writes and reads land under different actors. **Fix: set `MEMSY_ACTOR_ID` explicitly** — it pins both sides to the same value.
+> **Identity alignment.** Turn sync tags each event with the same `actor_id` that `memsy_search` reads, so captured memories surface in recall. The hook mirrors the MCP's **full** derivation ladder (`mcp/src/identity.ts`): `MEMSY_ACTOR_ID` env if set → the active profile's `actor_id` pinned in `~/.memsy/config.json` (this is what `/memsy:memsy-setup` writes) → `sha256("<profile>|<git-email>")` → `sha256("<profile>|<user>@<host>")`. The profile name resolves `MEMSY_PROFILE` env → the config file's `active_profile` → `default`, identically on both sides — so a profile selected via `active_profile` (not the env var) **and** a pinned `actor_id` both stay aligned with no extra setup. Edge case: if you have *no* git `user.email` configured at all, the OS-username fallback can differ between the Node MCP and the Python hook — set `MEMSY_ACTOR_ID` to pin both.
 
 ### First-run setup (onboarding)
 

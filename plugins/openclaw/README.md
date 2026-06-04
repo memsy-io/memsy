@@ -88,8 +88,15 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 |---|---|
 | `MEMSY_SESSION_AUTOCONTEXT=on` | Fetches recent memories at session start and injects them into the agent's first-turn context |
 | `MEMSY_SESSION_CONTEXT_LIMIT=N` | Number of memories to surface at session start (default 6, max 20) |
+| `MEMSY_PROACTIVE=on` | Watch the conversation for save-worthy content (decisions, preferences) and store without an explicit "remember that" |
+| `MEMSY_CONFIRM_STORE=on` | Ask before every store operation |
+| `MEMSY_ACTOR_ID=<id>` | Pin a stable `actor_id` (otherwise derived from `git config user.email`); takes top precedence |
+| `MEMSY_DEFAULT_ROLE_IDS=a,b` | Comma-separated default role IDs — search filters + single-default ingest attribution (also read from `~/.memsy/config.json`) |
+| `MEMSY_DEFAULT_TEAM_IDS=a,b` | Comma-separated default team IDs — same as roles |
 | `MEMSY_BASE_URL=https://...` | Override the Memsy API URL (self-hosted installations) |
 | `MEMSY_PROFILE=<name>` | Active profile name (informational — switch API keys by restarting with a new `MEMSY_API_KEY`) |
+
+> **Config file precedence.** A per-project `./.memsy/config.json` is used **exclusively** when present — it is *not* merged key-by-key with `~/.memsy/config.json` (this matches the MCP, so your `actor_id` stays aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
 
 ## Capabilities
 

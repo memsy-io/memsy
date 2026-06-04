@@ -31,7 +31,7 @@ Add Memsy to Codex CLI to persist decisions and context across sessions. The Mem
   <Step title="Set your API key">
     The installer **prompts for your key interactively** and saves it to `~/.memsy/config.json` (`chmod 600`). The MCP server reads it from that file on launch, so nothing else is needed — and the same file is shared with every other MCP host (Cursor, Cline, …).
 
-    Codex does not pass your shell environment to MCP servers, so a bare `export MEMSY_API_KEY=...` may not reach the server. If you'd rather configure it by hand, add it to the MCP env block in `~/.codex/config.toml` instead:
+    Codex launches MCP servers with a curated environment and does **not** pass your login shell's variables to them, so a bare `export MEMSY_API_KEY=...` will not reach the server — don't rely on it. If you'd rather configure it by hand, add it to the MCP env block in `~/.codex/config.toml` instead:
 
     ```toml
     [mcp_servers.memsy.env]
@@ -114,10 +114,12 @@ If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.j
 | Skills (SKILL.md) | ✓ |
 | AGENTS.md context injection | ✓ |
 | Multi-org / profiles | ✓ |
-| SessionStart auto-context hook | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`) |
-| Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
-| Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
+| SessionStart auto-context hook | ✓ † (`MEMSY_SESSION_AUTOCONTEXT=on`) |
+| Proactive store mode | ✓ † (`MEMSY_PROACTIVE=on`) |
+| Confirm-before-store mode | ✓ † (`MEMSY_CONFIRM_STORE=on`) |
 | First-run onboarding nudge | ✓ |
+
+† Toggled by env vars read in the **SessionStart hook** (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). They work provided your Codex build forwards the launching shell's environment to hook commands — the [hooks docs](https://developers.openai.com/codex/hooks) don't document shell-env inheritance, so treat it as assumed-pending-confirmation. Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` (see Set your API key above).
 
 ## Troubleshooting
 

@@ -73,7 +73,7 @@ Memsy runs as Hermes's native memory backend — no MCP subprocess, no `npx`:
 
 ## Native tools
 
-Four tools are injected directly into Hermes's tool registry:
+These tools are injected directly into Hermes's tool registry:
 
 | Tool | When Hermes uses it |
 |---|---|
@@ -99,6 +99,12 @@ And set your API key in `~/.hermes/.env`:
 ```
 MEMSY_API_KEY=msy_...
 ```
+
+The provider resolves the key in order: `MEMSY_API_KEY` env → `~/.hermes/memsy.json` → the shared `~/.memsy/config.json`. So a key you already configured in another host (Codex, Claude Code, Cursor) activates Hermes too, without re-entering it.
+
+<Info>
+  A per-project `./.memsy/config.json` is used **exclusively** when present — it is not merged key-by-key with `~/.memsy/config.json` (this matches the MCP, keeping your `actor_id` aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
+</Info>
 
 ## Hermes learning loop + Memsy
 

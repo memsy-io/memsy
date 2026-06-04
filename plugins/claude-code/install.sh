@@ -216,7 +216,7 @@ fi
 echo ""
 echo "Next steps:"
 echo "  1. Restart Claude Code so the plugin's MCP config (and your key) load."
-echo "  2. Run /memsy-doctor in Claude Code to verify."
+echo "  2. Run /memsy doctor (or /memsy:memsy-doctor) in Claude Code to verify."
 echo ""
 echo "Local-build mode (for iterating on @memsy-io/mcp itself):"
 echo "  ./install.sh --dev /path/to/memsy"

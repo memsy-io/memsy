@@ -81,28 +81,33 @@ function sharedDefaults(): SharedDefaults {
   if (_sharedDefaults) return _sharedDefaults;
   const global = readJson(join(homedir(), ".memsy", "config.json"));
   const project = readJson(join(process.cwd(), ".memsy", "config.json"));
+  // WHOLE-FILE precedence, identical to the MCP's findConfigFile
+  // (mcp/src/config.ts): a per-project ./.memsy/config.json is used EXCLUSIVELY
+  // when present; otherwise the per-user ~/.memsy/config.json. The two files are
+  // never merged key-by-key — a partial project file merged against the global
+  // could derive a different actor_id than the MCP, silently splitting writes
+  // from reads across surfaces. readJson returns null for a missing file, so
+  // `project ?? global` falls through correctly.
+  const cfg = project ?? global;
 
-  // Active profile: MEMSY_PROFILE env → global active_profile → "default".
+  // Active profile: MEMSY_PROFILE env → the chosen file's active_profile → "default".
   const envProfile = process.env.MEMSY_PROFILE?.trim();
-  const fileActive = typeof global?.active_profile === "string" ? (global.active_profile as string) : "";
+  const fileActive = typeof cfg?.active_profile === "string" ? (cfg.active_profile as string) : "";
   const profileName = envProfile || fileActive || "default";
 
-  const g = profileSlice(global, profileName);
-  const p = profileSlice(project, profileName);
-  const pick = <T>(...vals: T[]): T | undefined => vals.find((v) => v !== undefined);
+  const slc = profileSlice(cfg, profileName);
 
-  // Precedence for list defaults: project profile → global profile → env var.
+  // List defaults: the active file profile's value, else the env var.
   const envList = (name: string): string[] =>
     parseStringList((process.env[name] ?? "").split(",").map((s) => s.trim()).filter(Boolean));
   const resolveList = (snake: string, camel: string, env: string): string[] => {
-    const proj = parseStringList(p[snake] ?? p[camel]);
-    const glob = parseStringList(g[snake] ?? g[camel]);
-    return proj.length ? proj : glob.length ? glob : envList(env);
+    const fromFile = parseStringList(slc[snake] ?? slc[camel]);
+    return fromFile.length ? fromFile : envList(env);
   };
 
   _sharedDefaults = {
     profileName,
-    actorId: pick(p.actor_id, p.actorId, g.actor_id, g.actorId) as string | undefined,
+    actorId: (slc.actor_id ?? slc.actorId) as string | undefined,
     roleIds: resolveList("default_role_ids", "defaultRoleIds", "MEMSY_DEFAULT_ROLE_IDS"),
     teamIds: resolveList("default_team_ids", "defaultTeamIds", "MEMSY_DEFAULT_TEAM_IDS"),
   };
@@ -464,12 +469,17 @@ export default definePluginEntry({
       parameters: Type.Object({}),
       async execute(_toolCallId: string, _params: unknown) {
         const baseUrl = resolveBaseUrl(config);
+        // Report the profile actually in effect — env OR the config file's
+        // active_profile — not just the env var. The README's "wrong memories?"
+        // troubleshooting points users here, so it must reflect file-selected
+        // profiles too.
+        const profileName = sharedDefaults().profileName;
         const profiles = [
           {
-            profile_name: process.env.MEMSY_PROFILE ?? "default",
+            profile_name: profileName,
             active: true,
             base_url: baseUrl,
-            org_label: process.env.MEMSY_PROFILE ?? "Default",
+            org_label: profileName,
           },
         ];
         return {

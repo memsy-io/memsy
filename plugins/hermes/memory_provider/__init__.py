@@ -34,6 +34,51 @@ from agent.memory_provider import MemoryProvider
 logger = logging.getLogger(__name__)
 
 _DEFAULT_BASE_URL = "https://api.memsy.io/v1"
+# /ingest rejects events whose content exceeds this (HTTP 422). Truncate in
+# _event so every ingest path is capped, not just the turn-sync hook.
+_MAX_CONTENT_CHARS = 32_000
+
+
+def _any_persisted_api_key() -> str:
+    """Best-effort key probe for is_available(), which receives no hermes_home.
+    Returns a key if Memsy is configured via any persistence path initialize()
+    can read — the shared ~/.memsy/config.json (or a project ./.memsy/config.json)
+    or Hermes' own ~/.hermes/memsy.json — so the provider isn't silently disabled
+    when the key was persisted rather than exported as MEMSY_API_KEY. This is the
+    activation gate only ("is a key present?"); initialize() does the precise,
+    profile-scoped resolution. Intentionally permissive about which profile."""
+
+    def _load(path: str) -> dict | None:
+        try:
+            raw = json.loads(Path(path).read_text())
+            return raw if isinstance(raw, dict) else None
+        except Exception:
+            return None
+
+    def _key_in(cfg: dict | None) -> str:
+        if not isinstance(cfg, dict):
+            return ""
+        profs = cfg.get("profiles")
+        if isinstance(profs, dict):
+            for p in profs.values():
+                if isinstance(p, dict):
+                    v = p.get("api_key") or p.get("apiKey")
+                    if isinstance(v, str) and v:
+                        return v
+            return ""
+        v = cfg.get("api_key") or cfg.get("apiKey")  # legacy flat config
+        return v if isinstance(v, str) else ""
+
+    home = os.path.expanduser("~")
+    for path in (
+        os.path.join(os.getcwd(), ".memsy", "config.json"),
+        os.path.join(home, ".memsy", "config.json"),
+        os.path.join(home, ".hermes", "memsy.json"),
+    ):
+        key = _key_in(_load(path))
+        if key:
+            return key
+    return ""
 
 
 class MemsyMemoryProvider(MemoryProvider):
@@ -42,7 +87,10 @@ class MemsyMemoryProvider(MemoryProvider):
         return "memsy"
 
     def is_available(self) -> bool:
-        return bool(os.environ.get("MEMSY_API_KEY"))
+        # Env first (covers MEMSY_API_KEY and Hermes' ~/.hermes/.env which it
+        # loads into the environment); then any persisted key. See
+        # _any_persisted_api_key for why the env-only check was insufficient.
+        return bool(os.environ.get("MEMSY_API_KEY") or _any_persisted_api_key())
 
     def initialize(self, session_id: str, **kwargs: Any) -> None:
         # session_id is sent on every ingest event (required by /ingest). Hermes
@@ -73,6 +121,13 @@ class MemsyMemoryProvider(MemoryProvider):
         # write. So defaults set once in any host apply here too. Read-only:
         # Hermes never writes it (managing defaults is the MCP/dashboard's job).
         self._read_shared_defaults()
+
+        # Key precedence mirrors the MCP: MEMSY_API_KEY env → Hermes' own
+        # memsy.json → the shared ~/.memsy/config.json. Without this last source
+        # a user who configured Memsy in another host (Cursor/Codex) but never
+        # exported the env var would have a silently-disabled provider.
+        if not self._api_key:
+            self._api_key = self._config_api_key
 
         # actor_id MUST match what the MCP server derives (mcp/src/identity.ts:
         # resolveActorId), or memories written here land under a different actor
@@ -510,18 +565,25 @@ class MemsyMemoryProvider(MemoryProvider):
         home = os.path.expanduser("~")
         gcfg = _load(os.path.join(home, ".memsy", "config.json"))
         pcfg = _load(os.path.join(os.getcwd(), ".memsy", "config.json"))
+        # WHOLE-FILE precedence, identical to the MCP's findConfigFile
+        # (mcp/src/config.ts): a per-project ./.memsy/config.json is used
+        # EXCLUSIVELY when present; otherwise the per-user ~/.memsy/config.json.
+        # The two files are never merged key-by-key — merging let a partial
+        # project file derive a different actor_id than the MCP, silently
+        # splitting writes from reads across surfaces.
+        cfg = pcfg if pcfg is not None else gcfg
 
         env_profile = os.environ.get("MEMSY_PROFILE", "").strip()
-        file_active = gcfg.get("active_profile") if isinstance(gcfg, dict) else None
+        file_active = cfg.get("active_profile") if isinstance(cfg, dict) else None
         self._profile_name = env_profile or (
             file_active if isinstance(file_active, str) and file_active else "default"
         )
 
-        gslc, pslc = _slice(gcfg), _slice(pcfg)
+        slc = _slice(cfg)
 
-        # Precedence for list defaults: project profile → global profile → env var.
+        # List defaults: the active file profile's value, else the env var.
         def _resolve(snake: str, camel: str, env: str) -> list[str]:
-            return _list(pslc, snake, camel) or _list(gslc, snake, camel) or _env_list(env)
+            return _list(slc, snake, camel) or _env_list(env)
 
         self._default_role_ids = _resolve(
             "default_role_ids", "defaultRoleIds", "MEMSY_DEFAULT_ROLE_IDS"
@@ -529,13 +591,11 @@ class MemsyMemoryProvider(MemoryProvider):
         self._default_team_ids = _resolve(
             "default_team_ids", "defaultTeamIds", "MEMSY_DEFAULT_TEAM_IDS"
         )
-        self._config_actor_id = (
-            pslc.get("actor_id")
-            or pslc.get("actorId")
-            or gslc.get("actor_id")
-            or gslc.get("actorId")
-            or ""
-        )
+        self._config_actor_id = slc.get("actor_id") or slc.get("actorId") or ""
+        # The MCP reads the API key from this same shared config (config.ts).
+        # Capture it so initialize() can activate for users who saved their key
+        # via another MCP host / `memsy auth login` rather than MEMSY_API_KEY.
+        self._config_api_key = slc.get("api_key") or slc.get("apiKey") or ""
 
     def _event(self, kind: str, content: str) -> dict:
         """Build an ingest event with the identity fields /ingest requires, plus
@@ -544,7 +604,7 @@ class MemsyMemoryProvider(MemoryProvider):
         pick one to attribute)."""
         ev = {
             "kind": kind,
-            "content": content,
+            "content": content[:_MAX_CONTENT_CHARS],
             "actor_id": self._actor_id,
             "session_id": self._session_id,
         }

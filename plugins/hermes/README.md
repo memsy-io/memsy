@@ -89,9 +89,14 @@ MEMSY_API_KEY=msy_...
 
 | Variable | Effect |
 |---|---|
-| `MEMSY_API_KEY` | **Required.** Your `msy_...` key |
+| `MEMSY_API_KEY` | **Required** (unless saved in `~/.memsy/config.json` or `~/.hermes/memsy.json`). Your `msy_...` key |
 | `MEMSY_BASE_URL` | Override the API URL (self-hosted installations) |
 | `MEMSY_ACTOR_ID` | Pin a stable actor ID across machines |
+| `MEMSY_PROFILE` | Select a named profile from `~/.memsy/config.json` (also changes the derived `actor_id`) |
+| `MEMSY_DEFAULT_ROLE_IDS` | Comma-separated default role IDs — search filters + single-default ingest attribution |
+| `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team IDs — same as roles |
+
+> **Config file precedence.** A per-project `./.memsy/config.json` is used **exclusively** when present — it is *not* merged key-by-key with `~/.memsy/config.json` (this matches the MCP, so your `actor_id` stays aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
 
 ## Hermes + Memsy: complementary memory
 
