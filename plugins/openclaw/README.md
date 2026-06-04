@@ -34,29 +34,25 @@ cd memsy/plugins/openclaw
 
 Get a key from [app.memsy.io](https://app.memsy.io), then pick one of:
 
-**Persist in OpenClaw config (recommended):**
-```bash
-openclaw config set env.MEMSY_API_KEY "msy_..."
-```
-Writes the key to `~/.openclaw/openclaw.json`. Takes effect on next `openclaw start`.
-
-**Persist in `.env` file:**
+**Persist in `~/.openclaw/.env` (recommended):**
 ```bash
 echo "MEMSY_API_KEY=msy_..." >> ~/.openclaw/.env
 ```
-OpenClaw loads `~/.openclaw/.env` automatically on every start.
+OpenClaw loads `~/.openclaw/.env` into the environment on every start — the [official trusted source for provider credentials](https://docs.openclaw.ai/help/environment).
 
-**Session only (not persisted):**
+**Interactive / secrets manager (1Password, Bitwarden, Vault, …):**
+```bash
+openclaw secrets configure
+```
+OpenClaw's native interactive helper — walks you through a SecretRef so the key stays out of plaintext config entirely.
+
+**Session only (quick test, not persisted):**
 ```bash
 export MEMSY_API_KEY=msy_...
 openclaw start
 ```
 
-**Secrets manager (1Password, Bitwarden, Vault, etc.):**
-```bash
-openclaw secrets configure
-```
-Interactively configure a SecretRef — keeps the key out of plaintext config entirely.
+> Avoid `openclaw config set env.MEMSY_API_KEY` for the key — that stores it as **plaintext in `~/.openclaw/openclaw.json`** (agent-readable), and the config `env` block is non-overriding ("only if missing"). The docs recommend `.env` or a SecretRef for credentials.
 
 ## Plugin structure
 

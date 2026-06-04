@@ -48,11 +48,33 @@ echo "✓ Skills installed."
 echo ""
 echo "Memsy for OpenClaw installed."
 echo ""
-if [[ -z "${MEMSY_API_KEY:-}" ]]; then
-  echo "Set your API key before starting OpenClaw:"
-  echo "  export MEMSY_API_KEY=msy_..."
+# ── Interactive API key setup ─────────────────────────────────────────────────
+# OpenClaw loads ~/.openclaw/.env into the environment on every start (the docs'
+# recommended trusted source for credentials), and the plugin reads
+# MEMSY_API_KEY from there. Offer to append it. For a secrets manager (1Password,
+# Vault, …) point at OpenClaw's native `openclaw secrets configure`. Auto-skips
+# when the key is already set, already in .env, or in a non-interactive shell.
+ENV_FILE="${OPENCLAW_HOME}/.env"
+if [[ -n "${MEMSY_API_KEY:-}" ]]; then
+  echo "✓ MEMSY_API_KEY is set in your environment."
+  echo "  To persist it across restarts:  echo \"MEMSY_API_KEY=\$MEMSY_API_KEY\" >> ${ENV_FILE}"
+elif [[ -f "$ENV_FILE" ]] && grep -q '^MEMSY_API_KEY=' "$ENV_FILE" 2>/dev/null; then
+  echo "✓ MEMSY_API_KEY already set in ${ENV_FILE} — OpenClaw loads it on every start."
+elif [[ ! -t 0 ]]; then
+  echo "Set your Memsy API key (recommended):  echo 'MEMSY_API_KEY=msy_...' >> ${ENV_FILE}"
+  echo "Or run OpenClaw's interactive helper:  openclaw secrets configure"
 else
-  echo "✓ MEMSY_API_KEY is set."
+  printf "Enter your Memsy API key (msy_..., from https://app.memsy.io) to save it to %s, or press Enter to skip: " "$ENV_FILE"
+  read -r _key || _key=""
+  if [[ -n "${_key// /}" ]]; then
+    mkdir -p "${OPENCLAW_HOME}"
+    printf 'MEMSY_API_KEY=%s\n' "$_key" >> "$ENV_FILE"
+    chmod 600 "$ENV_FILE" 2>/dev/null || true
+    echo "✓ Appended MEMSY_API_KEY to ${ENV_FILE} — OpenClaw loads it on every start."
+  else
+    echo "  Skipped. Add it later:  echo 'MEMSY_API_KEY=msy_...' >> ${ENV_FILE}"
+    echo "  Or run the interactive helper (1Password / Vault / … via SecretRef):  openclaw secrets configure"
+  fi
 fi
 echo ""
 echo "Start OpenClaw:"

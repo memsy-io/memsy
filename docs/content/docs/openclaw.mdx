@@ -25,24 +25,22 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
   </Step>
 
   <Step title="Set your API key">
-    The recommended way persists the key across restarts:
+    Recommended — OpenClaw loads `~/.openclaw/.env` into the environment on every start (the official trusted source for provider credentials, and it survives daemon restarts):
 
     ```bash
-    openclaw config set env.MEMSY_API_KEY "msy_..."
-    ```
-
-    Alternatives:
-
-    ```bash
-    # .env file (survives daemon restarts)
     echo "MEMSY_API_KEY=msy_..." >> ~/.openclaw/.env
-
-    # Session only
-    export MEMSY_API_KEY=msy_...
     ```
+
+    Or use OpenClaw's native interactive secrets helper (1Password, Bitwarden, Vault, … via a SecretRef — keeps the key out of plaintext config):
+
+    ```bash
+    openclaw secrets configure
+    ```
+
+    Quick test (session only, not persisted): `export MEMSY_API_KEY=msy_...` then `openclaw start`.
 
     <Info>
-      `openclaw config set env.MEMSY_API_KEY` writes the key into `~/.openclaw/openclaw.json` and injects it at every gateway start. Use `~/.openclaw/.env` instead if you run OpenClaw as a systemd/LaunchAgent service.
+      Avoid `openclaw config set env.MEMSY_API_KEY` for the key — it stores plaintext in `~/.openclaw/openclaw.json` (agent-readable), and the config `env` block is non-overriding ("only if missing"). Prefer `.env` or a SecretRef.
     </Info>
   </Step>
 
