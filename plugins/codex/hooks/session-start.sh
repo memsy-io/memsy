@@ -145,8 +145,12 @@ if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}"; then
 fi
 
 LIMIT="${MEMSY_SESSION_CONTEXT_LIMIT:-6}"
-if ! [[ "$LIMIT" =~ ^[0-9]+$ ]] || (( 10#$LIMIT < 1 )) || (( 10#$LIMIT > 20 )); then
-  LIMIT=6
+if ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
+  LIMIT=6                      # non-numeric (typo, empty) → safe default
+elif (( 10#$LIMIT < 1 )); then
+  LIMIT=1                      # clamp up to the floor
+elif (( 10#$LIMIT > 20 )); then
+  LIMIT=20                     # clamp down to the ceiling (e.g. 25 → 20)
 else
   LIMIT="$((10#$LIMIT))"
 fi
