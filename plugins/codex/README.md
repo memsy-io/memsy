@@ -23,7 +23,7 @@ Long-term memory for [OpenAI Codex](https://developers.openai.com/codex). Decisi
 
 ```bash
 codex plugin marketplace add memsy-io/memsy
-codex plugin install memsy
+codex plugin add memsy@memsy
 ```
 
 Or run the convenience script:
