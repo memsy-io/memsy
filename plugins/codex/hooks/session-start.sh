@@ -130,7 +130,10 @@ Workflow per save-worthy item:
      Otherwise store directly — proactive mode is the user pre-authorizing.
 
   3. Call memsy_ingest with ONE event:
-       kind:     "user_message"
+       kind:     match the speaker the substance came FROM —
+                 "assistant_message" if it's something you (the assistant)
+                 produced or concluded; "user_message" if it's something the
+                 user stated. (Do NOT default everything to user_message.)
        content:  the substance (standalone, no framing)
        ts:       current ISO 8601
        metadata: JSON.stringify({source:"codex-proactive",safe_to_delete:true})

@@ -50,8 +50,11 @@ plugins/codex/
 ├── .codex-plugin/plugin.json   # plugin manifest
 ├── .mcp.json                   # registers @memsy-io/mcp
 ├── hooks/
-│   ├── hooks.json              # SessionStart hook
-│   └── session-start.sh        # auto-context + mode injection
+│   ├── hooks.json              # SessionStart + UserPromptSubmit + Stop hooks
+│   ├── session-start.sh        # auto-context + mode injection + onboarding nudge
+│   ├── user-prompt-submit.sh   # turn-sync: stash the user prompt
+│   ├── stop.sh                 # turn-sync: POST the completed turn
+│   └── turn_sync.py            # shared turn-sync impl (capture / sync)
 └── skills/
     ├── memsy-recall/SKILL.md
     └── memsy-remember/SKILL.md
@@ -75,9 +78,12 @@ Set these as environment variables before starting Codex (e.g. `export MEMSY_SES
 | Variable | Effect |
 |---|---|
 | `MEMSY_SESSION_AUTOCONTEXT=on` | Calls `memsy_list_memories` at session start and injects recent memories as context |
-| `MEMSY_PROACTIVE=on` | Watches conversation for save-worthy content (decisions, preferences, learnings) and stores proactively |
+| `MEMSY_TURN_SYNC=on` | Captures **every** completed turn — POSTs the user message + assistant reply to `/ingest` (the `UserPromptSubmit` + `Stop` hooks). The backend extraction decides what becomes a durable memory. This is the "store everything" mode (like the Hermes provider); `MEMSY_PROACTIVE` is the lighter "store only the important ones" mode. |
+| `MEMSY_PROACTIVE=on` | Watches conversation for save-worthy content (decisions, preferences, learnings) and stores **only those**, with the correct `user_message`/`assistant_message` label for whoever produced the substance |
 | `MEMSY_CONFIRM_STORE=on` | Asks for confirmation before any store operation |
 | `MEMSY_SESSION_CONTEXT_LIMIT=N` | Number of memories to surface at session start (default 6, max 20) |
+
+> **Turn-sync vs proactive.** `MEMSY_TURN_SYNC` stores *every* turn; `MEMSY_PROACTIVE` stores *only the important ones* automatically; with both off, only explicit "remember that …" is stored. If you enable **both**, the important assistant content is captured twice (once verbatim by turn-sync, once as extracted substance by proactive) — usually fine since the backend de-noises, but proactive's real value is when turn-sync is **off**. Turn-sync hooks run **synchronously** (Codex doesn't support async hooks yet), so the POST is best-effort with a short timeout; failures are logged to `~/.memsy/turn-sync.log` and never block your turn.
 
 > Hooks are reviewed and trusted once by the user on first run — this is a Codex security feature for plugin-bundled hooks.
 
@@ -91,6 +97,7 @@ Set these as environment variables before starting Codex (e.g. `export MEMSY_SES
 | Store (memsy_ingest) | ✓ |
 | Skills (SKILL.md) | ✓ |
 | SessionStart auto-context hook | ✓ |
+| Turn-sync (store every turn) | ✓ (`MEMSY_TURN_SYNC=on` — `UserPromptSubmit` + `Stop` hooks) |
 | Proactive store mode | ✓ |
 | Confirm-before-store mode | ✓ |
 | Multi-org / profiles | ✓ |

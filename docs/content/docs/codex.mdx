@@ -115,11 +115,14 @@ If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.j
 | AGENTS.md context injection | ✓ |
 | Multi-org / profiles | ✓ |
 | SessionStart auto-context hook | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`) |
+| Turn-sync — store every turn | ✓ (`MEMSY_TURN_SYNC=on` — `UserPromptSubmit` + `Stop` hooks) |
 | Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
 | Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
 | First-run onboarding nudge | ✓ |
 
-These modes are toggled by env vars read in the **SessionStart hook** (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). Verified on Codex v0.137: Codex forwards your shell environment to hook commands, and the hook emits its context using the JSON envelope Codex requires (`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`). Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` — the MCP server gets a curated env (see Set your API key above).
+These modes are toggled by env vars read in the hooks (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). Verified on Codex v0.137: Codex forwards your shell environment to hook commands, and SessionStart emits its context using the JSON envelope Codex requires (`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`). Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` — the MCP server gets a curated env (see Set your API key above).
+
+**Storage tiers.** `MEMSY_TURN_SYNC=on` stores **every** turn — the `UserPromptSubmit` hook captures your prompt and the `Stop` hook pairs it with the assistant reply, POSTing both to `/ingest` (correct `user_message` / `assistant_message` labels; the backend extraction decides what becomes a durable memory). `MEMSY_PROACTIVE=on` is the lighter tier — it stores **only** the save-worthy substance automatically. With both off, only an explicit "remember that …" is stored. Turn-sync hooks run **synchronously** (Codex doesn't support async hooks yet), so the POST is best-effort with a short timeout; failures log to `~/.memsy/turn-sync.log` and never block your turn.
 
 ## Troubleshooting
 
