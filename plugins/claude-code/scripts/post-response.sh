@@ -27,7 +27,47 @@ is_truthy() {
 
 is_truthy "${MEMSY_TURN_SYNC:-}" || exit 0
 
+# Resolve API key + base URL. Env wins (Claude Code passes the launching shell's
+# env to hooks, so an exported key works); otherwise fall back to
+# ~/.memsy/config.json's active profile — users who ran install.sh have the key
+# ONLY there, and the MCP reads it from there, so turn-sync must too or it
+# silently bails when the key isn't exported. Whole-file precedence + profile
+# resolution mirror mcp/src/config.ts and the codex turn_sync.py.
 MEMSY_API_KEY="${MEMSY_API_KEY:-}"
+MEMSY_BASE_URL="${MEMSY_BASE_URL:-}"
+if [[ -z "$MEMSY_API_KEY" ]] && command -v python3 >/dev/null 2>&1; then
+  eval "$(python3 - <<'PY' 2>/dev/null
+import json, os, shlex
+base = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+key = bu = ""
+for path in (os.path.join(base, ".memsy", "config.json"),
+             os.path.expanduser("~/.memsy/config.json")):
+    if not os.path.isfile(path):
+        continue
+    try:
+        raw = json.load(open(path))
+    except Exception:
+        break
+    if not isinstance(raw, dict):
+        break
+    profs = raw.get("profiles")
+    if profs is None and (raw.get("api_key") or raw.get("apiKey")):
+        profs = {"default": raw}
+    active = (os.environ.get("MEMSY_PROFILE", "").strip()
+              or (raw.get("active_profile") if isinstance(raw.get("active_profile"), str) else "")
+              or "default")
+    prof = profs.get(active) if isinstance(profs, dict) else {}
+    prof = prof if isinstance(prof, dict) else {}
+    key = str(prof.get("api_key") or prof.get("apiKey") or "").strip()
+    bu = str(prof.get("base_url") or prof.get("baseUrl") or "").strip()
+    break  # whole-file: first existing config wins (project overrides user)
+print("_CFG_KEY=" + shlex.quote(key))
+print("_CFG_BU=" + shlex.quote(bu))
+PY
+)"
+  MEMSY_API_KEY="${_CFG_KEY:-}"
+  [[ -z "$MEMSY_BASE_URL" ]] && MEMSY_BASE_URL="${_CFG_BU:-}"
+fi
 MEMSY_BASE_URL="${MEMSY_BASE_URL:-https://api.memsy.io/v1}"
 
 [[ -z "$MEMSY_API_KEY" ]] && exit 0
