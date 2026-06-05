@@ -35,7 +35,7 @@ If you're iterating on the MCP server itself (`memsy/mcp/`), point the plugin at
 ```sh
 # 1. Build the MCP
 cd /path/to/memsy/mcp
-npm run build
+npm install && npm run build
 
 # 2. Rewrite the plugin's .mcp.json to use the local build
 cd /path/to/memsy/plugins/claude-code
@@ -160,7 +160,7 @@ These are exposed by the `@memsy-io/mcp` server itself, so they work in any MCP 
 | `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
 | `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
 | `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the SessionStart hook surfaces. Default: `6`, clamped 1–20. |
-| `MEMSY_TURN_SYNC` | `on` to auto-capture every user+assistant turn via the `Stop` hook (POSTs to `/ingest` over HTTPS). Default: `off`. **Set `MEMSY_ACTOR_ID` alongside it** if you use a `~/.memsy/config.json` `active_profile`, so captured memories surface in recall (see Turn sync above). Accepts `on`/`true`/`1`/`yes`/`enabled`. |
+| `MEMSY_TURN_SYNC` | `on` to auto-capture every user+assistant turn via the `Stop` hook (POSTs to `/ingest` over HTTPS). Default: `off`. The hook reads the active profile's `active_profile` + pinned `actor_id` from `~/.memsy/config.json`, so captured memories stay aligned with recall automatically — no need to set `MEMSY_ACTOR_ID` (except the no-git-email edge case; see Turn sync above). Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_CONFIRM_STORE` | `on` to require confirmation before every single-item memory store (`/memsy:memsy-remember`, the `memsy-remember` auto-fire skill, and the `/memsy remember` smart-router branch). Default: `off` (stores directly — deliberate slash invocation implies intent). Bulk operations (`/memsy:memsy-checkpoint`, `/memsy:memsy-index`) always confirm regardless. Accepts truthy variants: `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_PROACTIVE` | `on` to make Claude actively watch the conversation for save-worthy content — preferences, intents, plans, decisions, learnings — and store them via `memsy_ingest` **without** requiring explicit save verbs like "remember that". This is the equivalent of running `/memsy:proactive-mode` once per session, but turned into the default behavior. Combine with `MEMSY_CONFIRM_STORE=on` to get "watch + ask before storing each one." Default: `off` (conservative — only explicit save verbs / slash invocations / `/memsy-checkpoint` save). Accepts the same truthy variants. |
 

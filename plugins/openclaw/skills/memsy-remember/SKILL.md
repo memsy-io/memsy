@@ -26,7 +26,7 @@ Strip the leading verb / framing (`remember that`, `save this`, `note that`, `le
 
 ## 3. Confirm-before-store (if enabled)
 
-If your session context contains the line `[memsy modes: ... confirm-before-store ...]` (emitted by the SessionStart hook when `MEMSY_CONFIRM_STORE=on`), surface the proposed content and ask before calling the tool:
+If your session context contains the line `[memsy modes: ... confirm-before-store ...]` (emitted by the plugin's prompt-contribution hook when `MEMSY_CONFIRM_STORE=on`), surface the proposed content and ask before calling the tool:
 
 ```
 Memsy will store:

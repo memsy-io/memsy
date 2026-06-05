@@ -7,7 +7,7 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 22+
 - [OpenClaw](https://openclaw.ai) gateway running
 - Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
 
@@ -21,7 +21,7 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
     ./install.sh
     ```
 
-    The installer merges `mcpServers.memsy` into `~/.openclaw/openclaw.json` and copies two skills to `~/.openclaw/workspace/skills/`.
+    The installer builds the plugin from source, registers it via `openclaw plugins install` (into `~/.openclaw/extensions/`), copies its manifest, and installs the two skills globally via `openclaw skills install --global`. This is a native OpenClaw plugin — it registers its tools in-process and calls the Memsy API over HTTPS directly (no MCP subprocess).
   </Step>
 
   <Step title="Set your API key">
@@ -53,36 +53,31 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
   </Step>
 </Steps>
 
-## Manual config
+## Manual install
 
-Add to `~/.openclaw/openclaw.json`:
+If you prefer not to use `install.sh`, build and register the plugin by hand from the cloned repo:
 
-```json
-{
-  "mcpServers": {
-    "memsy": {
-      "command": "npx",
-      "args": ["-y", "@memsy-io/mcp"],
-      "env": {
-        "MEMSY_API_KEY": "msy_..."
-      }
-    }
-  }
-}
+```bash
+cd memsy/plugins/openclaw
+npm install && npm run build
+openclaw plugins install --force ./dist/index.js
+cp ./openclaw.plugin.json ~/.openclaw/extensions/
+openclaw skills install --global --force --as memsy-recall   ./skills/memsy-recall
+openclaw skills install --global --force --as memsy-remember ./skills/memsy-remember
 ```
 
-Restart OpenClaw after editing the config.
+Then add your key to `~/.openclaw/.env` (above) and restart OpenClaw.
 
 ## Skills
 
-Two skills install to `~/.openclaw/workspace/skills/`:
+Two skills install globally via `openclaw skills install --global` (you can override them from a workspace `./skills/` directory):
 
 | Skill | Trigger phrases |
 |---|---|
 | `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" |
 | `memsy-remember` | "remember that", "save this decision", "note that", "for future reference" |
 
-Skills are available to your agent alongside MCP tools across every connected channel. Memory stored from one channel is searchable from any other.
+Skills are available to your agent alongside the plugin's native tools across every connected channel. Memory stored from one channel is searchable from any other.
 
 ## Multi-org
 
@@ -112,17 +107,20 @@ Configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org
 
 ## Troubleshooting
 
-### MCP shows "disconnected"
+### Plugin not loading / tools missing
 
-Run the server directly to see the error:
+Check the plugin loaded and inspect runtime errors:
 
 ```bash
-MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp
+openclaw plugins list                      # is "memsy" installed + enabled?
+openclaw plugins inspect memsy --runtime   # load errors, if any
 ```
+
+If tools error, the most common cause is a missing API key — confirm `MEMSY_API_KEY` is in `~/.openclaw/.env`.
 
 ### Skills not triggering
 
-Confirm `~/.openclaw/workspace/skills/memsy-recall/SKILL.md` exists. Re-run `./install.sh`.
+Run `openclaw skills list` to verify `memsy-recall` / `memsy-remember` are installed. Re-run `./install.sh` if missing.
 
 ### Wrong memories returned
 

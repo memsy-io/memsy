@@ -70,6 +70,7 @@ Memsy runs as Hermes's native memory backend — no MCP subprocess, no `npx`:
 | `sync_turn` | After each turn | Persists user + assistant content to Memsy in a background thread |
 | `on_pre_compress` | Before context compression | Saves a snapshot of the conversation before Hermes discards older context |
 | `on_memory_write` | When Hermes writes a built-in memory | Mirrors the write to Memsy for cross-agent access |
+| `on_session_end` | At session end | Waits for pending background sync to flush before exit |
 
 ## Native tools
 

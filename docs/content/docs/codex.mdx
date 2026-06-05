@@ -20,12 +20,6 @@ Add Memsy to Codex CLI to persist decisions and context across sessions. The Mem
     cd memsy/plugins/codex
     ./install.sh
     ```
-
-    Add `--project` to also append Memsy instructions to the current project's `AGENTS.md`:
-
-    ```bash
-    ./install.sh --project
-    ```
   </Step>
 
   <Step title="Set your API key">
@@ -82,16 +76,6 @@ The installer copies two skills to `~/.codex/skills/`:
 
 Invoke via `/skills` in the Codex CLI, or type `$memsy-recall` to mention a skill inline.
 
-## AGENTS.md (recommended)
-
-`AGENTS.md.snippet` (in `plugins/codex/`) gives Codex proactive instructions — search Memsy at session start and store decisions automatically. Append it to your project root:
-
-```bash
-cat plugins/codex/AGENTS.md.snippet >> AGENTS.md
-```
-
-Codex reads `AGENTS.md` automatically at the start of every session in that directory.
-
 ## First-run setup
 
 On your first session with no default roles/teams configured, the SessionStart hook emits a **one-time** nudge offering to set them up. It self-suppresses (writes `~/.memsy/.onboard-nudged` after the first show) and stays silent once any defaults exist or `MEMSY_DEFAULT_ROLE_IDS`/`MEMSY_DEFAULT_TEAM_IDS` is set — the check is purely local, no network on session start.
@@ -112,9 +96,8 @@ If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.j
 | Recall (memsy_search) | ✓ |
 | Store (memsy_ingest) | ✓ |
 | Skills (SKILL.md) | ✓ |
-| AGENTS.md context injection | ✓ |
 | Multi-org / profiles | ✓ |
-| SessionStart auto-context hook | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`) |
+| SessionStart auto-context hook | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`, `MEMSY_SESSION_CONTEXT_LIMIT` default 6 / max 20) |
 | Turn-sync — store every turn | ✓ (`MEMSY_TURN_SYNC=on` — `UserPromptSubmit` + `Stop` hooks) |
 | Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
 | Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |

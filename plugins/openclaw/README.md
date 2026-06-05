@@ -90,11 +90,11 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 | `MEMSY_SESSION_CONTEXT_LIMIT=N` | Number of memories to surface at session start (default 6, max 20) |
 | `MEMSY_PROACTIVE=on` | Watch the conversation for save-worthy content (decisions, preferences) and store without an explicit "remember that" |
 | `MEMSY_CONFIRM_STORE=on` | Ask before every store operation |
-| `MEMSY_ACTOR_ID=<id>` | Pin a stable `actor_id` (otherwise derived from `git config user.email`); takes top precedence |
+| `MEMSY_ACTOR_ID=<id>` | Pin a stable `actor_id` (top precedence). Otherwise resolved as: config-file `actor_id` → `sha256("<profile>\|<git-email>")` → `sha256("<profile>\|<user>@<host>")` |
 | `MEMSY_DEFAULT_ROLE_IDS=a,b` | Comma-separated default role IDs — search filters + single-default ingest attribution (also read from `~/.memsy/config.json`) |
 | `MEMSY_DEFAULT_TEAM_IDS=a,b` | Comma-separated default team IDs — same as roles |
 | `MEMSY_BASE_URL=https://...` | Override the Memsy API URL (self-hosted installations) |
-| `MEMSY_PROFILE=<name>` | Active profile name (informational — switch API keys by restarting with a new `MEMSY_API_KEY`) |
+| `MEMSY_PROFILE=<name>` | Selects which profile slice to load from `~/.memsy/config.json` (defaults, `actor_id`) and is a component of the derived `actor_id` — not merely informational. Switch API keys by restarting with a new `MEMSY_API_KEY` or a different active profile. |
 
 > **Config file precedence.** A per-project `./.memsy/config.json` is used **exclusively** when present — it is *not* merged key-by-key with `~/.memsy/config.json` (this matches the MCP, so your `actor_id` stays aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
 
@@ -119,7 +119,7 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 **Skills not triggering** — Run `openclaw skills list` to verify the skills are installed.
 
-**API key error** — Run `openclaw config set env.MEMSY_API_KEY "msy_..."` to persist the key, then restart. If running as a daemon/service, set it via `~/.openclaw/.env` so it survives restarts without relying on shell env.
+**API key error** — Persist the key in `~/.openclaw/.env` (`echo 'MEMSY_API_KEY=msy_...' >> ~/.openclaw/.env`) so it survives restarts, then restart. Or run `openclaw secrets configure` for a SecretRef. Avoid `openclaw config set env.MEMSY_API_KEY` — it stores the key as plaintext in `~/.openclaw/openclaw.json` (see the API-key note above).
 
 **Wrong memories returned** — Ask your agent to call `memsy_list_orgs` and verify the active profile, then `memsy_health` to confirm connectivity.
 
