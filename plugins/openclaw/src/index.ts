@@ -260,10 +260,14 @@ const PROACTIVE_INSTRUCTION_BASE =
   `  - Constraints: "X doesn't work because Y", "we can't do Z"\n` +
   `  - Learnings: "turns out X", "the trick is Y", "found that Z"\n\n` +
   `Pre-flight: skip if <20 chars; skip secret-shaped tokens (msy_/sk_/ghp_/Bearer); skip duplicates.\n` +
-  `Call memsy_ingest: kind="user_message", content=<substance>, ts=<ISO 8601>, ` +
-  `metadata={"source":"openclaw-proactive","safe_to_delete":true}\n` +
+  `Call memsy_ingest: content=<substance>, ts=<ISO 8601>, ` +
+  `metadata={"source":"openclaw-proactive","safe_to_delete":true}, and kind matching the speaker the ` +
+  `substance came FROM — "assistant_message" if it's something you produced or concluded, "user_message" ` +
+  `if the user stated it (do NOT default everything to user_message).\n` +
   `Acknowledge after the primary answer: → saved to Memsy: "<first 60 chars>..." (event <id>)\n` +
-  `Hard rule: save things useful 3+ months from now. Do NOT ask permission every turn.`;
+  `Hard rules: save things useful 3+ months from now; do NOT ask permission every turn; ` +
+  `do NOT save the user's questions — if the user is asking rather than asserting, skip the turn, and ` +
+  `never rephrase a question into a pseudo-statement just to store something.`;
 
 const PROACTIVE_CONFIRM_NOTE =
   `\n  confirm-before-store is also active — ask Save? (y / n / edit "...") before each ingest.`;

@@ -44,7 +44,7 @@ If the mode line isn't in context (default), skip this step — the auto-fire tr
 ## 4. Call memsy_ingest
 
 A single event:
-- `kind`: `"user_message"`
+- `kind`: match the speaker the substance came from — `"user_message"` when the user is asserting it (the usual case, e.g. "remember that I prefer X"); `"assistant_message"` when they're asking you to save something you (the assistant) produced or concluded. Don't blindly use `user_message`.
 - `content`: the substantive text from step 1 (verbatim)
 - `ts`: current ISO 8601 timestamp
 

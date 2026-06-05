@@ -151,7 +151,10 @@ Workflow per save-worthy item:
      proactive mode is the user pre-authorizing the saves.
 
   3. Call memsy_ingest with ONE event:
-       kind:     "user_message"
+       kind:     match the speaker the substance came FROM —
+                 "assistant_message" if it's something you (the assistant)
+                 produced or concluded; "user_message" if it's something the
+                 user stated. (Do NOT default everything to user_message.)
        content:  the substance (standalone, no framing)
        ts:       current ISO 8601
        metadata: JSON.stringify({source:"claude-code-proactive",
@@ -174,8 +177,11 @@ Hard rules:
     you save (with the confirm-before-store check if enabled) or you
     don't. Asking each time is worse UX than either pure mode.
   - Do NOT save the user's question itself when they ask you something.
-    Save substantive content they assert as theirs ("I want X") —
-    not their queries ("how do I X?").
+    If the user is ASKING rather than ASSERTING, there is nothing to save —
+    skip the turn. Never rephrase a question into a pseudo-statement (e.g.
+    "the user is exploring X") just to have something to store; that is still
+    saving the question. Save substantive content they assert as theirs
+    ("I want X") — not their queries ("how do I X?").
 
 To disable: unset MEMSY_PROACTIVE in your shell and restart Claude Code.
 

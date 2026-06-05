@@ -61,7 +61,7 @@ If `memsy_health` errored, hand off to the `memsy-setup` skill instead.
    - too short (<20 chars) → ask user to expand.
    - contains a secret-shaped token (`msy_`, `sk_`, `ghp_`, `Bearer `, etc.) → **refuse**. Say: "That looks like it contains a secret — Memsy stores in plain text. Paraphrase without it, or use a real secret manager."
 3. **Confirm-before-store mode**: if your session context contains `[memsy modes: ... confirm-before-store ...]`, surface the stripped content and ask `Save? (y / n / edit "<new text>")`. Proceed only on `y` or `edit`. On `n`, say "Not stored." and stop. If the mode line isn't in context, skip this step (user invoked `/memsy` explicitly — that's deliberate enough on its own).
-4. Call `memsy_ingest` with one event: `kind="user_message"`, `content=<stripped substance>`, `ts=<current ISO 8601>`.
+4. Call `memsy_ingest` with one event: `content=<stripped substance>`, `ts=<current ISO 8601>`, and `kind` matching the speaker the substance came from — `"user_message"` when the user is asserting it (the usual case), `"assistant_message"` when they're asking you to save something you produced. Don't blindly use `user_message`.
 5. Confirm: `✓ Stored: <first 80 chars>...` plus event_id (first 8 chars).
 
 ### `SWITCH`
@@ -149,10 +149,10 @@ Lets the user toggle Memsy behavior flags from chat without setting env vars + r
 
    1. Pre-flight: skip if < 20 chars, skip if secret-shaped token (`msy_`/`sk_`/`ghp_`/`Bearer`), skip if already stored this session.
    2. If confirm-before-store is also active, ask `Save? (y / n / edit "...")` first. Otherwise store directly — proactive mode is pre-authorization.
-   3. Call `memsy_ingest`: `kind="user_message"`, `content=<substance>`, `ts=<ISO 8601>`, `metadata={"source":"claude-code-proactive","safe_to_delete":true}`.
+   3. Call `memsy_ingest`: `content=<substance>`, `ts=<ISO 8601>`, `metadata={"source":"claude-code-proactive","safe_to_delete":true}`, and `kind` matching the speaker the substance came from — `"assistant_message"` if it's something you produced or concluded, `"user_message"` if the user stated it. Do NOT default everything to `user_message`.
    4. Acknowledge after the primary answer: `→ saved to Memsy: "<first 60 chars>..." (event <id>)`
 
-   Hard rules: do NOT save every sentence — only things useful 3+ months from now. Do NOT ask "should I remember this?" on every turn. Do NOT save the user's questions, only their assertions. The save always comes AFTER the primary answer, never interrupting.
+   Hard rules: do NOT save every sentence — only things useful 3+ months from now. Do NOT ask "should I remember this?" on every turn. Do NOT save the user's questions — if the user is ASKING rather than ASSERTING, skip the turn; never rephrase a question into a pseudo-statement ("the user is exploring X") just to store something. The save always comes AFTER the primary answer, never interrupting.
    ---
 
    After emitting the block above, immediately apply it to the user's CURRENT message. Scan back through the user's most recent message and any recent context for save-worthy content you may have missed. If you find qualifying content, store it now and acknowledge.
