@@ -144,7 +144,13 @@ Workflow per save-worthy item:
 Hard rules:
   - Save things useful 3+ months from now. Ephemeral context is noise.
   - Do NOT ask "do you want me to remember that?" every turn.
-  - Do NOT save the user's questions — save what they assert as theirs.
+  - Do NOT save the user's questions. If the user is ASKING rather than
+    ASSERTING, there is nothing to save — skip the turn. Never rephrase a
+    question into a pseudo-statement (e.g. "the user is exploring X") just to
+    have something to store; that is still saving the question.
+  - Only store a genuine assertion (a preference / intent / decision /
+    constraint / learning) the user actually stated, or a concrete conclusion
+    YOU reached. When in doubt, don't store.
 
 To disable: unset MEMSY_PROACTIVE and restart Codex.
 
