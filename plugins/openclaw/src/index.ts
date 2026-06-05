@@ -20,10 +20,17 @@ interface PluginConfig {
 }
 
 function resolveApiKey(config: PluginConfig): string {
-  const key = config.apiKey ?? process.env.MEMSY_API_KEY;
+  // Precedence: plugin config → MEMSY_API_KEY env (incl. ~/.openclaw/.env) →
+  // the active profile's api_key in ~/.memsy/config.json. The last fallback
+  // keeps OpenClaw consistent with the other hosts + the MCP: a key configured
+  // once in the shared config (via `memsy auth login` or another host's
+  // install) works here too — the plugin already reads that file for
+  // actor_id/defaults, so it must honor the key there as well.
+  const key = config.apiKey ?? process.env.MEMSY_API_KEY ?? sharedDefaults().apiKey;
   if (!key) {
     throw new Error(
-      "Memsy API key not configured. Set MEMSY_API_KEY or add apiKey to the plugin config."
+      "Memsy API key not configured. Set MEMSY_API_KEY (e.g. in ~/.openclaw/.env), " +
+        "add apiKey to the plugin config, or save it to ~/.memsy/config.json."
     );
   }
   return key;
@@ -50,6 +57,7 @@ function authHeaders(apiKey: string): Record<string, string> {
 interface SharedDefaults {
   profileName: string;
   actorId?: string;
+  apiKey?: string;
   roleIds: string[];
   teamIds: string[];
 }
@@ -108,6 +116,7 @@ function sharedDefaults(): SharedDefaults {
   _sharedDefaults = {
     profileName,
     actorId: (slc.actor_id ?? slc.actorId) as string | undefined,
+    apiKey: (slc.api_key ?? slc.apiKey) as string | undefined,
     roleIds: resolveList("default_role_ids", "defaultRoleIds", "MEMSY_DEFAULT_ROLE_IDS"),
     teamIds: resolveList("default_team_ids", "defaultTeamIds", "MEMSY_DEFAULT_TEAM_IDS"),
   };
