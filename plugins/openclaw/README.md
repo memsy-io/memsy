@@ -52,6 +52,8 @@ export MEMSY_API_KEY=msy_...
 openclaw start
 ```
 
+**Already configured Memsy elsewhere?** If your key is in the shared `~/.memsy/config.json` (from `memsy auth login` or another host's installer), OpenClaw uses it automatically — no extra step. Precedence: plugin config → `MEMSY_API_KEY` env → `~/.memsy/config.json` active profile.
+
 > Avoid `openclaw config set env.MEMSY_API_KEY` for the key — that stores it as **plaintext in `~/.openclaw/openclaw.json`** (agent-readable), and the config `env` block is non-overriding ("only if missing"). The docs recommend `.env` or a SecretRef for credentials.
 
 ## Plugin structure

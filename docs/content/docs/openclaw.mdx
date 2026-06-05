@@ -39,6 +39,8 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
 
     Quick test (session only, not persisted): `export MEMSY_API_KEY=msy_...` then `openclaw start`.
 
+    Already configured Memsy in another host? If your key is in the shared `~/.memsy/config.json` (from `memsy auth login` or another installer), OpenClaw uses it automatically. Precedence: plugin config → `MEMSY_API_KEY` env → `~/.memsy/config.json` active profile.
+
     <Info>
       Avoid `openclaw config set env.MEMSY_API_KEY` for the key — it stores plaintext in `~/.openclaw/openclaw.json` (agent-readable), and the config `env` block is non-overriding ("only if missing"). Prefer `.env` or a SecretRef.
     </Info>
