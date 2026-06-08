@@ -1,6 +1,6 @@
 {
   "name": "@memsy-io/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Memsy MCP server - Drop-in memory infrastructure that learns at the role, team, and org level — so your AI app gets smarter as more agents and humans use it.",
   "type": "module",
   "bin": {
