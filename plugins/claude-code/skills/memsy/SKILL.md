@@ -82,7 +82,7 @@ First decide the **scope** from the user's text after `list` / `show` / `browse`
 Then:
 
 1. **Default (current actor):** read `memsy://actor/current` to get the active `actor_id`, then call `memsy_list_memories` with that `actor_id` and `limit=20`. Head the output with: `Memories for actor <actor_id> — use "/memsy list all" for every actor`. If the resource read fails, fall back to the org-wide call and say so.
-2. **Org-wide:** call `memsy_list_memories` with `limit=20` and **no** `actor_id`. Head the output with: `All memories (every actor)`.
+2. **Org-wide:** call `memsy_list_memories` with `limit=20` and `all_actors=true` (no `actor_id`). Head the output with: `All memories (every actor)`.
 3. Show as a numbered list: text (truncated to 100 chars), kind, observed_at.
 4. Suggest: "Use `/memsy <query>` to search a specific topic."
 
