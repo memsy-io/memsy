@@ -66,6 +66,27 @@ To switch back to the published npm version:
 ./install.sh --prod
 ```
 
+## Releasing (maintainers)
+
+This plugin uses explicit [semantic versioning](https://semver.org). Claude Code keys plugin updates off the `version` field, so **users only receive changes after you bump it** — pushing commits alone is not enough (`/plugin update` reports "already at the latest version" until the number changes).
+
+To cut a release:
+
+1. **Bump the version** — `scripts/release.sh` updates `.claude-plugin/plugin.json` and the marketplace entry in lockstep:
+   ```sh
+   ./scripts/release.sh patch     # bug fixes      0.1.0 → 0.1.1
+   ./scripts/release.sh minor     # new features   0.1.0 → 0.2.0
+   ./scripts/release.sh major     # breaking       0.1.0 → 1.0.0
+   ./scripts/release.sh 1.4.2     # or an explicit version
+   ./scripts/release.sh patch --commit   # also stage + commit the bump
+   ```
+2. **Update `CHANGELOG.md`** — move the `Unreleased` notes under the new version heading.
+3. **Commit and push to `main`.** The plugin source is served from the default branch, so changes reach users only once they land on `main`.
+
+Users then pull the release with `claude plugin update memsy@memsy` (see [Updating](#updating)).
+
+> **The version must change for an update to be delivered.** If instead you want every commit to ship automatically, omit `version` from both the manifest and the marketplace entry — Claude Code then uses the git commit SHA as the version. Explicit semver is recommended for a published plugin.
+
 ## Slash commands
 
 ### `/memsy <anything>` — universal entry point (smart router)

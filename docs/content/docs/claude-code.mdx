@@ -46,6 +46,19 @@ claude plugin install memsy@memsy
 </Step>
 </Steps>
 
+## Updating
+
+When a new version is published, update from the CLI or inside Claude Code:
+
+```sh
+claude plugin marketplace update memsy
+claude plugin update memsy@memsy
+```
+
+Or run `/plugin`, open the **Plugins** tab, select **memsy**, and choose update. To keep the plugin current automatically, open the **Marketplaces** tab, select **memsy**, and enable auto-update (opt-in for third-party marketplaces — off until you turn it on).
+
+After updating, restart Claude Code so the refreshed plugin and its MCP server load, then run `/memsy:memsy-doctor` to confirm.
+
 ## Slash commands
 
 ### `/memsy <anything>` — universal entry point
