@@ -28,6 +28,22 @@ This plugin wraps [`@memsy-io/mcp`](https://www.npmjs.com/package/@memsy-io/mcp)
    ```
    (or the namespaced form `/memsy:memsy-doctor`). You should see a "Status: ok" block with your active profile and `actor_id`.
 
+## Updating
+
+When a new version is published, update from inside Claude Code or the CLI:
+
+```sh
+# Refresh the marketplace catalog, then update the plugin
+claude plugin marketplace update memsy
+claude plugin update memsy@memsy
+```
+
+Or use the interactive picker — run `/plugin`, open the **Plugins** tab, select **memsy**, and choose update.
+
+**Auto-update (optional):** Claude Code can keep the plugin current for you. Run `/plugin`, open the **Marketplaces** tab, select **memsy**, and choose **Enable auto-update** — Claude Code will then refresh the marketplace and update the plugin at startup. (Auto-update is opt-in for third-party marketplaces; it's off until you enable it.)
+
+After any update, restart Claude Code so the refreshed plugin and its MCP server load, then run `/memsy:memsy-doctor` to confirm.
+
 ## Local development
 
 If you're iterating on the MCP server itself (`memsy/mcp/`), point the plugin at your local build:
