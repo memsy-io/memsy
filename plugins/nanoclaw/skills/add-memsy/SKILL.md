@@ -44,20 +44,22 @@ Add two fire-and-forget calls. Read each file, find the anchor, insert the hook.
 **`src/router.ts`** — import at top, then after the `'Message routed'` log inside the routing function:
 
 ```typescript
-import { memsyIngest } from './memsy-sync.js';
+import { memsyIngest } from "./memsy-sync.js";
 // ...after writeSessionMessage(...) and the 'Message routed' log:
-if (event.message.kind === 'chat' || event.message.kind === 'chat-sdk') {
-  memsyIngest('user_message', event.message.content, session.id).catch(() => {});
+if (event.message.kind === "chat" || event.message.kind === "chat-sdk") {
+  memsyIngest("user_message", event.message.content, session.id).catch(
+    () => {},
+  );
 }
 ```
 
 **`src/delivery.ts`** — import at top, then after the `'Message delivered'` log inside `deliverMessage`:
 
 ```typescript
-import { memsyIngest } from './memsy-sync.js';
+import { memsyIngest } from "./memsy-sync.js";
 // ...after the 'Message delivered' log:
-if (msg.kind === 'chat') {
-  memsyIngest('assistant_message', msg.content, session.id).catch(() => {});
+if (msg.kind === "chat") {
+  memsyIngest("assistant_message", msg.content, session.id).catch(() => {});
 }
 ```
 
@@ -78,7 +80,11 @@ Verify: `ncl groups config get --id <group-id>`.
 
 Also add a belt-and-braces line to each group's `groups/<folder>/CLAUDE.local.md`:
 
-> Memory capture is automatic. Never call memsy_ingest. Use memsy_search only when the user asks to recall.
+> Memory capture is automatic. Never call memsy_ingest.
+>
+> At the start of every new conversation turn, call memsy_search with the key topic(s) from the user's message before composing your reply. Use the
+> results to surface relevant past context, preferences, or decisions. Skip the search only for trivial one-word acks ("ok", "thanks") or when the
+> topic is already covered in the current turn.
 
 ## Phase 6 — Build, restart, verify
 
@@ -87,7 +93,7 @@ pnpm build
 # restart the NanoClaw host process
 ```
 
-Send a message in a connected channel, then ask *"what do you know about me?"*. The agent calls `memsy_search`; the logs show:
+Send a message in a connected channel, then ask _"what do you know about me?"_. The agent calls `memsy_search`; the logs show:
 
 ```
 Memsy turn synced kind=user_message status=200
