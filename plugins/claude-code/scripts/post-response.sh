@@ -74,8 +74,8 @@ MEMSY_BASE_URL="${MEMSY_BASE_URL:-https://api.memsy.io/v1}"
 
 # ── Parse transcript + extract last turn (single python3 process) ─────────────
 # Reads the transcript_path from Stop hook stdin, then walks the JSONL file
-# backwards to find the last substantive user+assistant turn.
-# Reads lines in reverse without loading the full file into memory.
+# backwards (reading from the tail in blocks and stopping as soon as the last
+# user+assistant turn is found) so a long transcript is not loaded in full.
 TURN_JSON="$(cat | python3 -c "
 import json, sys, os, hashlib, subprocess
 
@@ -108,11 +108,30 @@ user_text = ''
 assistant_text = ''
 found_assistant = False
 
-# Load the transcript, then scan newest-first for the last full turn.
-with open(transcript_path) as f:
-    lines = f.readlines()
+def _iter_lines_reverse(path, block=65536):
+    # Yield decoded lines newest-first by reading the file from the end in
+    # blocks, carrying a partial line across block boundaries. The scan below
+    # breaks once it has the last turn, so on a long transcript we touch only
+    # the tail instead of loading the whole file into memory.
+    with open(path, 'rb') as fh:
+        fh.seek(0, os.SEEK_END)
+        pos = fh.tell()
+        carry = b''
+        while pos > 0:
+            step = block if pos > block else pos
+            pos -= step
+            fh.seek(pos)
+            data = fh.read(step) + carry
+            parts = data.split(b'\n')
+            carry = parts[0]
+            for part in reversed(parts[1:]):
+                if part:
+                    yield part.decode('utf-8', 'replace')
+        if carry:
+            yield carry.decode('utf-8', 'replace')
 
-for line in reversed(lines):
+# Scan newest-first for the last full turn, reading only the tail we need.
+for line in _iter_lines_reverse(transcript_path):
     try:
         obj = json.loads(line)
     except Exception:

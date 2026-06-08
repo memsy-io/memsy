@@ -168,7 +168,10 @@ PY
       if [[ "$_ans" =~ ^[Nn] ]]; then _key=""; else _key="$MEMSY_API_KEY"; fi
     else
       printf "Enter your Memsy API key (msy_..., from https://app.memsy.io) to save it now, or press Enter to skip: "
-      read -r _key || _key=""
+      # -s: don't echo the key to the terminal (it's a secret); print our own
+      # newline afterwards since the user's Enter keystroke is suppressed too.
+      read -rs _key || _key=""
+      printf '\n'
     fi
     if [[ -n "${_key// /}" ]]; then
       if MEMSY_CONFIG="$MEMSY_CONFIG" MEMSY_KEY_INPUT="$_key" python3 - <<'PY'
