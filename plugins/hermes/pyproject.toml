@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "memsy-hermes-plugin"
+version = "0.1.0"
+description = "Memsy long-term memory provider for Hermes Agent"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["memsy", "hermes", "memory", "recall", "long-term-memory", "agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://docs.memsy.io/docs/hermes"
+Repository = "https://github.com/memsy-io/memsy"
+Documentation = "https://docs.memsy.io/docs/hermes"
+
+# Memory provider — discovered by Hermes at ~/.hermes/plugins/memsy/
+# Install manually via ./install.sh, or via pip which triggers the entry-point.
+[project.entry-points."hermes_agent.memory_providers"]
+memsy = "memory_provider:register"
+
+[tool.hatch.build.targets.wheel]
+packages = ["memory_provider"]

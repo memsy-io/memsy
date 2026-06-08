@@ -61,7 +61,7 @@ If `memsy_health` errored, hand off to the `memsy-setup` skill instead.
    - too short (<20 chars) → ask user to expand.
    - contains a secret-shaped token (`msy_`, `sk_`, `ghp_`, `Bearer `, etc.) → **refuse**. Say: "That looks like it contains a secret — Memsy stores in plain text. Paraphrase without it, or use a real secret manager."
 3. **Confirm-before-store mode**: if your session context contains `[memsy modes: ... confirm-before-store ...]`, surface the stripped content and ask `Save? (y / n / edit "<new text>")`. Proceed only on `y` or `edit`. On `n`, say "Not stored." and stop. If the mode line isn't in context, skip this step (user invoked `/memsy` explicitly — that's deliberate enough on its own).
-4. Call `memsy_ingest` with one event: `kind="user_message"`, `content=<stripped substance>`, `ts=<current ISO 8601>`.
+4. Call `memsy_ingest` with one event: `content=<stripped substance>`, `ts=<current ISO 8601>`, and `kind` matching the speaker the substance came from — `"user_message"` when the user is asserting it (the usual case), `"assistant_message"` when they're asking you to save something you produced. Don't blindly use `user_message`.
 5. Confirm: `✓ Stored: <first 80 chars>...` plus event_id (first 8 chars).
 
 ### `SWITCH`
@@ -120,7 +120,7 @@ Lets the user toggle Memsy behavior flags from chat without setting env vars + r
 
 2. **Apply the change** by:
    - Acknowledging the new state explicitly back to the user.
-   - Updating your behavior **for the rest of this session** to match. For `MEMSY_PROACTIVE`, this means starting to watch (or stop watching) save-worthy content. For `MEMSY_CONFIRM_STORE`, this means starting (or stopping) the pre-save confirmation step on memsy-remember / smart-router STORE / `/memsy:memsy-remember`.
+   - Updating your behavior **for the rest of this session** to match.
 
 3. **Reply with this exact shape**:
 
@@ -132,7 +132,32 @@ Lets the user toggle Memsy behavior flags from chat without setting env vars + r
        then restart Claude Code
    ```
 
-4. **Special case — autocontext**: changing it mid-session has no effect until next launch (the SessionStart hook has already fired). Make this explicit:
+4. **CRITICAL — when turning proactive ON**: The full proactive behavior instruction does NOT automatically enter context mid-session (the SessionStart hook already fired). You MUST emit the full instruction block below **verbatim** as part of your response so it enters your context and you can act on it immediately:
+
+   ---
+   [memsy proactive mode — active from this turn]
+
+   For the rest of this conversation, actively watch for content the user clearly wants remembered, EVEN IF they don't say "remember that" or "save this". When you spot it, store it via `memsy_ingest`. Categories that qualify:
+
+   - **Personal preferences**: "I like X", "my favorite is Y", "I prefer Z"
+   - **Intents / plans**: "I want to do X", "I plan to Y", "we're going to Z"
+   - **Decisions**: "we decided X", "going with Y", "switching to Z", "we need X"
+   - **Constraints discovered**: "X doesn't work because Y", "we can't do Z"
+   - **Learnings**: "turns out X", "the trick is Y", "found that Z"
+
+   Proactive save workflow per qualifying item:
+
+   1. Pre-flight: skip if < 20 chars, skip if secret-shaped token (`msy_`/`sk_`/`ghp_`/`Bearer`), skip if already stored this session.
+   2. If confirm-before-store is also active, ask `Save? (y / n / edit "...")` first. Otherwise store directly — proactive mode is pre-authorization.
+   3. Call `memsy_ingest`: `content=<substance>`, `ts=<ISO 8601>`, `metadata={"source":"claude-code-proactive","safe_to_delete":true}`, and `kind` matching the speaker the substance came from — `"assistant_message"` if it's something you produced or concluded, `"user_message"` if the user stated it. Do NOT default everything to `user_message`.
+   4. Acknowledge after the primary answer: `→ saved to Memsy: "<first 60 chars>..." (event <id>)`
+
+   Hard rules: do NOT save every sentence — only things useful 3+ months from now. Do NOT ask "should I remember this?" on every turn. Do NOT save the user's questions — if the user is ASKING rather than ASSERTING, skip the turn; never rephrase a question into a pseudo-statement ("the user is exploring X") just to store something. The save always comes AFTER the primary answer, never interrupting.
+   ---
+
+   After emitting the block above, immediately apply it to the user's CURRENT message. Scan back through the user's most recent message and any recent context for save-worthy content you may have missed. If you find qualifying content, store it now and acknowledge.
+
+5. **Special case — autocontext**: changing it mid-session has no effect until next launch (the SessionStart hook has already fired). Make this explicit:
 
    ```
    ✓ Memsy mode: autocontext = on   (effective NEXT session — SessionStart already fired this turn)
@@ -141,7 +166,7 @@ Lets the user toggle Memsy behavior flags from chat without setting env vars + r
        export MEMSY_SESSION_AUTOCONTEXT=on   # then `claude` from that shell
    ```
 
-5. **`mode` / `modes` / `status` with no direction** → print the current state of all three:
+6. **`mode` / `modes` / `status` with no direction** → print the current state of all three:
 
    ```
    Memsy modes — current session

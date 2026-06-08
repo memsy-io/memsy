@@ -1,0 +1,135 @@
+---
+title: OpenClaw
+description: Long-term memory for OpenClaw — recall decisions and store context from any connected chat app (WhatsApp, Telegram, Slack, Discord, iMessage, and more).
+---
+
+Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent persistent memory across every connected channel. Store a decision from Telegram, recall it from Slack — the memory is channel-agnostic.
+
+## Requirements
+
+- Node.js 22+
+- [OpenClaw](https://openclaw.ai) gateway running
+- Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
+
+## Install
+
+<Steps>
+  <Step title="Clone and run the installer">
+    ```bash
+    git clone https://github.com/memsy-io/memsy
+    cd memsy/plugins/openclaw
+    ./install.sh
+    ```
+
+    The installer builds the plugin from source, registers it via `openclaw plugins install` (into `~/.openclaw/extensions/`), copies its manifest, and installs the two skills globally via `openclaw skills install --global`. This is a native OpenClaw plugin — it registers its tools in-process and calls the Memsy API over HTTPS directly (no MCP subprocess).
+  </Step>
+
+  <Step title="Set your API key">
+    Recommended — OpenClaw loads `~/.openclaw/.env` into the environment on every start (the official trusted source for provider credentials, and it survives daemon restarts):
+
+    ```bash
+    echo "MEMSY_API_KEY=msy_..." >> ~/.openclaw/.env
+    ```
+
+    Or use OpenClaw's native interactive secrets helper (1Password, Bitwarden, Vault, … via a SecretRef — keeps the key out of plaintext config):
+
+    ```bash
+    openclaw secrets configure
+    ```
+
+    Quick test (session only, not persisted): `export MEMSY_API_KEY=msy_...` then `openclaw start`.
+
+    Already configured Memsy in another host? If your key is in the shared `~/.memsy/config.json` (from `memsy auth login` or another installer), OpenClaw uses it automatically. Precedence: plugin config → `MEMSY_API_KEY` env → `~/.memsy/config.json` active profile.
+
+    <Info>
+      Avoid `openclaw config set env.MEMSY_API_KEY` for the key — it stores plaintext in `~/.openclaw/openclaw.json` (agent-readable), and the config `env` block is non-overriding ("only if missing"). Prefer `.env` or a SecretRef.
+    </Info>
+  </Step>
+
+  <Step title="Verify">
+    In any connected chat app, send:
+
+    > *"What do we know about our Postgres decision?"*
+
+    Your OpenClaw agent should trigger the `memsy-recall` skill and call `memsy_search`.
+  </Step>
+</Steps>
+
+## Manual install
+
+If you prefer not to use `install.sh`, build and register the plugin by hand from the cloned repo:
+
+```bash
+cd memsy/plugins/openclaw
+npm install && npm run build
+openclaw plugins install --force ./dist/index.js
+cp ./openclaw.plugin.json ~/.openclaw/extensions/
+openclaw skills install --global --force --as memsy-recall   ./skills/memsy-recall
+openclaw skills install --global --force --as memsy-remember ./skills/memsy-remember
+```
+
+Then add your key to `~/.openclaw/.env` (above) and restart OpenClaw.
+
+## Skills
+
+Two skills install globally via `openclaw skills install --global` (you can override them from a workspace `./skills/` directory):
+
+| Skill | Trigger phrases |
+|---|---|
+| `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" |
+| `memsy-remember` | "remember that", "save this decision", "note that", "for future reference" |
+
+Skills are available to your agent alongside the plugin's native tools across every connected channel. Memory stored from one channel is searchable from any other.
+
+## Multi-org
+
+Configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org)), then ask your agent:
+
+- *"What orgs do I have?"* → calls `memsy_list_orgs`
+- *"Switch to my work org"* → calls `memsy_use_org`
+
+<Info>
+  A per-project `./.memsy/config.json` is used **exclusively** when present — it is not merged key-by-key with `~/.memsy/config.json` (this matches the MCP, keeping your `actor_id` aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
+</Info>
+
+## Capabilities
+
+| Capability | Supported |
+|---|---|
+| Recall (memsy_search) | ✓ |
+| Store (memsy_ingest) | ✓ |
+| Skills (SKILL.md) | ✓ |
+| Honors default roles/teams | ✓ (read from `~/.memsy/config.json`; filters search + attributes ingest) |
+| Onboarding (create/list roles+teams, set defaults) | ✓ (`memsy_set_defaults` persists to shared config) |
+| Channel-agnostic memory | ✓ |
+| Multi-org / profiles | ✓ |
+| Session-start auto-context | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`; surfaced via the prompt-contribution hook, `MEMSY_SESSION_CONTEXT_LIMIT` default 6, max 20) |
+| Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
+| Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
+
+## Troubleshooting
+
+### Plugin not loading / tools missing
+
+Check the plugin loaded and inspect runtime errors:
+
+```bash
+openclaw plugins list                      # is "memsy" installed + enabled?
+openclaw plugins inspect memsy --runtime   # load errors, if any
+```
+
+If tools error, the most common cause is a missing API key — confirm `MEMSY_API_KEY` is in `~/.openclaw/.env`.
+
+### Skills not triggering
+
+Run `openclaw skills list` to verify `memsy-recall` / `memsy-remember` are installed. Re-run `./install.sh` if missing.
+
+### Wrong memories returned
+
+Ask your agent: *"What Memsy orgs do I have?"* to check the active profile. Switch with *"Use my work Memsy org."*
+
+## See also
+
+- [MCP Server](/docs/mcp) — the universal layer that all integrations share
+- [Actors and Sessions](/docs/actors-and-sessions) — identity and `actor_id`
+- [Plugin source](https://github.com/memsy-io/memsy/tree/main/plugins/openclaw) on GitHub
