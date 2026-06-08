@@ -44,32 +44,43 @@ memsy_onboarding_nudge() {
   configured="$(python3 - <<'PY' 2>/dev/null
 import json, os
 
-def defaults_set(path, active):
+def load_cfg(path):
     try:
         with open(path) as f:
             cfg = json.load(f)
+        return cfg if isinstance(cfg, dict) else None
     except Exception:
-        return False
+        return None
+
+def defaults_set(cfg, active):
     profs = cfg.get("profiles")
     p = (profs.get(active) or {}) if isinstance(profs, dict) else cfg
+    if not isinstance(p, dict):
+        return False
     roles = p.get("default_role_ids") or p.get("defaultRoleIds")
     teams = p.get("default_team_ids") or p.get("defaultTeamIds")
     return bool(roles) or bool(teams)
 
-home = os.path.expanduser("~")
-gpath = os.path.join(home, ".memsy", "config.json")
-ppath = os.path.join(os.getcwd(), ".memsy", "config.json")
+# Whole-file precedence (mirrors the MCP's findConfigFile): a per-project
+# .memsy/config.json is used EXCLUSIVELY when present — never merged key-by-key
+# with the per-user one. Resolve the single active config, then check only that
+# (checking both would wrongly suppress the nudge when the project config, used
+# exclusively, has no defaults but the global one does).
+base = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+cfg = None
+for path in (os.path.join(base, ".memsy", "config.json"),
+             os.path.expanduser("~/.memsy/config.json")):
+    cfg = load_cfg(path)
+    if cfg is not None:
+        break
+cfg = cfg or {}
 
-active = os.environ.get("MEMSY_PROFILE") or ""
-if not active:
-    try:
-        with open(gpath) as f:
-            active = json.load(f).get("active_profile") or "default"
-    except Exception:
-        active = "default"
+active = (os.environ.get("MEMSY_PROFILE")
+          or (cfg.get("active_profile") if isinstance(cfg.get("active_profile"), str) else "")
+          or "default")
 
 env_set = bool(os.environ.get("MEMSY_DEFAULT_ROLE_IDS") or os.environ.get("MEMSY_DEFAULT_TEAM_IDS"))
-print("1" if (env_set or defaults_set(gpath, active) or defaults_set(ppath, active)) else "0")
+print("1" if (env_set or defaults_set(cfg, active)) else "0")
 PY
 )" || configured=0
 
@@ -82,7 +93,7 @@ PY
 
 No default Memsy roles/teams are configured yet (optional — they sharpen recall
 and attribution). Tell the user once, in one line, that you can set this up. If
-they agree (or say "set up my memsy defaults", or run /memsy:setup-defaults):
+they agree (or say "set up my memsy defaults", or run /memsy:memsy-setup):
 call memsy_list_roles and memsy_list_teams — show what their org already has, or
 offer to create some via memsy_create_role / memsy_create_team — then
 memsy_set_defaults (persist:"global"). If they decline, drop it; this won't repeat.

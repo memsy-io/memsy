@@ -118,7 +118,7 @@ The first time you start a session without default roles/teams configured, the `
 To run setup anytime — it surfaces the roles/teams your org already has, or offers to create them, then persists your chosen defaults:
 
 ```
-/memsy:setup-defaults
+/memsy:memsy-setup
 ```
 
 (or just ask: *"set up my memsy defaults"*). Defaults are optional — memory works fine without them; roles/teams sharpen recall and attribution.
@@ -133,12 +133,14 @@ To run setup anytime — it surfaces the roles/teams your org already has, or of
 
 These are exposed by the `@memsy-io/mcp` server itself, so they work in any MCP host:
 
+In Claude Code they're invoked with the `/plugin:<plugin>:<server>:<prompt>` form (other MCP hosts surface them under their own prompt menus):
+
 | Prompt | Description |
 |---|---|
-| `/memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` + `limit` |
-| `/memsy:proactive-mode` | Switch the session into proactive recall mode |
-| `/memsy:setup-defaults` | Same as `/memsy-setup`, host-agnostic version |
-| `/memsy:summarize-and-store` | Summarize recent turns into a single memory and store it |
+| `/plugin:memsy:memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` + `limit` |
+| `/plugin:memsy:memsy:proactive-mode` | Switch the session into proactive recall mode |
+| `/plugin:memsy:memsy:setup-defaults` | Same flow as the `/memsy:memsy-setup` command |
+| `/plugin:memsy:memsy:summarize-and-store` | Summarize recent turns into a single memory and store it |
 
 ## Skills (auto-fire on natural phrasing — no slash needed)
 

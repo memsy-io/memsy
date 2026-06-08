@@ -90,14 +90,14 @@ Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, `doctor`,
 
 ## MCP-level prompts (work in Cursor / VS Code / Cline too)
 
-These come from the MCP server itself, so they're available in any MCP host — not just Claude Code:
+These come from the MCP server itself, so they're available in any MCP host — not just Claude Code. In Claude Code they're invoked with the `/plugin:<plugin>:<server>:<prompt>` form (other hosts surface them under their own prompt menus):
 
 | Prompt | Description |
 |---|---|
-| `/memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` and `limit`. |
-| `/memsy:proactive-mode` | Switch the session into proactive recall mode for the rest of the conversation. |
-| `/memsy:setup-defaults` | Same as `/memsy-setup`, host-agnostic version. |
-| `/memsy:summarize-and-store` | Summarize the recent turns into a single memory and store it. |
+| `/plugin:memsy:memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` and `limit`. |
+| `/plugin:memsy:memsy:proactive-mode` | Switch the session into proactive recall mode for the rest of the conversation. |
+| `/plugin:memsy:memsy:setup-defaults` | Same flow as the `/memsy:memsy-setup` command. |
+| `/plugin:memsy:memsy:summarize-and-store` | Summarize the recent turns into a single memory and store it. |
 
 ## Hooks
 
@@ -128,10 +128,10 @@ Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude
 
 The first time you start a session with no default roles/teams configured, the SessionStart hook emits a **one-time** nudge offering to set them up. It self-suppresses — it writes `~/.memsy/.onboard-nudged` after the first show and never repeats, and stays silent once any defaults exist (or `MEMSY_DEFAULT_ROLE_IDS`/`MEMSY_DEFAULT_TEAM_IDS` is set). The check is purely local (`~/.memsy/config.json`) — no network call on session start.
 
-Run setup anytime with the MCP prompt — it surfaces the roles/teams your org already has, or offers to create them, then persists your chosen defaults:
+Run setup anytime — the `/memsy:memsy-setup` command, or the underlying MCP prompt:
 
 ```
-/memsy:setup-defaults
+/plugin:memsy:memsy:setup-defaults
 ```
 
 (or just ask *"set up my memsy defaults"*). Defaults are optional: memory works without them, but default roles/teams sharpen recall and attribution. This same prompt is available in any MCP host (Cursor, Cline, etc.) even where there's no SessionStart hook to nudge.
