@@ -97,7 +97,8 @@ This is the only slash you really need. The `memsy` skill reads what you typed a
 /memsy what did we decide about billing storage?     → searches memories
 /memsy remember we picked Postgres for billing       → stores a memory
 /memsy switch to work                                → switches profile
-/memsy list                                          → lists recent memories
+/memsy list                                          → recent memories for the current actor
+/memsy list all                                      → recent memories across every actor
 /memsy doctor                                        → runs the health check
 /memsy setup                                         → first-time walkthrough
 /memsy proactive on  | /memsy proactive off          → toggle auto-save (session)

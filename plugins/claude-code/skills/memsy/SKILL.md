@@ -16,7 +16,7 @@ Apply these rules **in order, first match wins**. Be **conservative** — when a
 | empty / whitespace only | `MENU` | Show the short help menu below. |
 | starts with `remember`, `save`, `note that`, `store`, `tag this as`, `let's remember`, `for future reference` | `STORE` | Drop the leading verb; store the rest. |
 | starts with `switch to`, `use profile`, `change profile`, or `org` followed by a profile name | `SWITCH` | Switch active Memsy profile. |
-| starts with `list`, `show`, `browse` and mentions memories/recent | `LIST` | List recent memories. |
+| starts with `list`, `show`, `browse` and mentions memories/recent | `LIST` | List memories — **scoped to the current actor by default**; org-wide only when the text signals all actors (e.g. `all`, `global`, `all actors`, `everyone`, `org`). |
 | is exactly `doctor`, `health`, `status`, `check`, or `diagnose` (one or two words) | `DOCTOR` | Run the `/memsy-doctor` workflow inline. |
 | is exactly `setup`, `configure`, `init`, `set defaults`, or `onboard` (one or two words) | `SETUP` | Run the `/memsy-setup` workflow inline. |
 | starts with `mode`, `modes`, `proactive`, `confirm`, `permission`, `autocontext`, or `auto-context` (with or without `on`/`off`/`status`) | `MODE` | Toggle a session-scoped behavior flag. |
@@ -43,7 +43,8 @@ Memsy is ready. What do you want to do?
   /memsy switch <profile>     — change active org
   /memsy doctor               — health + identity check
   /memsy setup                — first-time defaults walkthrough
-  /memsy list                 — show recent memories
+  /memsy list                 — recent memories for the current actor
+  /memsy list all              — recent memories across every actor
   /memsy proactive on|off     — auto-save preferences/decisions (session)
   /memsy confirm on|off       — ask before each save (session)
   /memsy modes                — show current mode state
@@ -73,9 +74,17 @@ If `memsy_health` errored, hand off to the `memsy-setup` skill instead.
 
 ### `LIST`
 
-1. Call `memsy_list_memories` with `limit=20`.
-2. Show as a numbered list: text (truncated to 100 chars), kind, observed_at.
-3. Suggest: "Use `/memsy <query>` to search a specific topic."
+First decide the **scope** from the user's text after `list` / `show` / `browse`:
+
+- **Org-wide** (all actors) if it contains an all-actors signal: `all`, `global`, `everyone`, `everybody`, `every actor`, `all actors`, `org`, or `org-wide`.
+- **Current actor only** otherwise — this is the default.
+
+Then:
+
+1. **Default (current actor):** read `memsy://actor/current` to get the active `actor_id`, then call `memsy_list_memories` with that `actor_id` and `limit=20`. Head the output with: `Memories for actor <actor_id> — use "/memsy list all" for every actor`. If the resource read fails, fall back to the org-wide call and say so.
+2. **Org-wide:** call `memsy_list_memories` with `limit=20` and **no** `actor_id`. Head the output with: `All memories (every actor)`.
+3. Show as a numbered list: text (truncated to 100 chars), kind, observed_at.
+4. Suggest: "Use `/memsy <query>` to search a specific topic."
 
 ### `SEARCH`
 
