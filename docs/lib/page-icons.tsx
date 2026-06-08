@@ -15,6 +15,7 @@ import {
   MessageSquare,
   Package,
   Plug,
+  Puzzle,
   Rocket,
   RotateCw,
   Search,
@@ -72,6 +73,19 @@ function McpIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+/** OpenClaw official logomark — lobster body + claws, gradient replaced with currentColor.
+ *  viewBox cropped to the claw/body region (y 10–80) to maximise claw visibility at small sizes. */
+function OpenClawIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 10 120 70" fill="currentColor" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <title>OpenClaw</title>
+      <path d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z" />
+      <path d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z" />
+      <path d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z" />
+    </svg>
+  )
+}
+
 /**
  * Slug → icon map for sidebar entries. Keys match the doc-page slug
  * (the part after `/docs/`); the index page uses an empty string.
@@ -101,6 +115,9 @@ const PAGE_ICONS: Record<string, IconComponent> = {
   langchain: LangChainIcon,
   mcp: McpIcon,
 
+  // Plugins
+  openclaw: OpenClawIcon,
+
   // API Reference
   'memsy-client': Code,
   'async-memsy-client': Code2,
@@ -117,6 +134,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   Concepts: Lightbulb,
   Guides: BookOpen,
   Integrations: Plug,
+  Plugins: Puzzle,
   'API Reference': Code,
   Reference: Bookmark,
 }
