@@ -28,6 +28,80 @@ is_truthy() {
   esac
 }
 
+# First-run onboarding nudge (one-time, network-free). If the active profile has
+# no default roles/teams configured, surface a single pointer to the setup flow,
+# then never again (marker file). Reads only ~/.memsy/config.json (+ a project
+# .memsy/config.json) — no network on this session-start path. The flow itself
+# (memsy_list_roles/teams → create-or-pick → memsy_set_defaults) surfaces the
+# org's existing roles/teams or offers to create them; this just gets the user
+# there once. Defaults are optional, so this is a nudge, not a gate.
+memsy_onboarding_nudge() {
+  local marker="${HOME}/.memsy/.onboard-nudged"
+  [[ -f "$marker" ]] && return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  local configured
+  configured="$(python3 - <<'PY' 2>/dev/null
+import json, os
+
+def load_cfg(path):
+    try:
+        with open(path) as f:
+            cfg = json.load(f)
+        return cfg if isinstance(cfg, dict) else None
+    except Exception:
+        return None
+
+def defaults_set(cfg, active):
+    profs = cfg.get("profiles")
+    p = (profs.get(active) or {}) if isinstance(profs, dict) else cfg
+    if not isinstance(p, dict):
+        return False
+    roles = p.get("default_role_ids") or p.get("defaultRoleIds")
+    teams = p.get("default_team_ids") or p.get("defaultTeamIds")
+    return bool(roles) or bool(teams)
+
+# Whole-file precedence (mirrors the MCP's findConfigFile): a per-project
+# .memsy/config.json is used EXCLUSIVELY when present — never merged key-by-key
+# with the per-user one. Resolve the single active config, then check only that
+# (checking both would wrongly suppress the nudge when the project config, used
+# exclusively, has no defaults but the global one does).
+base = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+cfg = None
+for path in (os.path.join(base, ".memsy", "config.json"),
+             os.path.expanduser("~/.memsy/config.json")):
+    cfg = load_cfg(path)
+    if cfg is not None:
+        break
+cfg = cfg or {}
+
+active = (os.environ.get("MEMSY_PROFILE")
+          or (cfg.get("active_profile") if isinstance(cfg.get("active_profile"), str) else "")
+          or "default")
+
+env_set = bool(os.environ.get("MEMSY_DEFAULT_ROLE_IDS") or os.environ.get("MEMSY_DEFAULT_TEAM_IDS"))
+print("1" if (env_set or defaults_set(cfg, active)) else "0")
+PY
+)" || configured=0
+
+  [[ "$configured" == "1" ]] && return 0
+
+  mkdir -p "${HOME}/.memsy"
+  : > "$marker"
+  cat <<'EOF'
+[memsy setup — first run]
+
+No default Memsy roles/teams are configured yet (optional — they sharpen recall
+and attribution). Tell the user once, in one line, that you can set this up. If
+they agree (or say "set up my memsy defaults", or run /memsy:memsy-setup):
+call memsy_list_roles and memsy_list_teams — show what their org already has, or
+offer to create some via memsy_create_role / memsy_create_team — then
+memsy_set_defaults (persist:"global"). If they decline, drop it; this won't repeat.
+
+EOF
+}
+memsy_onboarding_nudge
+
 # Mode block: emit a small "[memsy modes: ...]" line whenever any plugin mode
 # is set. SessionStart hook stdout is injected into Claude's context, so this
 # is how skill/command bodies learn the user's runtime preferences. Modes are
@@ -39,6 +113,9 @@ if is_truthy "${MEMSY_CONFIRM_STORE:-}"; then
 fi
 if is_truthy "${MEMSY_PROACTIVE:-}"; then
   modes="${modes} proactive"
+fi
+if is_truthy "${MEMSY_TURN_SYNC:-}"; then
+  modes="${modes} turn-sync"
 fi
 if [[ -n "$modes" ]]; then
   printf '[memsy modes:%s]\n\n' "$modes"
@@ -85,7 +162,10 @@ Workflow per save-worthy item:
      proactive mode is the user pre-authorizing the saves.
 
   3. Call memsy_ingest with ONE event:
-       kind:     "user_message"
+       kind:     match the speaker the substance came FROM —
+                 "assistant_message" if it's something you (the assistant)
+                 produced or concluded; "user_message" if it's something the
+                 user stated. (Do NOT default everything to user_message.)
        content:  the substance (standalone, no framing)
        ts:       current ISO 8601
        metadata: JSON.stringify({source:"claude-code-proactive",
@@ -108,8 +188,11 @@ Hard rules:
     you save (with the confirm-before-store check if enabled) or you
     don't. Asking each time is worse UX than either pure mode.
   - Do NOT save the user's question itself when they ask you something.
-    Save substantive content they assert as theirs ("I want X") —
-    not their queries ("how do I X?").
+    If the user is ASKING rather than ASSERTING, there is nothing to save —
+    skip the turn. Never rephrase a question into a pseudo-statement (e.g.
+    "the user is exploring X") just to have something to store; that is still
+    saving the question. Save substantive content they assert as theirs
+    ("I want X") — not their queries ("how do I X?").
 
 To disable: unset MEMSY_PROACTIVE in your shell and restart Claude Code.
 
@@ -130,8 +213,12 @@ LIMIT="${MEMSY_SESSION_CONTEXT_LIMIT:-6}"
 # weaponized to burn the whole context window via an env var. `10#$LIMIT`
 # forces base-10 arithmetic, so values like `08` and `09` don't crash on
 # bash's octal interpretation.
-if ! [[ "$LIMIT" =~ ^[0-9]+$ ]] || (( 10#$LIMIT < 1 )) || (( 10#$LIMIT > 20 )); then
-  LIMIT=6
+if ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
+  LIMIT=6                      # non-numeric (typo, empty) → safe default
+elif (( 10#$LIMIT < 1 )); then
+  LIMIT=1                      # clamp up to the floor
+elif (( 10#$LIMIT > 20 )); then
+  LIMIT=20                     # clamp down to the ceiling (e.g. 25 → 20)
 else
   LIMIT="$((10#$LIMIT))"
 fi

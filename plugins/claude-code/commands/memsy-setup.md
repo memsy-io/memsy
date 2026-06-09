@@ -4,7 +4,7 @@ description: First-time setup — pick default role(s), team(s), and pin your ac
 
 The user wants to configure their Memsy defaults so subsequent searches and stores don't need explicit arguments every time.
 
-This is the same walkthrough as the `/memsy:setup-defaults` MCP prompt — surfaced here as a discoverable plugin command. Run it end-to-end.
+This is the same walkthrough as the `/plugin:memsy:memsy:setup-defaults` MCP prompt — surfaced here as a discoverable plugin command. Run it end-to-end.
 
 ## Steps
 
