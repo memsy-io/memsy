@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT}\"/hooks/session-start.sh",
-            "statusMessage": "Loading Memsy context"
+            "statusMessage": "Memsy session context"
           }
         ]
       }
@@ -28,7 +28,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT}\"/hooks/stop.sh",
-            "statusMessage": "Syncing turn to Memsy",
+            "statusMessage": "Memsy turn sync (when enabled)",
             "timeout": 15
           }
         ]

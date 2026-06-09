@@ -43,14 +43,20 @@ Then set your API key. `install.sh` **prompts for it interactively** and saves i
 
 ## Updating
 
-Codex serves the plugin from the marketplace's Git snapshot (pinned to `main`), so updates ship as soon as a change lands on `main` — there's no version to bump. Refresh the snapshot, then reinstall:
+Codex serves the plugin from the marketplace's Git snapshot (pinned to `main`). Changes land for users once they're on `main` — there's no version to bump; you pull them with two commands:
 
 ```bash
-codex plugin marketplace upgrade memsy   # re-pull the marketplace from main
-codex plugin add memsy@memsy             # reinstall the refreshed plugin
+codex plugin marketplace upgrade memsy   # re-pull the snapshot from main
+codex plugin add memsy@memsy             # re-extract the refreshed plugin into the cache
 ```
 
-Restart Codex so the refreshed hooks and MCP server load. To confirm, ask *"What do we know about X?"* and check that `memsy-recall` fires.
+`plugin add` overwrites the cached copy from the freshly-upgraded snapshot (it does not skip just because the version is unchanged), so this delivers the latest `main` even though the version stays `0.1.0`. If an update ever doesn't seem to take, force a clean re-install:
+
+```bash
+codex plugin remove memsy && codex plugin add memsy@memsy
+```
+
+Then **restart Codex** so the refreshed plugin loads. Because plugin-bundled hooks are untrusted until reviewed, a changed hook is re-flagged after an update — run **`/hooks`** and re-trust Memsy's hooks, or turn-sync / auto-context will silently stay off (see [Hook trust](#hook-trust)). To confirm, ask *"What do we know about X?"* and check that `memsy-recall` fires.
 
 > The **MCP server** (`@memsy-io/mcp`) is fetched separately by `npx` and updates on its own cadence — see [Troubleshooting](#troubleshooting) if Memsy tools behave like an older version after an update.
 
@@ -98,7 +104,11 @@ Set these as environment variables before starting Codex (e.g. `export MEMSY_SES
 
 > **Turn-sync vs proactive.** `MEMSY_TURN_SYNC` stores *every* turn; `MEMSY_PROACTIVE` stores *only the important ones* automatically; with both off, only explicit "remember that …" is stored. If you enable **both**, the important assistant content is captured twice (once verbatim by turn-sync, once as extracted substance by proactive) — usually fine since the backend de-noises, but proactive's real value is when turn-sync is **off**. Turn-sync hooks run **synchronously** (Codex doesn't support async hooks yet), so the POST is best-effort with a short timeout; failures are logged to `~/.memsy/turn-sync.log` and never block your turn.
 
-> Hooks are reviewed and trusted once by the user on first run — this is a Codex security feature for plugin-bundled hooks.
+> **Turn-sync needs the API key on disk.** Unlike the mode flags (shell env), turn-sync POSTs directly to the API, so it resolves the key from — in order — the shell env, `~/.codex/config.toml` `[mcp_servers.memsy.env]`, then the active profile in `~/.memsy/config.json`. If recall works but `~/.memsy/turn-sync.log` says `no API key`, your key is somewhere this hook can't read it; the simplest fix is `./install.sh` (writes `~/.memsy/config.json`). To keep turn-sync's `actor_id` aligned with what `memsy_search` reads, **pin identity with `memsy_set_defaults { actor_id: "…", persist: "global" }`** (writes the config file both surfaces read) rather than `export MEMSY_ACTOR_ID=…`, which the hook sees but the MCP server's curated env may not.
+
+### Hook trust
+
+Plugin-bundled hooks are a Codex security feature: they're **untrusted until you review them via `/hooks`**, and Codex **re-flags them after any change to the hook definition** — including when you update the plugin. Until you trust (or re-trust) them, the hooks are silently skipped, so `MEMSY_SESSION_AUTOCONTEXT` / `MEMSY_TURN_SYNC` appear to do nothing even when set. If a mode isn't firing, open `/hooks`, confirm Memsy's hooks are listed and trusted, then restart Codex.
 
 **First-run setup.** On your first session without default roles/teams configured, the SessionStart hook shows a **one-time** nudge offering to set them up (self-suppressing — it writes `~/.memsy/.onboard-nudged` and stays silent once defaults exist). Run it anytime by asking *"set up my memsy defaults"* or invoking the `setup-defaults` prompt: it surfaces your org's existing roles/teams, or offers to create them, then persists your choice. Defaults are optional — they sharpen recall and attribution.
 
@@ -123,7 +133,7 @@ These modes are toggled by env vars read in the **SessionStart hook** (set them 
 
 **Skills not showing** — Run `codex plugin list` to verify the plugin is installed.
 
-**Hook not running** — Codex prompts you to trust plugin-bundled hooks on first use. Check the trust prompt.
+**Hook not running** (auto-context / turn-sync does nothing) — Plugin hooks must be trusted via `/hooks` before they run, and are **re-flagged after every plugin update**. Open `/hooks`, trust Memsy's hooks, then restart Codex (see [Hook trust](#hook-trust)). For turn-sync specifically, also check `~/.memsy/turn-sync.log` — `no API key` there means the key isn't where the hook can read it (see the turn-sync key note under [Modes](#modes)).
 
 **Wrong memories returned** — Ask Codex to call `memsy_list_orgs` and verify the active profile.
 

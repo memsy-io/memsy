@@ -10,11 +10,18 @@ if ! command -v codex &>/dev/null; then
   exit 1
 fi
 
+# Idempotent: re-running install.sh is the documented way to (re)enter the key
+# prompt below, so a marketplace/plugin that already exists must NOT abort the
+# script under `set -e`. `codex plugin marketplace upgrade` refreshes an
+# existing snapshot; `plugin add` is re-run either way to pick up changes.
 echo "Adding Memsy marketplace to Codex..."
-codex plugin marketplace add memsy-io/memsy
+if ! codex plugin marketplace add memsy-io/memsy 2>/dev/null; then
+  echo "  (marketplace already configured — refreshing)"
+  codex plugin marketplace upgrade memsy >/dev/null 2>&1 || true
+fi
 
 echo "Installing Memsy plugin..."
-codex plugin add memsy@memsy
+codex plugin add memsy@memsy || echo "  (plugin already installed — continuing)"
 
 echo ""
 echo "Memsy for Codex installed."

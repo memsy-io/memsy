@@ -1,17 +1,38 @@
 #!/usr/bin/env bash
 # session-start.sh — Memsy auto-context for Codex's SessionStart hook.
 #
-# OPT-IN: does nothing unless MEMSY_SESSION_AUTOCONTEXT=on, MEMSY_PROACTIVE=on,
-# or MEMSY_CONFIRM_STORE=on is set in the environment. All modes default OFF.
+# OPT-IN: the recall / proactive / confirm behaviours do nothing unless
+# MEMSY_SESSION_AUTOCONTEXT=on, MEMSY_PROACTIVE=on, or MEMSY_CONFIRM_STORE=on is
+# set in the environment — all default OFF. The ONE exception is a one-time,
+# network-free first-run setup nudge (see memsy_onboarding_nudge): on a genuine
+# session start, if no default roles/teams are configured, it emits a single
+# setup pointer and writes ~/.memsy/.onboard-nudged so it never repeats.
 #
-# Codex injects SessionStart hook output as developer context — but it requires
+# Codex pipes the hook payload (incl. `source`: startup|resume|clear|compact) on
+# stdin and injects this hook's output as developer context — but it requires
 # the output to be a JSON object of the form
 #   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}
 # Plain text is rejected at runtime ("hook returned invalid session start JSON
 # output"), which silently drops every block below. So we build the
 # human-readable text exactly as before, then JSON-encode it once at the end.
+#
+# SessionStart fires on startup, resume, clear AND compact. On `compact` (a
+# mid-session event) we suppress the nudge and the auto-context block — both are
+# "first message of the session" instructions that contradict themselves when
+# re-injected mid-conversation — but still re-assert the mode/proactive blocks,
+# since a compacted transcript may have dropped them.
 
 set -eu
+
+# Consume the hook payload from stdin and extract `source`. Defaults to
+# "startup" (full behaviour) when stdin is empty or python3 is unavailable.
+_payload="$(cat 2>/dev/null || true)"
+SOURCE="$(printf '%s' "$_payload" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("source") or "startup")
+except Exception:
+    print("startup")' 2>/dev/null)" || SOURCE="startup"
+[ -n "$SOURCE" ] || SOURCE="startup"
 
 is_truthy() {
   case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -40,7 +61,10 @@ import json, os
 # findConfigFile: a per-project ./.memsy/config.json is used EXCLUSIVELY when
 # present, else the per-user ~/.memsy/config.json. We never merge the two.
 def load_config():
-    base = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    # cwd, not CLAUDE_PROJECT_DIR: Codex runs hooks with the session cwd and
+    # never sets that Claude Code variable (an inherited one would point at the
+    # wrong project). Matches turn_sync.py:_load_config and the MCP.
+    base = os.getcwd()
     for path in (
         os.path.join(base, ".memsy", "config.json"),
         os.path.expanduser("~/.memsy/config.json"),
@@ -90,7 +114,10 @@ EOF
 # Build the full session-start context as plain text on stdout. Captured by the
 # caller and JSON-wrapped before being handed to Codex.
 generate_context() {
-  memsy_onboarding_nudge
+  # First-run nudge only on a genuine session start — never mid-session compact.
+  if [[ "$SOURCE" != "compact" ]]; then
+    memsy_onboarding_nudge
+  fi
 
   # Mode block — emitted whenever any mode is active. Skills read this to learn
   # the user's runtime preferences.
@@ -162,8 +189,11 @@ To disable: unset MEMSY_PROACTIVE and restart Codex.
 EOF
   fi
 
-  # Auto-context recall — fires only when MEMSY_SESSION_AUTOCONTEXT is on.
-  if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}"; then
+  # Auto-context recall — fires only when MEMSY_SESSION_AUTOCONTEXT is on, and
+  # never on `compact`: re-injecting "call memsy_list_memories before the first
+  # message / don't call it again" mid-session contradicts the copy emitted at
+  # the real session start.
+  if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}" || [[ "$SOURCE" == "compact" ]]; then
     return 0
   fi
 
