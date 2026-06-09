@@ -57,7 +57,7 @@ Reply with: "save all", "save N,M,…", "drop N", or "cancel".
 
 Call `memsy_ingest` **once** with `events` as an array (the MCP tool accepts up to 100 events per batch — don't loop). Each element:
 
-- `kind`: `"user_message"`
+- `kind`: match the speaker the item came from — `"user_message"` for something the user stated, `"assistant_message"` for a conclusion you (the assistant) reached. Set it per event (a batch can mix both). Don't blindly use `user_message`.
 - `content`: the standalone sentence (from step 1, refined in step 3)
 - `ts`: the conversation timestamp closest to where the content originated (if you can identify it), else `now`
 - `metadata`: a **JSON-encoded string** (the tool's schema requires `metadata: string`, max 4096 chars). Set it to `JSON.stringify({source: "claude-code-checkpoint", safe_to_delete: true})` — i.e. the literal string `{"source":"claude-code-checkpoint","safe_to_delete":true}`.

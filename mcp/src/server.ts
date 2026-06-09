@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
@@ -7,7 +9,13 @@ import { registerAllPrompts } from "./prompts/index.js";
 import { registerAllResources } from "./resources/index.js";
 import { registerAllTools } from "./tools/index.js";
 
-const VERSION = "0.1.0";
+// Read the version from the package manifest at runtime so the banner,
+// --version, and the MCP handshake always match the published package — no
+// hand-maintained constant to drift (it previously lagged at "0.1.0").
+// Resolved relative to this module: dist/server.js -> ../package.json.
+const VERSION: string = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 const SERVER_NAME = "@memsy-io/mcp";
 
 const HELP_TEXT = `memsy-mcp ${VERSION} — Memsy MCP server (drop-in memory that learns at role / team / org level)
