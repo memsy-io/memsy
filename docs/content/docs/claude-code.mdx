@@ -46,6 +46,19 @@ claude plugin install memsy@memsy
 </Step>
 </Steps>
 
+## Updating
+
+When a new version is published, update from the CLI or inside Claude Code:
+
+```sh
+claude plugin marketplace update memsy
+claude plugin update memsy@memsy
+```
+
+Or run `/plugin`, open the **Plugins** tab, select **memsy**, and choose update. To keep the plugin current automatically, open the **Marketplaces** tab, select **memsy**, and enable auto-update (opt-in for third-party marketplaces — off until you turn it on).
+
+After updating, restart Claude Code so the refreshed plugin and its MCP server load, then run `/memsy:memsy-doctor` to confirm.
+
 ## Slash commands
 
 ### `/memsy <anything>` — universal entry point
@@ -56,7 +69,8 @@ This is the one slash to remember. The `memsy` skill reads what you typed after 
 /memsy what did we decide about billing storage?     → searches memories
 /memsy remember we picked Postgres for billing       → stores a memory
 /memsy switch to work                                → switches profile
-/memsy list                                          → lists recent memories
+/memsy list                                          → recent memories for the current actor
+/memsy list all                                      → recent memories across every actor
 /memsy doctor                                        → runs the health check
 /memsy setup                                         → first-time walkthrough
 /memsy proactive on | /memsy proactive off           → toggle auto-save (session)
@@ -90,14 +104,14 @@ Routing rules: leading verbs (`remember`, `save`, `switch to`, `list`, `doctor`,
 
 ## MCP-level prompts (work in Cursor / VS Code / Cline too)
 
-These come from the MCP server itself, so they're available in any MCP host — not just Claude Code:
+These come from the MCP server itself, so they're available in any MCP host — not just Claude Code. In Claude Code they're invoked with the `/plugin:<plugin>:<server>:<prompt>` form (other hosts surface them under their own prompt menus):
 
 | Prompt | Description |
 |---|---|
-| `/memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` and `limit`. |
-| `/memsy:proactive-mode` | Switch the session into proactive recall mode for the rest of the conversation. |
-| `/memsy:setup-defaults` | Same as `/memsy-setup`, host-agnostic version. |
-| `/memsy:summarize-and-store` | Summarize the recent turns into a single memory and store it. |
+| `/plugin:memsy:memsy:recall-context` | Structured recall — Claude Code prompts you for `topic` and `limit`. |
+| `/plugin:memsy:memsy:proactive-mode` | Switch the session into proactive recall mode for the rest of the conversation. |
+| `/plugin:memsy:memsy:setup-defaults` | Same flow as the `/memsy:memsy-setup` command. |
+| `/plugin:memsy:memsy:summarize-and-store` | Summarize the recent turns into a single memory and store it. |
 
 ## Hooks
 
@@ -111,6 +125,30 @@ When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Cod
 | `MEMSY_SESSION_CONTEXT_LIMIT` | `6` | How many memories to surface. Clamped to 1–20. |
 
 Turn it off by unsetting `MEMSY_SESSION_AUTOCONTEXT` and restarting Claude Code. The hook is silent unless explicitly opted in.
+
+### Turn sync (auto-capture every turn, opt-in)
+
+When `MEMSY_TURN_SYNC=on` is set in the launch shell, the plugin's `Stop` hook ships the last user+assistant turn to Memsy after every response — so the extraction pipeline captures decisions, conclusions, and preferences buried in long answers that proactive mode's mid-turn heuristics would miss. No "remember that" needed.
+
+Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude, so the hook can't call MCP tools to store anything. Instead it POSTs the turn directly to `/ingest` over HTTPS. The hook is registered `async`, so it adds zero latency to your responses; failures are logged to `~/.memsy/turn-sync.log`.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `MEMSY_TURN_SYNC` | `off` | Set to `on` to capture every turn automatically. |
+
+> **Identity alignment.** Turn sync tags each event with the same `actor_id` that `memsy_search` reads, so captured memories surface in recall. The hook mirrors the MCP's **full** derivation ladder: `MEMSY_ACTOR_ID` env if set → the active profile's `actor_id` pinned in `~/.memsy/config.json` (what the setup flow writes) → `sha256("<profile>|<git-email>")` → `sha256("<profile>|<user>@<host>")`. The profile name resolves `MEMSY_PROFILE` → the config file's `active_profile` → `default`, identically on both sides — so a profile chosen via `active_profile` (not the env var) **and** a pinned `actor_id` both stay aligned with no extra setup. Edge case: with no git `user.email` configured at all, the OS-username fallback can differ between the Node MCP and the Python hook — set `MEMSY_ACTOR_ID` to pin both.
+
+### First-run setup (onboarding)
+
+The first time you start a session with no default roles/teams configured, the SessionStart hook emits a **one-time** nudge offering to set them up. It self-suppresses — it writes `~/.memsy/.onboard-nudged` after the first show and never repeats, and stays silent once any defaults exist (or `MEMSY_DEFAULT_ROLE_IDS`/`MEMSY_DEFAULT_TEAM_IDS` is set). The check is purely local (`~/.memsy/config.json`) — no network call on session start.
+
+Run setup anytime — the `/memsy:memsy-setup` command, or the underlying MCP prompt:
+
+```
+/plugin:memsy:memsy:setup-defaults
+```
+
+(or just ask *"set up my memsy defaults"*). Defaults are optional: memory works without them, but default roles/teams sharpen recall and attribution. This same prompt is available in any MCP host (Cursor, Cline, etc.) even where there's no SessionStart hook to nudge.
 
 ### Proactive mode (opt-in)
 
@@ -181,6 +219,7 @@ Do a deep memsy dive on rate limiting decisions across all our services.
 | `MEMSY_DEFAULT_TEAM_IDS` | Comma-separated default team filters for searches. |
 | `MEMSY_SESSION_AUTOCONTEXT` | `on` to enable SessionStart auto-context. Default: `off`. |
 | `MEMSY_SESSION_CONTEXT_LIMIT` | How many memories the auto-context surfaces. Default: `6`, clamped 1–20. |
+| `MEMSY_TURN_SYNC` | `on` to auto-capture every user+assistant turn via the `Stop` hook (POSTs directly to `/ingest`). Default: `off`. The hook now reads the active profile's pinned `actor_id` and `active_profile` from `~/.memsy/config.json`, so it stays aligned with recall automatically (see Turn sync above). Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_CONFIRM_STORE` | `on` to ask for confirmation before every single-item memory store (the auto-fire `memsy-remember` skill, the `/memsy:memsy-remember` command, and the `/memsy remember <text>` smart-router branch). Bulk operations like `/memsy:memsy-checkpoint` and `/memsy:memsy-index` already confirm by design, regardless of this flag. Default: `off`. Accepts `on`/`true`/`1`/`yes`/`enabled`. |
 | `MEMSY_PROACTIVE` | `on` to make Claude actively watch the conversation for save-worthy content — preferences, intents, plans, decisions, learnings — and store them via `memsy_ingest` **without** requiring explicit verbs like "remember that". Equivalent to running `/memsy:proactive-mode` once per session, but turned into the default. Combine with `MEMSY_CONFIRM_STORE=on` to get "watch + ask before storing each one." Default: `off`. |
 
@@ -217,6 +256,9 @@ Switch back to the published npm version:
 | Long delay before tools load | `dist/server.js` missing (local-dev mode) | `cd mcp && npm install && npm run build`, restart Claude Code. |
 | `command not found: node` in MCP logs | `install.sh --dev` not run, Node not on PATH | Re-run `./install.sh --dev /path/to/memsy` and restart Claude Code. |
 | SessionStart auto-context not appearing | `MEMSY_SESSION_AUTOCONTEXT` not set, or session not restarted after setting | `export MEMSY_SESSION_AUTOCONTEXT=on && claude` — child inherits launch env. |
+| Turn sync captures nothing | `MEMSY_TURN_SYNC` not set, no API key in launch shell, or transcript turn too short | `export MEMSY_TURN_SYNC=on` and restart from that shell; check `~/.memsy/turn-sync.log` for HTTP errors. |
+| Turn-synced memories not surfacing in recall | `actor_id` mismatch — only possible now if you have **no** git `user.email` set (Node MCP and Python hook can derive different OS-username fallbacks) | `export MEMSY_ACTOR_ID=<stable-id>` so the `Stop` hook and the MCP agree. |
+| Memsy tools behave like an old version (e.g. `/memsy list` not actor-scoped) | A global `@memsy-io/mcp` shadows the plugin's `npx` | `npm ls -g @memsy-io/mcp` → if listed, `npm uninstall -g @memsy-io/mcp`, then restart. See [MCP troubleshooting](/docs/mcp#troubleshooting). |
 | Wrong org's memories surfacing | Active profile mismatch | `/memsy switch <profile>` or set `MEMSY_PROFILE` in your shell. |
 
 ## Uninstall
