@@ -228,6 +228,11 @@ The MCP server (`@memsy-io/mcp`) is unaffected — uninstalling the plugin only 
 - Try `npx -y @memsy-io/mcp --version` to confirm the MCP server can run.
 - If you're on a corporate network blocking npm, run `./install.sh --dev /path/to/local/memsy` and point at a local build.
 
+**Memsy tools behave like an old version (e.g. `/memsy list` isn't actor-scoped)**
+
+- A globally-installed `@memsy-io/mcp` shadows the plugin's `npx -y @memsy-io/mcp`, pinning you to a stale build. Check and remove it: `npm ls -g @memsy-io/mcp` → if it's listed, `npm uninstall -g @memsy-io/mcp`, then restart Claude Code.
+- See [MCP troubleshooting](https://docs.memsy.io/docs/mcp#troubleshooting) for the full version-update guide (npx cache, stale process, how to verify).
+
 **Wrong org's memories surfacing**
 
 - Run `/memsy switch <profile>` (smart router) or `/memsy:memsy-org <profile>` (namespaced) to switch active profile, or set `MEMSY_PROFILE` in your shell and restart Claude Code.
