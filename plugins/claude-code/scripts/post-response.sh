@@ -178,7 +178,7 @@ def _git_email():
         try:
             out = subprocess.run(
                 ['git', 'config', *scope, '--get', 'user.email'],
-                capture_output=True, text=True, timeout=2,
+                capture_output=True, text=True, timeout=1.5,  # matches mcp/src/identity.ts (1500ms)
             )
             v = out.stdout.strip()
             if v:
@@ -218,10 +218,13 @@ def _resolve_profile(cfg):
     prof = profs.get(active) if isinstance(profs, dict) else None
     return active, (prof if isinstance(prof, dict) else {})
 
+# Always resolve the active profile (not just when deriving actor_id) — its
+# default role/team are needed below to mirror the MCP's ingest auto-tag.
+_cfg = _load_config()
+profile, _prof = _resolve_profile(_cfg)
+
 actor_id = os.environ.get('MEMSY_ACTOR_ID', '').strip()
 if not actor_id:
-    _cfg = _load_config()
-    profile, _prof = _resolve_profile(_cfg)
     # Tier 2: a pinned actor_id in the config file (matches MCP identity.ts:68).
     actor_id = (_prof.get('actor_id') or _prof.get('actorId') or '').strip()
     if not actor_id:
@@ -232,14 +235,34 @@ if not actor_id:
             import getpass, socket
             actor_id = _hash_id(profile, getpass.getuser() + '@' + socket.gethostname())
 
+def _single_default(snake, camel, env_name):
+    # Mirror the MCP's ingest auto-tag (mcp/src/tools/ingest.ts): attach the
+    # default role/team only when exactly ONE is configured (the API takes a
+    # singular role_id/team_id, so a multi-value default can't pick one).
+    # Profile wins; env fills the gap — same merge order as the MCP's loadConfig.
+    v = _prof.get(snake) or _prof.get(camel)
+    vals = [str(x) for x in v if str(x).strip()] if isinstance(v, list) else None
+    if not vals:
+        raw = os.environ.get(env_name, '').strip()
+        vals = [s.strip() for s in raw.split(',') if s.strip()] if raw else None
+    return vals[0] if vals is not None and len(vals) == 1 else None
+
+role_id = _single_default('default_role_ids', 'defaultRoleIds', 'MEMSY_DEFAULT_ROLE_IDS')
+team_id = _single_default('default_team_ids', 'defaultTeamIds', 'MEMSY_DEFAULT_TEAM_IDS')
+
 # session_id only needs to be non-empty and stable across the Stop hook's
 # repeated fires within one Claude session — the transcript path is exactly
 # that. Recall is actor-based, so it need not match the MCP's per-process id.
 session_id = 'cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16]
 
 def _event(kind, content):
-    return {'kind': kind, 'content': content,
-            'actor_id': actor_id, 'session_id': session_id}
+    e = {'kind': kind, 'content': content,
+         'actor_id': actor_id, 'session_id': session_id}
+    if role_id:
+        e['role_id'] = role_id
+    if team_id:
+        e['team_id'] = team_id
+    return e
 
 events = []
 if user_text:

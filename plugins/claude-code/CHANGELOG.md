@@ -25,6 +25,9 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Turn sync previously read the API key from the environment only and did nothing when the key lived solely in `~/.memsy/config.json`.
 - The onboarding nudge now resolves a single active config (a per-project `.memsy/config.json` is used exclusively when present) instead of mixing project and global defaults.
 - `post-response.sh` now reads the transcript from the tail in blocks and stops at the last turn, instead of loading the whole file on every response.
+- Turn sync now auto-tags each event with the active profile's single default `role_id` / `team_id` (mirroring the MCP's `memsy_ingest`), so turn-synced memories participate in role/team promotion instead of landing untagged.
+- The `SessionStart` hook no longer re-injects the first-run nudge or the "call `memsy_list_memories` before the first message" auto-context block on `compact` (a mid-session event) — both are session-start instructions that contradict themselves mid-conversation; the mode/proactive blocks are still re-asserted so a compacted transcript keeps them.
+- Aligned the turn-sync git-email lookup timeout to the MCP's 1.5s.
 
 ## [0.1.0]
 

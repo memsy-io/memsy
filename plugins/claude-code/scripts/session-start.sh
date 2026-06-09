@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # session-start.sh — Memsy auto-context for Claude Code's SessionStart hook.
 #
-# OPT-IN: this hook does nothing unless MEMSY_SESSION_AUTOCONTEXT=on is set in
-# the shell that launched Claude Code. We default OFF because token-bursting
-# every session start with stale memories is worse than no auto-context until
-# the user explicitly turns it on.
+# OPT-IN: the recall auto-context does nothing unless MEMSY_SESSION_AUTOCONTEXT=on
+# is set in the shell that launched Claude Code. We default OFF because token-
+# bursting every session start with stale memories is worse than no auto-context
+# until the user explicitly turns it on. The ONE thing that runs unprompted is a
+# one-time, network-free first-run setup nudge (see memsy_onboarding_nudge): on a
+# genuine session start, if no default roles/teams are configured, it prints a
+# single setup pointer and writes ~/.memsy/.onboard-nudged so it never repeats.
 #
 # When enabled, this script prints an instruction to stdout. Claude Code injects
 # SessionStart stdout as context Claude sees before the first user message — so
@@ -14,8 +17,25 @@
 # We do NOT spawn a memsy-mcp child from this script to make the call ourselves
 # — the plugin's bundled MCP is already loaded by Claude Code, so the cheapest
 # path is to instruct Claude to use the existing connection.
+#
+# SessionStart fires on startup, resume, clear AND compact. On `compact` (a mid-
+# session event) we suppress the nudge and the auto-context block — both are
+# "first message of the session" instructions that contradict themselves when
+# re-injected mid-conversation — while still re-asserting the mode/proactive
+# blocks, since a compacted transcript may have dropped them.
 
 set -eu
+
+# Consume the hook payload from stdin and extract `source` (startup|resume|
+# clear|compact). Defaults to "startup" (full behaviour) when stdin is empty or
+# python3 is unavailable.
+_payload="$(cat 2>/dev/null || true)"
+SOURCE="$(printf '%s' "$_payload" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("source") or "startup")
+except Exception:
+    print("startup")' 2>/dev/null)" || SOURCE="startup"
+[ -n "$SOURCE" ] || SOURCE="startup"
 
 # Helper: decide whether a Memsy env flag is set to a truthy value.
 # Accepts the conventional truthy variants users actually type, lower-cased —
@@ -100,7 +120,10 @@ memsy_set_defaults (persist:"global"). If they decline, drop it; this won't repe
 
 EOF
 }
-memsy_onboarding_nudge
+# First-run nudge only on a genuine session start — never mid-session compact.
+if [[ "$SOURCE" != "compact" ]]; then
+  memsy_onboarding_nudge
+fi
 
 # Mode block: emit a small "[memsy modes: ...]" line whenever any plugin mode
 # is set. SessionStart hook stdout is injected into Claude's context, so this
@@ -200,9 +223,11 @@ EOF
 fi
 
 # Recall auto-context — separate, only fires when MEMSY_SESSION_AUTOCONTEXT is
-# truthy. If neither this nor any mode flag above was set, the script has
-# already finished its observable work and is about to exit 0 silently.
-if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}"; then
+# truthy, and never on `compact`: re-injecting "call memsy_list_memories before
+# the first message / don't call it again" mid-session contradicts the copy
+# emitted at the real session start. If neither this nor any mode flag above
+# was set, the script has already finished its observable work and exits 0.
+if ! is_truthy "${MEMSY_SESSION_AUTOCONTEXT:-}" || [[ "$SOURCE" == "compact" ]]; then
   exit 0
 fi
 
