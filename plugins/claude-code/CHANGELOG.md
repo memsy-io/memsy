@@ -6,6 +6,13 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-09
+
+### Fixed
+- Turn sync now auto-tags each event with the active profile's single default `role_id` / `team_id` (mirroring the MCP's `memsy_ingest`), so turn-synced memories participate in role/team promotion instead of landing untagged.
+- The `SessionStart` hook no longer re-injects the first-run nudge or the "call `memsy_list_memories` before the first message" auto-context block on `compact` (a mid-session event) — both are session-start instructions that contradict themselves mid-conversation; the mode/proactive blocks are still re-asserted so a compacted transcript keeps them.
+- Aligned the turn-sync git-email lookup timeout to the MCP's 1.5s.
+
 ## [0.1.1] - 2026-06-08
 
 ### Added
@@ -32,4 +39,5 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial release: the `/memsy` universal entry point and `/memsy:memsy-*` slash commands; recall, remember, and setup skills; opt-in session-start auto-context; codebase indexing (`/memsy:memsy-index`); session checkpointing (`/memsy:memsy-checkpoint`); multi-org switching; and a deep-retrieval subagent — all over the `@memsy-io/mcp` server.
 
 [Unreleased]: https://github.com/memsy-io/memsy/commits/main/plugins/claude-code
+[0.1.2]: https://github.com/memsy-io/memsy/tree/main/plugins/claude-code
 [0.1.1]: https://github.com/memsy-io/memsy/tree/main/plugins/claude-code
