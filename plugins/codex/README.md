@@ -41,6 +41,19 @@ Then set your API key. `install.sh` **prompts for it interactively** and saves i
 > MEMSY_API_KEY = "msy_..."
 > ```
 
+## Updating
+
+Codex serves the plugin from the marketplace's Git snapshot (pinned to `main`), so updates ship as soon as a change lands on `main` — there's no version to bump. Refresh the snapshot, then reinstall:
+
+```bash
+codex plugin marketplace upgrade memsy   # re-pull the marketplace from main
+codex plugin add memsy@memsy             # reinstall the refreshed plugin
+```
+
+Restart Codex so the refreshed hooks and MCP server load. To confirm, ask *"What do we know about X?"* and check that `memsy-recall` fires.
+
+> The **MCP server** (`@memsy-io/mcp`) is fetched separately by `npx` and updates on its own cadence — see [Troubleshooting](#troubleshooting) if Memsy tools behave like an older version after an update.
+
 ## Plugin structure
 
 This is a proper Codex plugin — Codex manages MCP registration and hooks automatically:
@@ -113,5 +126,7 @@ These modes are toggled by env vars read in the **SessionStart hook** (set them 
 **Hook not running** — Codex prompts you to trust plugin-bundled hooks on first use. Check the trust prompt.
 
 **Wrong memories returned** — Ask Codex to call `memsy_list_orgs` and verify the active profile.
+
+**Memsy tools behave like an older version** — A globally-installed `@memsy-io/mcp` shadows the plugin's `npx -y @memsy-io/mcp`, pinning you to a stale build. Check and remove it: `npm ls -g @memsy-io/mcp` → if it's listed, `npm uninstall -g @memsy-io/mcp`, then restart Codex. See [MCP troubleshooting](https://docs.memsy.io/docs/mcp#troubleshooting) for the full version-update guide.
 
 Full docs: [docs.memsy.io/docs/codex](https://docs.memsy.io/docs/codex)

@@ -36,32 +36,37 @@ memsy_onboarding_nudge() {
   configured="$(python3 - <<'PY' 2>/dev/null
 import json, os
 
-def defaults_set(path, active):
-    try:
-        with open(path) as f:
-            cfg = json.load(f)
-    except Exception:
-        return False
-    profs = cfg.get("profiles")
-    p = (profs.get(active) or {}) if isinstance(profs, dict) else cfg
-    roles = p.get("default_role_ids") or p.get("defaultRoleIds")
-    teams = p.get("default_team_ids") or p.get("defaultTeamIds")
-    return bool(roles) or bool(teams)
+# Whole-file precedence, identical to turn_sync.py:_load_config and the MCP's
+# findConfigFile: a per-project ./.memsy/config.json is used EXCLUSIVELY when
+# present, else the per-user ~/.memsy/config.json. We never merge the two.
+def load_config():
+    base = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    for path in (
+        os.path.join(base, ".memsy", "config.json"),
+        os.path.expanduser("~/.memsy/config.json"),
+    ):
+        try:
+            if os.path.isfile(path):
+                with open(path) as f:
+                    raw = json.load(f)
+                return raw if isinstance(raw, dict) else {}
+        except Exception:
+            return {}
+    return {}
 
-home = os.path.expanduser("~")
-gpath = os.path.join(home, ".memsy", "config.json")
-ppath = os.path.join(os.getcwd(), ".memsy", "config.json")
+cfg = load_config()
 
-active = os.environ.get("MEMSY_PROFILE") or ""
-if not active:
-    try:
-        with open(gpath) as f:
-            active = json.load(f).get("active_profile") or "default"
-    except Exception:
-        active = "default"
+active = os.environ.get("MEMSY_PROFILE") or (
+    cfg.get("active_profile") if isinstance(cfg.get("active_profile"), str) else ""
+) or "default"
+
+profs = cfg.get("profiles")
+prof = (profs.get(active) or {}) if isinstance(profs, dict) else cfg
+roles = prof.get("default_role_ids") or prof.get("defaultRoleIds")
+teams = prof.get("default_team_ids") or prof.get("defaultTeamIds")
 
 env_set = bool(os.environ.get("MEMSY_DEFAULT_ROLE_IDS") or os.environ.get("MEMSY_DEFAULT_TEAM_IDS"))
-print("1" if (env_set or defaults_set(gpath, active) or defaults_set(ppath, active)) else "0")
+print("1" if (env_set or roles or teams) else "0")
 PY
 )" || configured=0
 
