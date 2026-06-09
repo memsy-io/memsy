@@ -37,7 +37,8 @@ Then set your API key:
 # Option 1 — environment variable (add to ~/.zshrc or ~/.bashrc)
 export MEMSY_API_KEY=msy_...
 
-# Option 2 — interactive setup (persists to ~/.hermes/.env)
+# Option 2 — interactive setup (persists the key; the provider reads it from
+# the environment, ~/.hermes/memsy.json, or the shared ~/.memsy/config.json)
 hermes memory setup
 ```
 
@@ -46,6 +47,17 @@ Start Hermes:
 ```bash
 hermes chat
 ```
+
+## Updating
+
+The provider is a copied install (not a live checkout): `install.sh` drops `memory_provider/` into `~/.hermes/plugins/memsy/`. To update, pull the repo and re-run the installer — it replaces the installed copy in place (your key and config are untouched):
+
+```bash
+cd memsy && git pull
+cd plugins/hermes && ./install.sh
+```
+
+Then restart Hermes so the refreshed provider loads.
 
 ## Plugin structure
 

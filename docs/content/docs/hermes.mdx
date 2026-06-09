@@ -33,14 +33,14 @@ Memories stored from Codex, Claude Code, or a teammate's Hermes session are imme
     export MEMSY_API_KEY=msy_...
     ```
 
-    **Option 2 — interactive setup** (saves to `~/.hermes/.env`, survives restarts):
+    **Option 2 — interactive setup** (persists the key, survives restarts):
 
     ```bash
     hermes memory setup
     ```
 
     <Info>
-      `hermes memory setup` prompts for your API key and writes it to `~/.hermes/.env` so Hermes picks it up on every start without needing a shell export.
+      `hermes memory setup` prompts for your API key and persists it so Hermes picks it up on every start without needing a shell export. The provider resolves the key from the environment (including `~/.hermes/.env`), `~/.hermes/memsy.json`, or the shared `~/.memsy/config.json` — so a key saved by any other Memsy host (Claude Code, Cursor, Codex) works here too.
     </Info>
   </Step>
 
@@ -72,6 +72,15 @@ Memsy runs as Hermes's native memory backend — no MCP subprocess, no `npx`:
 | `on_memory_write` | When Hermes writes a built-in memory | Mirrors the write to Memsy for cross-agent access |
 | `on_session_end` | At session end | Waits for pending background sync to flush before exit |
 
+## Updating
+
+The provider is a copied install — `install.sh` drops `memory_provider/` into `~/.hermes/plugins/memsy/`, so pulling the repo alone changes nothing. To update, pull and re-run the installer (it replaces the installed copy in place; your key and config are untouched), then restart Hermes:
+
+```bash
+cd memsy && git pull
+cd plugins/hermes && ./install.sh
+```
+
 ## Native tools
 
 These tools are injected directly into Hermes's tool registry:
@@ -81,7 +90,7 @@ These tools are injected directly into Hermes's tool registry:
 | `memsy_search` | "What did we decide about X?", "Do we have anything on Y?" |
 | `memsy_ingest` | "Remember that…", "Save this decision…" |
 | `memsy_health` | Diagnosing connectivity issues |
-| `memsy_list_memories` | "Show me recent memories" |
+| `memsy_list_memories` | "Show me recent memories" — defaults to **your** actor; say "across all actors" for the org-wide view (`all_actors: true`) |
 | `memsy_list_roles` / `memsy_create_role` | "What roles do we have?", "Create a Software Engineer role" |
 | `memsy_list_teams` / `memsy_create_team` | "What teams exist?", "Create a Platform team" |
 | `memsy_set_defaults` | "Set up my Memsy defaults" — persists role/team/actor defaults to the shared `~/.memsy/config.json` |

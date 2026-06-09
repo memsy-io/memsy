@@ -25,6 +25,7 @@ import os
 import subprocess
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -154,8 +155,16 @@ class MemsyMemoryProvider(MemoryProvider):
         ]
 
     def save_config(self, values: dict, hermes_home: str) -> None:
+        # Atomic write + 0600, same as _persist_defaults: this is the write path
+        # for `hermes memory setup`, and the file can carry the API key (initialize
+        # falls back to cfg["api_key"] from it), so it must never be world-readable
+        # or left half-written on a crash.
         config_path = Path(hermes_home) / "memsy.json"
-        config_path.write_text(json.dumps(values, indent=2))
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = config_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(values, indent=2))
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, config_path)
 
     # ── Tools ─────────────────────────────────────────────────────────────────
 
@@ -215,13 +224,30 @@ class MemsyMemoryProvider(MemoryProvider):
             {
                 "name": "memsy_list_memories",
                 "description": (
-                    "Browse stored memories without a query. Use when memsy_search returns nothing."
+                    "Browse stored memories without a query. Use when memsy_search returns "
+                    "nothing. Defaults to the ACTIVE actor only — pass all_actors:true for an "
+                    "org-wide view across every actor, or actor_id to filter to a specific one."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "limit": {"type": "integer", "default": 20},
                         "sort": {"type": "string", "default": "observed_at_desc"},
+                        "actor_id": {
+                            "type": "string",
+                            "description": (
+                                "Filter to a specific actor. Omit to use the active actor "
+                                "(the default); set all_actors:true for every actor."
+                            ),
+                        },
+                        "all_actors": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": (
+                                "List across every actor (org-wide) instead of just the "
+                                "active one. Ignored when actor_id is set."
+                            ),
+                        },
                     },
                 },
             },
@@ -331,6 +357,14 @@ class MemsyMemoryProvider(MemoryProvider):
                 return self._get("/health")
             elif tool_name == "memsy_list_memories":
                 qs = f"?limit={args.get('limit', 20)}&sort={args.get('sort', 'observed_at_desc')}"
+                # Actor scope mirrors the MCP's resolveListActorScope: an explicit
+                # actor_id wins; all_actors=true lists org-wide; default = the
+                # active actor, so "list" shows YOUR memories like search does.
+                explicit = (args.get("actor_id") or "").strip()
+                if explicit:
+                    qs += f"&actor_id={urllib.parse.quote(explicit)}"
+                elif not args.get("all_actors"):
+                    qs += f"&actor_id={urllib.parse.quote(self._actor_id)}"
                 return self._get(f"/console/memories{qs}")
             elif tool_name == "memsy_list_roles":
                 org_id = self._resolve_org_id()
@@ -508,7 +542,7 @@ class MemsyMemoryProvider(MemoryProvider):
                     ["git", "config", *scope, "--get", "user.email"],
                     capture_output=True,
                     text=True,
-                    timeout=2,
+                    timeout=1.5,  # matches mcp/src/identity.ts (1500ms)
                 )
                 value = out.stdout.strip()
                 if value:
