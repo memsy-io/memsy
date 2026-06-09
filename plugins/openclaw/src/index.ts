@@ -318,6 +318,18 @@ const ListMemoriesParams = Type.Object({
   search: Type.Optional(Type.String()),
   kind: Type.Optional(Type.String()),
   status: Type.Optional(Type.String()),
+  actor_id: Type.Optional(
+    Type.String({
+      description:
+        "Filter to a specific actor. Omit to use the active actor (the default); set all_actors:true for every actor.",
+    }),
+  ),
+  all_actors: Type.Optional(
+    Type.Boolean({
+      description:
+        "List across every actor (org-wide) instead of just the active one. Ignored when actor_id is set.",
+    }),
+  ),
 });
 
 const UseOrgParams = Type.Object({
@@ -341,7 +353,12 @@ export default definePluginEntry({
     // Fired-once flags: reset on session_start so /new and idle-rotation get
     // fresh context blocks each session. sessionId is sent on every ingest
     // event (required by /ingest) and likewise rotates per session.
-    const _state = { autocontextFired: false, proactiveFired: false, sessionId: randomUUID() };
+    const _state = {
+      autocontextFired: false,
+      proactiveFired: false,
+      modesFired: false,
+      sessionId: randomUUID(),
+    };
 
     // ── memsy_health ─────────────────────────────────────────────────────────
     api.registerTool({
@@ -449,7 +466,7 @@ export default definePluginEntry({
       name: "memsy_list_memories",
       label: "Memsy List Memories",
       description:
-        "List memories with optional filters. Use when memsy_search returns nothing or the user wants to browse stored memories.",
+        "List memories with optional filters. Use when memsy_search returns nothing or the user wants to browse stored memories. Defaults to the ACTIVE actor only — pass all_actors:true for an org-wide view across every actor, or actor_id to filter to a specific actor.",
       parameters: ListMemoriesParams,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as ListMemoriesParamsType;
@@ -462,6 +479,12 @@ export default definePluginEntry({
         if (p.search) qs.set("search", p.search);
         if (p.kind) qs.set("kind", p.kind);
         if (p.status) qs.set("status", p.status);
+        // Actor scope mirrors the MCP's resolveListActorScope: an explicit
+        // actor_id wins; all_actors=true lists org-wide; default = the active
+        // actor, so "list" shows YOUR memories like search does.
+        const explicitActor = p.actor_id?.trim();
+        if (explicitActor) qs.set("actor_id", explicitActor);
+        else if (!p.all_actors) qs.set("actor_id", resolveActorId());
         const url = `${baseUrl}/console/memories${qs.size > 0 ? "?" + qs.toString() : ""}`;
         const resp = await fetch(url, { headers: authHeaders(apiKey) });
         const data = (await resp.json()) as unknown;
@@ -677,6 +700,7 @@ export default definePluginEntry({
     api.on("session_start", (_event: unknown) => {
       _state.autocontextFired = false;
       _state.proactiveFired = false;
+      _state.modesFired = false;
       _state.sessionId = randomUUID();
     });
 
@@ -685,8 +709,35 @@ export default definePluginEntry({
     // their respective fired flags. If both fire on the same first turn they
     // are combined into a single prependContext return value.
     api.on("heartbeat_prompt_contribution", async (_event: unknown) => {
+      let modesPart: string | undefined;
       let proactivePart: string | undefined;
       let recallPart: string | undefined;
+
+      // ── Mode line (no API call needed) ───────────────────────────────────────
+      // Emitted once per session whenever any mode is active, INDEPENDENT of
+      // proactive: the memsy-remember skill keys its confirm-before-store step
+      // off this exact "[memsy modes: ...]" line, so it must appear even when
+      // MEMSY_CONFIRM_STORE=on is the only mode set. (It was previously emitted
+      // only inside the proactive block, leaving confirm-store silently inert
+      // unless proactive was also on.)
+      if (!_state.modesFired) {
+        const modes = [
+          isConfirmStoreEnabled(config) ? "confirm-before-store" : "",
+          isProactiveEnabled(config) ? "proactive" : "",
+        ].filter(Boolean);
+        if (modes.length) {
+          _state.modesFired = true;
+          modesPart = `[memsy modes: ${modes.join(" ")}]`;
+          if (isConfirmStoreEnabled(config) && !isProactiveEnabled(config)) {
+            // Standalone confirm-store: spell out the contract here, since no
+            // proactive block will carry it this session.
+            modesPart +=
+              `\nBefore EVERY memsy_ingest call this session, surface the proposed ` +
+              `content and ask: Save? (y / n / edit "<new text>"). Do not store ` +
+              `without an explicit yes.`;
+          }
+        }
+      }
 
       // ── Proactive mode instruction (no API call needed) ──────────────────────
       if (isProactiveEnabled(config) && !_state.proactiveFired) {
@@ -713,7 +764,14 @@ export default definePluginEntry({
           const baseUrl = resolveBaseUrl(config);
           const limit = contextLimit(config);
           try {
-            const qs = new URLSearchParams({ limit: String(limit), sort: "observed_at_desc" });
+            // Scope the recall block to the active actor — without this the
+            // session-start context surfaces the whole org's memories, unlike
+            // every other surface (search and the list tool are actor-scoped).
+            const qs = new URLSearchParams({
+              limit: String(limit),
+              sort: "observed_at_desc",
+              actor_id: resolveActorId(),
+            });
             const resp = await fetch(`${baseUrl}/console/memories?${qs.toString()}`, {
               headers: authHeaders(apiKey),
             });
@@ -739,7 +797,7 @@ export default definePluginEntry({
         }
       }
 
-      const combined = [proactivePart, recallPart].filter(Boolean).join("\n\n");
+      const combined = [modesPart, proactivePart, recallPart].filter(Boolean).join("\n\n");
       if (!combined) return;
       return { prependContext: combined + "\n" };
     });

@@ -23,6 +23,7 @@ Strip the leading verb / framing (`remember that`, `save this`, `note that`, `le
 - **Too short** (< 20 chars): ask the user to expand.
 - **Contains a secret-shaped token** (`msy_`, `sk_`, `ghp_`, `Bearer `, anything resembling an API key, password, or JWT): refuse. Say: "That looks like it contains a secret — Memsy stores in plain text. Either paraphrase without the secret, or use a real secret manager."
 - **Transient / scratch content** (TODOs for the current turn, half-formed debug output): ask if they really want to persist it.
+- **Already-stored**: if you just stored something nearly identical this session, skip and tell the user it's a duplicate rather than storing it again.
 
 ## 3. Confirm-before-store (if enabled)
 

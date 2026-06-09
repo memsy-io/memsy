@@ -1,0 +1,43 @@
+# Changelog
+
+All notable changes to the Memsy plugin for OpenClaw are documented here.
+This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The plugin is built from source and installed as a copy; users receive changes
+by pulling the repo and re-running `./install.sh` — see the README's
+[Updating](./README.md#updating) section.
+
+## [Unreleased]
+
+## [0.1.0]
+
+### Added
+- Initial release: a native OpenClaw TypeScript plugin registering the Memsy
+  tools — `memsy_search`, `memsy_ingest`, `memsy_health`,
+  `memsy_list_memories` (defaults to the **active actor**; `all_actors: true`
+  for org-wide), `memsy_list_orgs` / `memsy_use_org`, `memsy_list_roles` /
+  `memsy_create_role`, `memsy_list_teams` / `memsy_create_team`, and
+  `memsy_set_defaults` (persisted atomically, `0600`, to the shared
+  `~/.memsy/config.json`).
+- `memsy-recall` and `memsy-remember` skills (installed globally via
+  `openclaw skills install`).
+- Opt-in **session auto-context** (`MEMSY_SESSION_AUTOCONTEXT=on`): recent
+  memories for the active actor are prepended once per session via the
+  heartbeat prompt contribution.
+- Opt-in **proactive capture** (`MEMSY_PROACTIVE=on`) with speaker-correct
+  `kind` labels, and **confirm-before-store** (`MEMSY_CONFIRM_STORE=on`) —
+  the `[memsy modes: …]` line is emitted independently of proactive, so
+  confirm-before-store works on its own.
+- `actor_id` derivation matches the MCP server (`mcp/src/identity.ts`):
+  `MEMSY_ACTOR_ID` env → pinned profile `actor_id` → `sha256(profile|git-email)`
+  → `sha256(profile|user@host)`; whole-file config precedence (a per-project
+  `.memsy/config.json` is used exclusively when present); single-default
+  role/team auto-attribution on ingest and default role/team filters on search.
+- `install.sh` builds from source, registers the plugin + skills, and offers
+  interactive API-key setup (input is not echoed; `~/.openclaw/.env` is locked
+  to `0600` before the key is written).
+- Marketplace entry and the OpenClaw documentation page.
+
+[Unreleased]: https://github.com/memsy-io/memsy/commits/main/plugins/openclaw
+[0.1.0]: https://github.com/memsy-io/memsy/tree/main/plugins/openclaw

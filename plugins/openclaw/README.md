@@ -56,6 +56,17 @@ openclaw start
 
 > Avoid `openclaw config set env.MEMSY_API_KEY` for the key — that stores it as **plaintext in `~/.openclaw/openclaw.json`** (agent-readable), and the config `env` block is non-overriding ("only if missing"). The docs recommend `.env` or a SecretRef for credentials.
 
+## Updating
+
+The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched):
+
+```bash
+cd memsy && git pull
+cd plugins/openclaw && ./install.sh
+```
+
+Then restart OpenClaw so the refreshed plugin loads.
+
 ## Plugin structure
 
 This is a proper OpenClaw TypeScript plugin — OpenClaw manages tool registration and session hooks automatically:

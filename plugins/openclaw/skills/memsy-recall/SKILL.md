@@ -38,7 +38,7 @@ Top 3–5 most relevant first. If memories are clearly unrelated to the query, s
 Say: "No memories matched `<query>`." Then offer:
 - Broaden the query (drop adjectives, try synonyms).
 - Check the active org with `memsy_list_orgs` — the memory might be in a different profile.
-- Try `memsy_list_memories` with no filters to see what's stored.
+- Try `memsy_list_memories` to see what's stored (it lists the **current actor's** memories by default; pass `all_actors: true` for an org-wide view in case the memory was stored under a different actor).
 
 ## 5. If the tool errors out
 

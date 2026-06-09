@@ -65,11 +65,15 @@ elif [[ ! -t 0 ]]; then
   echo "Or run OpenClaw's interactive helper:  openclaw secrets configure"
 else
   printf "Enter your Memsy API key (msy_..., from https://app.memsy.io) to save it to %s, or press Enter to skip: " "$ENV_FILE"
-  read -r _key || _key=""
+  read -rs _key || _key=""   # -s: don't echo the key to the terminal
+  printf '\n'                # read -s swallows the newline; restore it
   if [[ -n "${_key// /}" ]]; then
     mkdir -p "${OPENCLAW_HOME}"
+    # Lock perms BEFORE the key lands in the file: a freshly created .env would
+    # otherwise carry default-umask perms for the instant between append and
+    # chmod. Append (not rewrite) — .env can hold other variables.
+    touch "$ENV_FILE" && chmod 600 "$ENV_FILE" 2>/dev/null || true
     printf 'MEMSY_API_KEY=%s\n' "$_key" >> "$ENV_FILE"
-    chmod 600 "$ENV_FILE" 2>/dev/null || true
     echo "✓ Appended MEMSY_API_KEY to ${ENV_FILE} — OpenClaw loads it on every start."
   else
     echo "  Skipped. Add it later:  echo 'MEMSY_API_KEY=msy_...' >> ${ENV_FILE}"
