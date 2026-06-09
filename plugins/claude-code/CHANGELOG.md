@@ -9,6 +9,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.1.2] - 2026-06-09
 
 ### Fixed
+- **SessionStart hook is now bash-3.2-safe.** The previous all-bash `session-start.sh` hit a parser bug in the macOS default shell (bash 3.2) — a heredoc-in-command-substitution with apostrophes failed to parse, Claude Code swallowed the non-zero hook exit, and on a default macOS install **every SessionStart-gated feature silently never fired** (auto-context, the first-run onboarding nudge, and the proactive / confirm-before-store mode notices). The logic now runs in `session_start.py` (python3 is already a hard dependency) behind a thin `session-start.sh` shim; output is byte-identical to before on shells that did work. Homebrew bash 4/5 users were unaffected, which had masked the issue.
 - Turn sync now auto-tags each event with the active profile's single default `role_id` / `team_id` (mirroring the MCP's `memsy_ingest`), so turn-synced memories participate in role/team promotion instead of landing untagged.
 - The `SessionStart` hook no longer re-injects the first-run nudge or the "call `memsy_list_memories` before the first message" auto-context block on `compact` (a mid-session event) — both are session-start instructions that contradict themselves mid-conversation; the mode/proactive blocks are still re-asserted so a compacted transcript keeps them.
 - Aligned the turn-sync git-email lookup timeout to the MCP's 1.5s.
