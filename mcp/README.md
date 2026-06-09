@@ -412,7 +412,7 @@ Wrong `base_url`. Production hot-path is `https://api.memsy.io/v1` — the `/v1`
 
 The query may not semantically match. Try:
 - Broader terms / single keyword
-- `memsy_list_memories` (no args) → see what's actually stored
+- `memsy_list_memories` with `all_actors: true` → see everything stored (with no args it lists only your active actor)
 - `threshold: 0` (default) — anything stricter hides weak matches
 
 If you previously stored memories with a specific `actor_id` (via dashboard or SDK), they're still findable since search is org-wide by default. Don't pass `actor_id` unless you want to scope down.
@@ -433,6 +433,20 @@ Common causes:
 ### Profile-switching doesn't seem to persist
 
 It only persists for the lifetime of the MCP process. Each host spawns a fresh process per chat/session. To make a different profile the default at startup, set `MEMSY_PROFILE` in the host's MCP `env`, or update `active_profile` in the config file.
+
+### Server is running an old version (a new feature or fix isn't showing up)
+
+The server runs via `npx -y @memsy-io/mcp`, which uses the latest published version — usually you just restart your host and npx pulls the new release. If a recent change still isn't taking effect, in order of likelihood:
+
+1. **A global install is shadowing `npx`.** If `@memsy-io/mcp` is installed globally, `npx -y @memsy-io/mcp` runs *that* copy instead of fetching the latest — the most common cause.
+   ```bash
+   npm ls -g @memsy-io/mcp        # if it's listed, it's shadowing npx
+   npm uninstall -g @memsy-io/mcp # let npx pull the latest, then restart your host
+   ```
+2. **A stale `npx` cache.** Quit your host, run `rm -rf "$(npm config get cache)/_npx"`, then restart.
+3. **A still-running process.** The server is long-lived per host session — fully restart the host (or `pkill -f "@memsy-io/mcp"`) so a fresh one spawns.
+
+Verify with `npm ls -g @memsy-io/mcp` (no global install = good) or behaviorally, rather than the startup banner.
 
 ---
 
