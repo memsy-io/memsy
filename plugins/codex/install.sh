@@ -21,10 +21,34 @@ if ! codex plugin marketplace add memsy-io/memsy 2>/dev/null; then
 fi
 
 echo "Installing Memsy plugin..."
-codex plugin add memsy@memsy || echo "  (plugin already installed — continuing)"
+# `codex plugin add` only exists on newer Codex CLIs (v0.125+); older ones have
+# only `codex plugin marketplace` and install via the /plugins browser inside
+# Codex. Feature-detect instead of assuming — and never claim success unless
+# `codex plugin list` actually reports the plugin installed.
+_plugin_installed() {
+  codex plugin list 2>/dev/null | grep -E '^memsy@memsy[[:space:]]' | grep -qv 'not installed'
+}
+
+PLUGIN_OK=0
+if codex plugin --help 2>/dev/null | grep -qE '^[[:space:]]+add[[:space:]]'; then
+  codex plugin add memsy@memsy || true
+  if _plugin_installed; then
+    PLUGIN_OK=1
+  fi
+else
+  echo "⚠ This Codex version has no 'codex plugin add' subcommand (added around v0.125)."
+fi
 
 echo ""
-echo "Memsy for Codex installed."
+if [[ "$PLUGIN_OK" == 1 ]]; then
+  echo "Memsy for Codex installed."
+else
+  echo "⚠ Memsy plugin is NOT installed yet. Finish the install one of two ways:"
+  echo "    1. Update Codex, then re-run this script:"
+  echo "         npm install -g @openai/codex@latest"
+  echo "    2. Or install interactively: start codex, run /plugins, open the"
+  echo "       'memsy' marketplace, select 'memsy', and choose Install plugin."
+fi
 echo ""
 
 # ── Interactive API key setup ─────────────────────────────────────────────────

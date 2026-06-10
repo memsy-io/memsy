@@ -8,7 +8,7 @@ Add Memsy to Codex CLI to persist decisions and context across sessions. The Mem
 ## Requirements
 
 - Node.js 18+
-- [Codex CLI](https://github.com/openai/codex) (`npm install -g @openai/codex`)
+- [Codex CLI](https://github.com/openai/codex) **v0.125+** (`npm install -g @openai/codex@latest`) — older versions lack `codex plugin add` and must install via the `/plugins` browser inside Codex
 - Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
 
 ## Install
@@ -133,6 +133,17 @@ The mode flags above are read by plugin-bundled **hooks**, which Codex treats as
 </Info>
 
 ## Troubleshooting
+
+### `error: unrecognized subcommand 'add'` during install
+
+Your Codex CLI predates `codex plugin add` (added around v0.125). Update and re-run the installer:
+
+```bash
+npm install -g @openai/codex@latest
+./install.sh
+```
+
+Or install without updating: start `codex`, run `/plugins`, open the **memsy** marketplace, select **memsy**, and choose **Install plugin**.
 
 ### MCP shows "disconnected" or tools unavailable
 

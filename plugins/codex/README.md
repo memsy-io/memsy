@@ -16,7 +16,7 @@ Long-term memory for [OpenAI Codex](https://developers.openai.com/codex). Decisi
 ## Requirements
 
 - Node.js 18+
-- Codex CLI (`npm install -g @openai/codex`)
+- Codex CLI **v0.125+** (`npm install -g @openai/codex@latest`) — older versions lack `codex plugin add`; they can still install via the `/plugins` browser inside Codex
 - Memsy API key from [app.memsy.io](https://app.memsy.io)
 
 ## Install
@@ -128,6 +128,8 @@ Plugin-bundled hooks are a Codex security feature: they're **untrusted until you
 These modes are toggled by env vars read in the **SessionStart hook** (set them before launching Codex, e.g. `export MEMSY_SESSION_AUTOCONTEXT=on`). Verified on Codex v0.137: Codex forwards your shell environment to hook commands, and the hook emits its context using the JSON envelope Codex requires (`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`) — plain text is rejected. The **API key** does **not** travel via shell env — the MCP server gets a curated environment, so set the key in `~/.memsy/config.json` or `config.toml` (see install note).
 
 ## Troubleshooting
+
+**`error: unrecognized subcommand 'add'` during install** — Your Codex CLI predates `codex plugin add` (added around v0.125). Update and re-run: `npm install -g @openai/codex@latest && ./install.sh`. Or install without updating: start `codex`, run `/plugins`, open the **memsy** marketplace, select **memsy**, and choose **Install plugin**.
 
 **MCP shows "disconnected"** — Run `MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp` to see the startup error directly.
 
