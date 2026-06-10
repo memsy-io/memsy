@@ -1,0 +1,181 @@
+---
+title: Codex CLI
+description: Long-term memory for OpenAI Codex CLI — recall past decisions, store context, and surface relevant history across every session.
+---
+
+Add Memsy to Codex CLI to persist decisions and context across sessions. The Memsy [MCP server](/docs/mcp) registers as a tool server; two skills give Codex natural-language recall and store triggers.
+
+## Requirements
+
+- Node.js 18+
+- [Codex CLI](https://github.com/openai/codex) **v0.125+** (`npm install -g @openai/codex@latest`) — older versions lack `codex plugin add` and must install via the `/plugins` browser inside Codex
+- Memsy API key — [app.memsy.io](https://app.memsy.io) → Settings → API Keys
+
+## Install
+
+<Steps>
+  <Step title="Clone and run the installer">
+    ```bash
+    git clone https://github.com/memsy-io/memsy
+    cd memsy/plugins/codex
+    ./install.sh
+    ```
+  </Step>
+
+  <Step title="Set your API key">
+    The installer **prompts for your key interactively** and saves it to `~/.memsy/config.json` (`chmod 600`). The MCP server reads it from that file on launch, so nothing else is needed — and the same file is shared with every other MCP host (Cursor, Cline, …).
+
+    Codex launches MCP servers with a curated environment and does **not** pass your login shell's variables to them, so a bare `export MEMSY_API_KEY=...` will not reach the server — don't rely on it. If you'd rather configure it by hand, add it to the MCP env block in `~/.codex/config.toml` instead:
+
+    ```toml
+    [mcp_servers.memsy.env]
+    MEMSY_API_KEY = "msy_..."
+    ```
+
+    <Info>
+      Get your key at [app.memsy.io](https://app.memsy.io) → Settings → API Keys.
+    </Info>
+  </Step>
+
+  <Step title="Verify">
+    Open Codex and ask: *"What did we decide about X?"*
+
+    Codex should trigger the `memsy-recall` skill and call `memsy_search`. If tools show as unavailable, run `memsy_health` or check the manual config below.
+  </Step>
+</Steps>
+
+## Manual config
+
+If you prefer to configure by hand, add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.memsy]
+command = "npx"
+args = ["-y", "@memsy-io/mcp"]
+
+[mcp_servers.memsy.env]
+MEMSY_API_KEY = "msy_..."
+```
+
+Or via the Codex CLI:
+
+```bash
+codex mcp add memsy -- npx -y @memsy-io/mcp
+```
+
+Then add the API key to the generated entry in `~/.codex/config.toml`.
+
+## Updating
+
+Codex serves the plugin from the marketplace's Git snapshot (pinned to `main`). Changes reach users once they land on `main` — there is no version to bump; you pull them with two commands:
+
+```bash
+codex plugin marketplace upgrade memsy   # re-pull the snapshot from main
+codex plugin add memsy@memsy             # re-extract the refreshed plugin into the cache
+```
+
+`plugin add` overwrites the cached copy from the freshly-upgraded snapshot — it does not skip just because the version is still `0.1.0` — so this delivers the latest `main`. If an update doesn't seem to take, force a clean re-install with `codex plugin remove memsy && codex plugin add memsy@memsy`.
+
+Then **restart Codex**. If you use the hook-driven modes (auto-context, turn-sync), also re-trust the hooks after updating — Codex re-flags a changed hook definition, and untrusted hooks are silently skipped (see [Trusting the hooks](#trusting-the-hooks)). Confirm with *"What do we know about X?"* — `memsy-recall` should fire.
+
+<Info>
+  The [MCP server](/docs/mcp) (`@memsy-io/mcp`) is fetched separately by `npx` and updates on its own cadence. If Memsy tools behave like an older version after updating, see [Troubleshooting](#memsy-tools-behave-like-an-older-version) below.
+</Info>
+
+## Skills
+
+The plugin bundles two skills (declared in `.codex-plugin/plugin.json`); Codex loads them when you install the plugin — no manual copy needed:
+
+| Skill | Trigger phrases |
+|---|---|
+| `memsy-recall` | "what did we decide", "remember when", "context on X", "do we have anything about Y" |
+| `memsy-remember` | "remember that", "save this decision", "note that", "for future reference" |
+
+Invoke via `/skills` in the Codex CLI, or type `$memsy-recall` to mention a skill inline.
+
+## First-run setup
+
+On your first session with no default roles/teams configured, the SessionStart hook emits a **one-time** nudge offering to set them up. It self-suppresses (writes `~/.memsy/.onboard-nudged` after the first show) and stays silent once any defaults exist or `MEMSY_DEFAULT_ROLE_IDS`/`MEMSY_DEFAULT_TEAM_IDS` is set — the check is purely local, no network on session start.
+
+Run setup anytime by asking *"set up my memsy defaults"* (or invoking the `setup-defaults` prompt): it surfaces the roles/teams your org already has, or offers to create them, then persists your chosen defaults. Defaults are optional — memory works without them; roles/teams sharpen recall and attribution.
+
+## Multi-org
+
+If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org)), then ask Codex:
+
+- *"What orgs do I have?"* → calls `memsy_list_orgs`
+- *"Switch to my work org"* → calls `memsy_use_org`
+
+## Capabilities
+
+| Capability | Supported |
+|---|---|
+| Recall (memsy_search) | ✓ |
+| Store (memsy_ingest) | ✓ |
+| Skills (SKILL.md) | ✓ |
+| Multi-org / profiles | ✓ |
+| SessionStart auto-context hook | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`, `MEMSY_SESSION_CONTEXT_LIMIT` default 6 / max 20) |
+| Turn-sync — store every turn | ✓ (`MEMSY_TURN_SYNC=on` — `UserPromptSubmit` + `Stop` hooks) |
+| Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
+| Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
+| First-run onboarding nudge | ✓ |
+
+These modes are toggled by env vars read in the hooks (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). Verified on Codex v0.137: Codex forwards your shell environment to hook commands, and SessionStart emits its context using the JSON envelope Codex requires (`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`). Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` — the MCP server gets a curated env (see Set your API key above).
+
+### Trusting the hooks
+
+The mode flags above are read by plugin-bundled **hooks**, which Codex treats as a security boundary: they are **untrusted until you review them with `/hooks`**, and Codex **re-flags them after any hook change — including plugin updates**. While untrusted, the hooks are silently skipped, so a mode you've enabled appears to do nothing. If `MEMSY_SESSION_AUTOCONTEXT` or `MEMSY_TURN_SYNC` isn't taking effect, run `/hooks`, trust Memsy's hooks, and restart Codex.
+
+**Storage tiers.** `MEMSY_TURN_SYNC=on` stores **every** turn — the `UserPromptSubmit` hook captures your prompt and the `Stop` hook pairs it with the assistant reply, POSTing both to `/ingest` (correct `user_message` / `assistant_message` labels; the backend extraction decides what becomes a durable memory). `MEMSY_PROACTIVE=on` is the lighter tier — it stores **only** the save-worthy substance automatically. With both off, only an explicit "remember that …" is stored. Turn-sync hooks run **synchronously** (Codex doesn't support async hooks yet), so the POST is best-effort with a short timeout; failures log to `~/.memsy/turn-sync.log` and never block your turn.
+
+<Info>
+  **Turn-sync key & identity.** Because turn-sync POSTs to the API directly from a hook (not through the MCP server), it resolves the key from the shell env, then `~/.codex/config.toml` `[mcp_servers.memsy.env]`, then the active profile in `~/.memsy/config.json`. `no API key` in `~/.memsy/turn-sync.log` means it's none of those — re-run `./install.sh`. To keep turn-sync's `actor_id` aligned with what `memsy_search` reads, pin it with `memsy_set_defaults { actor_id: "…", persist: "global" }` (writes the config file both surfaces read) rather than `export MEMSY_ACTOR_ID=…`.
+</Info>
+
+## Troubleshooting
+
+### `error: unrecognized subcommand 'add'` during install
+
+Your Codex CLI predates `codex plugin add` (added around v0.125). Update and re-run the installer:
+
+```bash
+npm install -g @openai/codex@latest
+./install.sh
+```
+
+Or install without updating: start `codex`, run `/plugins`, open the **memsy** marketplace, select **memsy**, and choose **Install plugin**.
+
+### MCP shows "disconnected" or tools unavailable
+
+Run the server directly to see the error:
+
+```bash
+MEMSY_API_KEY=msy_... npx -y @memsy-io/mcp
+```
+
+Common causes: missing API key in the env block (not just shell env), Node < 18, or a stale `@memsy-io/mcp` cached by npm.
+
+### Skills not appearing in `/skills`
+
+Run `codex plugin list` to confirm the plugin is installed. If it's missing, re-run `./install.sh` (or `codex plugin add memsy@memsy`).
+
+### Wrong memories returned
+
+Check the active org: ask Codex to call `memsy_list_orgs`. Switch with `memsy_use_org { profile: "work" }`.
+
+### Memsy tools behave like an older version
+
+A globally-installed `@memsy-io/mcp` shadows the plugin's `npx -y @memsy-io/mcp`, pinning you to a stale build. Check and remove it:
+
+```bash
+npm ls -g @memsy-io/mcp        # if listed, it's shadowing npx
+npm uninstall -g @memsy-io/mcp # then restart Codex
+```
+
+See [MCP troubleshooting](/docs/mcp#troubleshooting) for the full version-update guide (npx cache, stale process, how to verify).
+
+## See also
+
+- [MCP Server](/docs/mcp) — the universal layer that all integrations share
+- [Actors and Sessions](/docs/actors-and-sessions) — identity and `actor_id`
+- [Plugin source](https://github.com/memsy-io/memsy/tree/main/plugins/codex) on GitHub
