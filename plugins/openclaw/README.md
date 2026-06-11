@@ -49,7 +49,7 @@ OpenClaw's native interactive helper — walks you through a SecretRef so the ke
 **Session only (quick test, not persisted):**
 ```bash
 export MEMSY_API_KEY=msy_...
-openclaw start
+openclaw chat
 ```
 
 **Already configured Memsy elsewhere?** If your key is in the shared `~/.memsy/config.json` (from `memsy auth login` or another host's installer), OpenClaw uses it automatically — no extra step. Precedence: plugin config → `MEMSY_API_KEY` env → `~/.memsy/config.json` active profile.
@@ -65,7 +65,7 @@ cd memsy && git pull
 cd plugins/openclaw && ./install.sh
 ```
 
-Then restart OpenClaw so the refreshed plugin loads.
+Then `openclaw gateway restart` — and fully exit and relaunch any open TUI session (`openclaw chat`); plugins and tool policy load at process startup.
 
 ## Plugin structure
 

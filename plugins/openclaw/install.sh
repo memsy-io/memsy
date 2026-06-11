@@ -114,10 +114,12 @@ else
   fi
 fi
 echo ""
-echo "Start OpenClaw:"
-echo "  openclaw start"
-echo "Already running? Reload plugins with:"
+echo "Start OpenClaw (local terminal UI):"
+echo "  openclaw chat"
+echo "Gateway already running? Reload plugins with:"
 echo "  openclaw gateway restart"
+echo "(A TUI session that was open during install must be fully exited and"
+echo " relaunched — plugins and tool policy load at process startup.)"
 echo ""
 echo "Optional: enable auto-context (injects recent memories at session start):"
 echo "  export MEMSY_SESSION_AUTOCONTEXT=on"

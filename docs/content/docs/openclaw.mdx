@@ -37,7 +37,7 @@ Add Memsy to your [OpenClaw](https://openclaw.ai) gateway to give your agent per
     openclaw secrets configure
     ```
 
-    Quick test (session only, not persisted): `export MEMSY_API_KEY=msy_...` then `openclaw start`.
+    Quick test (session only, not persisted): `export MEMSY_API_KEY=msy_...` then `openclaw chat`.
 
     Already configured Memsy in another host? If your key is in the shared `~/.memsy/config.json` (from `memsy auth login` or another installer), OpenClaw uses it automatically. Precedence: plugin config → `MEMSY_API_KEY` env → `~/.memsy/config.json` active profile.
 
@@ -73,16 +73,19 @@ Install from the **tarball**, not the loose `dist/index.js` — the tarball carr
 `~/.openclaw/extensions/memsy/` with the manifest in place. A loose-file install
 has no manifest next to it and OpenClaw 2026.6.x rejects it at config validation.
 
-Then add your key to `~/.openclaw/.env` (above) and restart OpenClaw.
+Then add your key to `~/.openclaw/.env` (above), run `openclaw gateway restart`, and fully exit/relaunch any open TUI session.
 
 ## Updating
 
-The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/memsy/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched), then restart OpenClaw:
+The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/memsy/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched):
 
 ```bash
 cd memsy && git pull
 cd plugins/openclaw && ./install.sh
+openclaw gateway restart
 ```
+
+Then fully exit and relaunch any open TUI session (`openclaw chat`) — a running agent process only picks up plugins and tool policy at startup.
 
 ## Skills
 
