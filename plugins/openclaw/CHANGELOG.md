@@ -40,7 +40,10 @@ by pulling the repo and re-running `./install.sh` — see the README's
   role/team auto-attribution on ingest and default role/team filters on search.
 - `install.sh` builds from source, registers the plugin + skills, and offers
   interactive API-key setup (input is not echoed; `~/.openclaw/.env` is locked
-  to `0600` before the key is written).
+  to `0600` before the key is written). It also detects a restrictive
+  `tools.profile` (OpenClaw's default `"coding"` profile filters plugin-owned
+  tools out of the agent's toolset) and adds `"memsy_*"` to `tools.allow` when
+  it can do so without clobbering existing entries.
 - Marketplace entry and the OpenClaw documentation page.
 
 [Unreleased]: https://github.com/memsy-io/memsy/commits/main/plugins/openclaw

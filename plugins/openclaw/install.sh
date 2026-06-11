@@ -40,6 +40,37 @@ openclaw plugins install --force "${SCRIPT_DIR}/${TGZ}"
 rm -f "${SCRIPT_DIR}/${TGZ}"
 echo "✓ Plugin installed."
 
+# ── Tool policy ───────────────────────────────────────────────────────────────
+# tools.profile (local onboarding defaults it to "coding") is a base ALLOWLIST:
+# plugin-owned tools are filtered out of the agent's toolset unless explicitly
+# allowed. Without this, the plugin loads fine but the agent never sees the
+# memsy_* tools. When an allow list already exists we never clobber it — we
+# print the merge instruction instead.
+PROFILE="$(openclaw config get tools.profile 2>/dev/null | tail -n1 || true)"
+case "$PROFILE" in
+  ""|full|*"not found"*)
+    : # no profile restriction — plugin tools are visible as-is
+    ;;
+  *)
+    ALLOW_JSON="$(openclaw config get tools.allow 2>/dev/null || true)"
+    if printf '%s' "$ALLOW_JSON" | grep -q 'memsy_\*'; then
+      echo "✓ tools.allow already includes \"memsy_*\"."
+    elif printf '%s' "$ALLOW_JSON" | grep -q '\['; then
+      echo "⚠ tools.profile is \"${PROFILE}\" (an allowlist) and tools.allow doesn't include \"memsy_*\"."
+      echo "  The agent won't see the Memsy tools until you add it (keep your existing entries):"
+      echo "    openclaw config set tools.allow '[\"memsy_*\", ...your existing entries...]' --strict-json"
+    else
+      echo "Allowing Memsy tools (tools.profile \"${PROFILE}\" filters out plugin tools)..."
+      if openclaw config set tools.allow '["memsy_*"]' --strict-json >/dev/null 2>&1; then
+        echo "✓ Added \"memsy_*\" to tools.allow."
+      else
+        echo "⚠ Could not update tools.allow automatically. Add it yourself:"
+        echo "    openclaw config set tools.allow '[\"memsy_*\"]' --strict-json"
+      fi
+    fi
+    ;;
+esac
+
 # ── Install skills ────────────────────────────────────────────────────────────
 echo "Installing skills..."
 openclaw skills install --global --force --as memsy-recall   "${SCRIPT_DIR}/skills/memsy-recall"

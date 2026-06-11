@@ -126,6 +126,8 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 ## Troubleshooting
 
+**Agent says it has no `memsy_*` tools (most common, happens on the default config)** — `tools.profile` (OpenClaw's local onboarding sets `"coding"`) is a base *allowlist* that filters out plugin-owned tools, even when the plugin shows as loaded. `install.sh` adds the allow entry when it safely can; by hand: `openclaw config set tools.allow '["memsy_*"]' --strict-json` (merge with any existing entries), then `openclaw gateway restart` and fully restart your TUI session.
+
 **Plugin not loading** — Run `openclaw plugins inspect memsy --runtime` to see load errors.
 
 **Tools not visible** — Run `openclaw plugins list` to confirm the plugin is installed and enabled.

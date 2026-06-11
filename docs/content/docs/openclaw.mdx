@@ -123,6 +123,24 @@ Configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org
 
 ## Troubleshooting
 
+### Agent says it has no `memsy_*` tools
+
+This is the most common failure, and it happens on OpenClaw's **default config**.
+`tools.profile` (local onboarding sets it to `"coding"`) is a base *allowlist* —
+plugin-owned tools are filtered out of the agent's toolset unless explicitly
+allowed, even though `openclaw plugins list` shows the plugin loaded and
+`openclaw plugins inspect memsy --runtime` lists every tool. `install.sh`
+detects this and adds the entry when it can; to do it by hand:
+
+```bash
+openclaw config get tools.profile    # "coding"? → plugin tools are filtered
+openclaw config set tools.allow '["memsy_*"]' --strict-json   # merge with any existing entries
+openclaw gateway restart
+```
+
+Then **fully restart your TUI session** — a running agent process only loads
+plugins and tool policy at startup.
+
 ### Plugin not loading / tools missing
 
 Check the plugin loaded and inspect runtime errors:
