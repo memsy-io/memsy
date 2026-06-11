@@ -62,17 +62,22 @@ If you prefer not to use `install.sh`, build and register the plugin by hand fro
 ```bash
 cd memsy/plugins/openclaw
 npm install && npm run build
-openclaw plugins install --force ./dist/index.js
-cp ./openclaw.plugin.json ~/.openclaw/extensions/
+npm pack                                # produces memsy-io-openclaw-plugin-<version>.tgz
+openclaw plugins install --force ./memsy-io-openclaw-plugin-*.tgz
 openclaw skills install --global --force --as memsy-recall   ./skills/memsy-recall
 openclaw skills install --global --force --as memsy-remember ./skills/memsy-remember
 ```
+
+Install from the **tarball**, not the loose `dist/index.js` — the tarball carries
+`openclaw.plugin.json` with it, so OpenClaw extracts the whole plugin into
+`~/.openclaw/extensions/memsy/` with the manifest in place. A loose-file install
+has no manifest next to it and OpenClaw 2026.6.x rejects it at config validation.
 
 Then add your key to `~/.openclaw/.env` (above) and restart OpenClaw.
 
 ## Updating
 
-The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched), then restart OpenClaw:
+The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/memsy/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched), then restart OpenClaw:
 
 ```bash
 cd memsy && git pull
@@ -128,6 +133,15 @@ openclaw plugins inspect memsy --runtime   # load errors, if any
 ```
 
 If tools error, the most common cause is a missing API key — confirm `MEMSY_API_KEY` is in `~/.openclaw/.env`.
+
+### "suspicious code pattern" warning at install
+
+OpenClaw's security scanner flags the plugin with a *potential-exfiltration*
+warning ("file read combined with network send"). That combination is the
+plugin's job: it reads your shared `~/.memsy/config.json` and sends memories to
+your Memsy API over HTTPS. It is a warning, not a block — the install proceeds.
+The plugin spawns no subprocesses and sends data only to your configured
+`baseUrl`.
 
 ### Skills not triggering
 

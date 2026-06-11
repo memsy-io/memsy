@@ -31,7 +31,11 @@ by pulling the repo and re-running `./install.sh` — see the README's
   confirm-before-store works on its own.
 - `actor_id` derivation matches the MCP server (`mcp/src/identity.ts`):
   `MEMSY_ACTOR_ID` env → pinned profile `actor_id` → `sha256(profile|git-email)`
-  → `sha256(profile|user@host)`; whole-file config precedence (a per-project
+  → `sha256(profile|user@host)`. The git email is read from git's config
+  **files** directly (global scope first, then the repo's `.git/config`,
+  worktree-aware) instead of spawning `git` — OpenClaw's plugin security
+  scanner blocks any plugin importing the Node subprocess module, which would
+  make the install fail outright; whole-file config precedence (a per-project
   `.memsy/config.json` is used exclusively when present); single-default
   role/team auto-attribution on ingest and default role/team filters on search.
 - `install.sh` builds from source, registers the plugin + skills, and offers

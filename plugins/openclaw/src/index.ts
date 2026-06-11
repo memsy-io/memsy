@@ -1,8 +1,14 @@
-import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { Type, type Static } from "@sinclair/typebox";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
@@ -128,24 +134,102 @@ function sharedDefaults(): SharedDefaults {
 // resolveActorId), or memories written here land under a different actor than
 // memsy_search reads — and recall silently finds nothing. Precedence:
 // MEMSY_ACTOR_ID env → shared-config profile actor_id → sha256('<profile>|<git-email>')
-// → sha256('<profile>|<user>@<host>'). Cached: git is forked once.
-function gitEmail(): string | null {
-  for (const args of [
-    ["config", "--global", "--get", "user.email"],
-    ["config", "--get", "user.email"],
-  ]) {
-    try {
-      const out = execFileSync("git", args, {
-        stdio: ["ignore", "pipe", "ignore"],
-        encoding: "utf8",
-        timeout: 1500,
-      }).trim();
-      if (out) return out;
-    } catch {
-      // git missing or no email at this scope — fall through.
+// → sha256('<profile>|<user>@<host>'). Cached: config files are read once.
+//
+// IMPORTANT: we read git's config FILES directly instead of spawning `git` —
+// OpenClaw's plugin security scanner blocks any plugin that imports the node
+// subprocess module, so forking is not an option here. The file-based
+// resolution mirrors `git config --global --get user.email` (then default
+// scope) closely enough for real-world configs; exotic setups ([include]
+// directives, system-scope-only email) should pin MEMSY_ACTOR_ID instead.
+
+/**
+ * Minimal gitconfig scan: return the LAST `email = ...` under a `[user]`
+ * section (git's last-one-wins). Handles comments, quoted values; does NOT
+ * follow [include] directives.
+ */
+function parseGitConfigEmail(path: string): string | null {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+  let inUser = false;
+  let email: string | null = null;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#") || line.startsWith(";")) continue;
+    if (line.startsWith("[")) {
+      inUser = /^\[user\s*\]/i.test(line);
+      continue;
     }
+    if (!inUser) continue;
+    const m = /^email\s*=\s*(.+)$/i.exec(line);
+    if (!m) continue;
+    let v = m[1].trim();
+    if (v.startsWith('"')) {
+      const end = v.indexOf('"', 1);
+      v = end > 0 ? v.slice(1, end) : v.slice(1);
+    } else {
+      // unquoted values end at an inline comment
+      v = v.split("#")[0].split(";")[0].trim();
+    }
+    if (v) email = v;
+  }
+  return email;
+}
+
+/** Global scope: GIT_CONFIG_GLOBAL override, else ~/.gitconfig, else XDG. */
+function globalGitEmail(): string | null {
+  const override = process.env.GIT_CONFIG_GLOBAL;
+  if (override) return parseGitConfigEmail(override);
+  // git reads XDG first then ~/.gitconfig with last-one-wins, so ~/.gitconfig
+  // takes precedence when both define user.email.
+  const xdg = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return (
+    parseGitConfigEmail(join(homedir(), ".gitconfig")) ??
+    parseGitConfigEmail(join(xdg, "git", "config"))
+  );
+}
+
+/** Local scope: walk up from cwd to the repo's .git/config (worktree-aware). */
+function localGitEmail(): string | null {
+  let dir = process.cwd();
+  for (let depth = 0; depth < 64; depth++) {
+    const dotGit = join(dir, ".git");
+    try {
+      if (statSync(dotGit).isDirectory()) {
+        return parseGitConfigEmail(join(dotGit, "config"));
+      }
+      // .git is a FILE in linked worktrees/submodules: "gitdir: <path>". The
+      // shared config lives in the main repo's .git (via `commondir`).
+      const m = /^gitdir:\s*(.+)\s*$/m.exec(readFileSync(dotGit, "utf8"));
+      if (!m) return null;
+      const gitdir = resolve(dir, m[1].trim());
+      let common = gitdir;
+      try {
+        common = resolve(gitdir, readFileSync(join(gitdir, "commondir"), "utf8").trim());
+      } catch {
+        // not a linked worktree — gitdir IS the common dir
+      }
+      return parseGitConfigEmail(join(common, "config"));
+    } catch {
+      // no .git at this level — keep walking up
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
   }
   return null;
+}
+
+function gitEmail(): string | null {
+  // Global first so actor_id is stable across cwds (a per-repo user.email
+  // override would otherwise fragment identity per project), then the local
+  // repo config — the same precedence the MCP uses (mcp/src/identity.ts
+  // safeGitEmail: `--global` then default scope).
+  return globalGitEmail() ?? localGitEmail();
 }
 
 function hashId(...parts: string[]): string {

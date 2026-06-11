@@ -27,15 +27,17 @@ npm run build
 echo "✓ Plugin built."
 
 # ── Install plugin ────────────────────────────────────────────────────────────
-# openclaw plugins install copies the JS to ~/.openclaw/extensions/ and
-# registers the entry in openclaw.json. It does NOT copy openclaw.plugin.json,
-# so we copy the manifest manually to the same directory.
+# Install from an npm pack tarball, NOT the loose dist/index.js: the tarball
+# carries openclaw.plugin.json alongside the build, so OpenClaw extracts the
+# whole plugin into ~/.openclaw/extensions/memsy/ with the manifest in place.
+# (A loose-file install lands index.js directly in extensions/ with no
+# manifest, which OpenClaw 2026.6.x rejects at config validation.)
 OPENCLAW_HOME="${OPENCLAW_HOME:-${HOME}/.openclaw}"
-EXTENSIONS_DIR="${OPENCLAW_HOME}/extensions"
 
 echo "Installing plugin..."
-openclaw plugins install --force "${SCRIPT_DIR}/dist/index.js"
-cp "${SCRIPT_DIR}/openclaw.plugin.json" "${EXTENSIONS_DIR}/openclaw.plugin.json"
+TGZ="$(npm pack --silent | tail -n1)"
+openclaw plugins install --force "${SCRIPT_DIR}/${TGZ}"
+rm -f "${SCRIPT_DIR}/${TGZ}"
 echo "✓ Plugin installed."
 
 # ── Install skills ────────────────────────────────────────────────────────────
@@ -83,6 +85,8 @@ fi
 echo ""
 echo "Start OpenClaw:"
 echo "  openclaw start"
+echo "Already running? Reload plugins with:"
+echo "  openclaw gateway restart"
 echo ""
 echo "Optional: enable auto-context (injects recent memories at session start):"
 echo "  export MEMSY_SESSION_AUTOCONTEXT=on"

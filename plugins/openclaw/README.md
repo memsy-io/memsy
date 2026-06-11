@@ -58,7 +58,7 @@ openclaw start
 
 ## Updating
 
-The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched):
+The plugin is built from source and installed as a copy (`openclaw plugins install` → `~/.openclaw/extensions/memsy/`), so pulling the repo alone changes nothing. To update, pull and re-run the installer — it rebuilds and force-reinstalls the plugin and skills in place (your key and config are untouched):
 
 ```bash
 cd memsy && git pull
