@@ -42,8 +42,11 @@ by pulling the repo and re-running `./install.sh` — see the README's
   interactive API-key setup (input is not echoed; `~/.openclaw/.env` is locked
   to `0600` before the key is written). It also detects a restrictive
   `tools.profile` (OpenClaw's default `"coding"` profile filters plugin-owned
-  tools out of the agent's toolset) and adds `"memsy_*"` to `tools.allow` when
-  it can do so without clobbering existing entries.
+  tools out of the agent's toolset, and `tools.allow` is applied AFTER the
+  profile so it cannot re-add them) and — on the untouched onboarding default —
+  converts to `profile: "full"` plus an allow list replicating coding's groups
+  with `"memsy_*"` added; customized policies get printed instructions instead
+  of edits.
 - Marketplace entry and the OpenClaw documentation page.
 - All HTTP calls go through one `memsyFetch` helper: every request is bounded
   by a 10s timeout (a hung fetch inside the gateway's heartbeat hook would

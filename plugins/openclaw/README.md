@@ -126,7 +126,7 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 ## Troubleshooting
 
-**Agent says it has no `memsy_*` tools (most common, happens on the default config)** — `tools.profile` (OpenClaw's local onboarding sets `"coding"`) is a base *allowlist* that filters out plugin-owned tools, even when the plugin shows as loaded. `install.sh` adds the allow entry when it safely can; by hand: `openclaw config set tools.allow '["memsy_*"]' --strict-json` (merge with any existing entries), then `openclaw gateway restart` and fully restart your TUI session.
+**Agent says it has no `memsy_*` tools (most common, happens on the default config)** — `tools.profile` (OpenClaw's local onboarding sets `"coding"`) is a base *allowlist* applied **before** `tools.allow`, which can only narrow it, never re-add — so plugin-owned tools are filtered out even when the plugin shows as loaded (and even with `allow: ["*"]`). Fix: switch to profile `full` with an explicit allow list replicating coding's groups plus `memsy_*` — `install.sh` does this automatically on the untouched default config; by hand: `openclaw config set tools.profile full` then `openclaw config set tools.allow '["group:fs","group:runtime","group:web","group:sessions","group:memory","cron","image","image_generate","skill_workshop","video_generate","memsy_*"]' --strict-json`, then `openclaw gateway restart` and fully restart your TUI session. Verify with `openclaw logs | grep "tool policy removed" | tail -1` — memsy tools must not be listed.
 
 **Plugin not loading** — Run `openclaw plugins inspect memsy --runtime` to see load errors.
 

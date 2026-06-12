@@ -129,16 +129,30 @@ Configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org
 ### Agent says it has no `memsy_*` tools
 
 This is the most common failure, and it happens on OpenClaw's **default config**.
-`tools.profile` (local onboarding sets it to `"coding"`) is a base *allowlist* —
-plugin-owned tools are filtered out of the agent's toolset unless explicitly
-allowed, even though `openclaw plugins list` shows the plugin loaded and
-`openclaw plugins inspect memsy --runtime` lists every tool. `install.sh`
-detects this and adds the entry when it can; to do it by hand:
+`tools.profile` (local onboarding sets it to `"coding"`) is a base *allowlist*
+applied **before** `tools.allow`/`tools.deny` — it strips plugin-owned tools
+from the agent's toolset, and `tools.allow` can only narrow further, never
+re-add (even `allow: ["*"]` does not bring them back). All this while
+`openclaw plugins list` shows the plugin loaded and
+`openclaw plugins inspect memsy --runtime` lists every tool.
+
+The fix is to switch to profile `"full"` and let `tools.allow` be the
+allowlist — replicating `coding`'s groups plus `memsy_*`. `install.sh` does
+this automatically when your config is the untouched onboarding default; by
+hand:
 
 ```bash
 openclaw config get tools.profile    # "coding"? → plugin tools are filtered
-openclaw config set tools.allow '["memsy_*"]' --strict-json   # merge with any existing entries
+openclaw config set tools.profile full
+openclaw config set tools.allow '["group:fs","group:runtime","group:web","group:sessions","group:memory","cron","image","image_generate","skill_workshop","video_generate","memsy_*"]' --strict-json
 openclaw gateway restart
+```
+
+Verify in the gateway log — the memsy tools must NOT appear in the
+"tool policy removed" line:
+
+```bash
+openclaw logs | grep "tool policy removed" | tail -1
 ```
 
 Then **fully restart your TUI session** — a running agent process only loads

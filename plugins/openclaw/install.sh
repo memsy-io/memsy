@@ -41,33 +41,58 @@ rm -f "${SCRIPT_DIR}/${TGZ}"
 echo "✓ Plugin installed."
 
 # ── Tool policy ───────────────────────────────────────────────────────────────
-# tools.profile (local onboarding defaults it to "coding") is a base ALLOWLIST:
-# plugin-owned tools are filtered out of the agent's toolset unless explicitly
-# allowed. Without this, the plugin loads fine but the agent never sees the
-# memsy_* tools. When an allow list already exists we never clobber it — we
-# print the merge instruction instead.
+# tools.profile (local onboarding defaults it to "coding") is a base ALLOWLIST
+# applied BEFORE tools.allow/tools.deny — and tools.allow can only NARROW what
+# survived the profile, never re-add (policy order: profile → allow/deny;
+# verified empirically: with profile "coding" even allow:["*"] still strips
+# plugin-owned tools). So plugin tools require either profile "full" (with
+# allow acting as the allowlist) or no profile.
+#
+# When the config is the untouched onboarding default (profile "coding", no
+# allow list) we convert it losslessly: profile → "full" plus an allow list
+# replicating coding's documented contents + "memsy_*". Anything else is the
+# user's own policy — print instructions instead of clobbering it.
+# NOTE: the group list mirrors the "coding" profile as of OpenClaw 2026.6.x.
+CODING_EQUIV='["group:fs","group:runtime","group:web","group:sessions","group:memory","cron","image","image_generate","skill_workshop","video_generate","memsy_*"]'
 PROFILE="$(openclaw config get tools.profile 2>/dev/null | tail -n1 || true)"
+ALLOW_JSON="$(openclaw config get tools.allow 2>/dev/null || true)"
+allow_has_memsy() { printf '%s' "$ALLOW_JSON" | grep -q 'memsy_\*'; }
+allow_is_set()    { printf '%s' "$ALLOW_JSON" | grep -q '\['; }
 case "$PROFILE" in
   ""|full|*"not found"*)
-    : # no profile restriction — plugin tools are visible as-is
+    if allow_is_set && ! allow_has_memsy; then
+      echo "⚠ tools.allow is set but doesn't include \"memsy_*\" — the agent won't see the Memsy tools."
+      echo "  Append it to your existing entries:"
+      echo "    openclaw config set tools.allow '[...your entries..., \"memsy_*\"]' --strict-json"
+    fi
     ;;
-  *)
-    ALLOW_JSON="$(openclaw config get tools.allow 2>/dev/null || true)"
-    if printf '%s' "$ALLOW_JSON" | grep -q 'memsy_\*'; then
-      echo "✓ tools.allow already includes \"memsy_*\"."
-    elif printf '%s' "$ALLOW_JSON" | grep -q '\['; then
-      echo "⚠ tools.profile is \"${PROFILE}\" (an allowlist) and tools.allow doesn't include \"memsy_*\"."
-      echo "  The agent won't see the Memsy tools until you add it (keep your existing entries):"
-      echo "    openclaw config set tools.allow '[\"memsy_*\", ...your existing entries...]' --strict-json"
+  coding)
+    if allow_is_set; then
+      # The user manages their own allow list — never clobber it. (Even if it
+      # already names memsy_*, the coding profile strips the tools first, so
+      # the profile must still be switched.)
+      echo "⚠ tools.profile \"coding\" filters out plugin tools and tools.allow cannot re-add them."
+      echo "  Switch to profile \"full\" with an allow list (keep your entries, add coding's groups + memsy_*):"
+      echo "    openclaw config set tools.profile full"
+      echo "    openclaw config set tools.allow '${CODING_EQUIV}' --strict-json"
     else
-      echo "Allowing Memsy tools (tools.profile \"${PROFILE}\" filters out plugin tools)..."
-      if openclaw config set tools.allow '["memsy_*"]' --strict-json >/dev/null 2>&1; then
-        echo "✓ Added \"memsy_*\" to tools.allow."
+      echo "Exposing Memsy tools (profile \"coding\" filters plugin-owned tools; converting to"
+      echo "profile \"full\" + an equivalent allow list — same toolset, plus memsy_*)..."
+      if openclaw config set tools.allow "$CODING_EQUIV" --strict-json >/dev/null 2>&1 \
+         && openclaw config set tools.profile full >/dev/null 2>&1; then
+        echo "✓ tools.profile=full, tools.allow=coding-equivalent + \"memsy_*\"."
       else
-        echo "⚠ Could not update tools.allow automatically. Add it yourself:"
-        echo "    openclaw config set tools.allow '[\"memsy_*\"]' --strict-json"
+        echo "⚠ Could not update tool policy automatically. Run:"
+        echo "    openclaw config set tools.profile full"
+        echo "    openclaw config set tools.allow '${CODING_EQUIV}' --strict-json"
       fi
     fi
+    ;;
+  *)
+    echo "⚠ tools.profile is \"${PROFILE}\", which filters out plugin-owned tools, and tools.allow"
+    echo "  cannot re-add them. To expose the Memsy tools, switch to an explicit allow list:"
+    echo "    openclaw config set tools.profile full"
+    echo "    openclaw config set tools.allow '[...the tools you use..., \"memsy_*\"]' --strict-json"
     ;;
 esac
 
