@@ -518,7 +518,20 @@ export default definePluginEntry({
     "Long-term memory for OpenClaw agents — recall, store, and surface context across channels.",
 
   register(api) {
-    const config: PluginConfig = {};
+    // Plugin config from openclaw.json → plugins.entries.memsy.config (the
+    // host validates it against openclaw.plugin.json's configSchema). This is
+    // how stock plugins read their settings; without it every configSchema
+    // knob (proactive, confirmStore, sessionAutoContext, apiKey, …) is dead
+    // and only the env vars work. Env vars remain the fallback for every knob
+    // (see resolveApiKey / isFlagEnabled).
+    const entry = (
+      api as unknown as {
+        config?: { plugins?: { entries?: Record<string, { config?: unknown } | undefined> } };
+      }
+    ).config?.plugins?.entries?.memsy;
+    const rawConfig = entry?.config;
+    const config: PluginConfig =
+      rawConfig && typeof rawConfig === "object" ? (rawConfig as PluginConfig) : {};
 
     // Fired-once flags: reset on session_start so /new and idle-rotation get
     // fresh context blocks each session. sessionId is sent on every ingest

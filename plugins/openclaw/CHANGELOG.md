@@ -61,6 +61,13 @@ by pulling the repo and re-running `./install.sh` — see the README's
 - `memsy_list_orgs` lists every profile in the shared config (not just the
   active one), and `memsy_use_org` prints a working restart command
   (`openclaw chat` — there is no `openclaw start`).
+- The plugin reads its OpenClaw config (`plugins.entries.memsy.config` —
+  `proactive`, `confirmStore`, `sessionAutoContext`, `sessionContextLimit`,
+  `apiKey`, `baseUrl`) from `api.config`, the same way stock plugins do.
+  Previously the `configSchema` knobs were declared but never read, so modes
+  could only be enabled via env vars; now
+  `openclaw config set plugins.entries.memsy.config.proactive true --strict-json`
+  works, with env vars as the fallback.
 
 [Unreleased]: https://github.com/memsy-io/memsy/commits/main/plugins/openclaw
 [0.1.0]: https://github.com/memsy-io/memsy/tree/main/plugins/openclaw
