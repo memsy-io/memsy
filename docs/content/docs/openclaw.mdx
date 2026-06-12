@@ -172,6 +172,17 @@ Run `openclaw skills list` to verify `memsy-recall` / `memsy-remember` are insta
 
 Ask your agent: *"What Memsy orgs do I have?"* to check the active profile. Switch with *"Use my work Memsy org."*
 
+### Memories stored here don't show up in other hosts (or vice versa)
+
+Cross-host recall depends on every host deriving the same `actor_id`. OpenClaw's
+plugin cannot spawn `git` (the plugin scanner forbids it), so it reads your git
+config **files** directly — if your `user.email` lives behind an `[include]` /
+`[includeIf]` directive or only in the system-scope gitconfig, the plugin can
+derive a different identity than the MCP. Fix it by pinning the identity once,
+shared by every host: ask your agent to call `memsy_set_defaults` with an
+explicit `actor_id` (persisted to `~/.memsy/config.json`), or set
+`MEMSY_ACTOR_ID` in `~/.openclaw/.env`.
+
 ## See also
 
 - [MCP Server](/docs/mcp) — the universal layer that all integrations share

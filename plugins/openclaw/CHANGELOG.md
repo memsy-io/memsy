@@ -45,6 +45,19 @@ by pulling the repo and re-running `./install.sh` — see the README's
   tools out of the agent's toolset) and adds `"memsy_*"` to `tools.allow` when
   it can do so without clobbering existing entries.
 - Marketplace entry and the OpenClaw documentation page.
+- All HTTP calls go through one `memsyFetch` helper: every request is bounded
+  by a 10s timeout (a hung fetch inside the gateway's heartbeat hook would
+  stall the agent turn forever), and error bodies are read as text first so a
+  proxy's non-JSON 502 page surfaces as the real status instead of a
+  `SyntaxError`.
+- Session auto-context reads the `items` field `/console/memories` actually
+  returns (it previously read a nonexistent `memories` field and always came
+  back empty); the proactive instruction spells out that `memsy_ingest`'s
+  `metadata` parameter is a JSON **string**, not an object; ingest bounds
+  mirror the MCP (1–100 events, non-empty content, ≤4096-char metadata).
+- `memsy_list_orgs` lists every profile in the shared config (not just the
+  active one), and `memsy_use_org` prints a working restart command
+  (`openclaw chat` — there is no `openclaw start`).
 
 [Unreleased]: https://github.com/memsy-io/memsy/commits/main/plugins/openclaw
 [0.1.0]: https://github.com/memsy-io/memsy/tree/main/plugins/openclaw

@@ -53,6 +53,62 @@ function authHeaders(apiKey: string): Record<string, string> {
   };
 }
 
+// ── HTTP helper ──────────────────────────────────────────────────────────────
+// Every Memsy call goes through here so the cross-cutting concerns live in ONE
+// place instead of being copy-pasted per tool:
+//   - timeout: the plugin runs inside OpenClaw's long-lived gateway process —
+//     a hung fetch (no reject, no resolve) would stall the agent turn forever,
+//     so every request is bounded with AbortSignal.timeout.
+//   - text-first parsing: a non-JSON error body (proxy HTML 502, LB error
+//     page) surfaces as the real HTTP status + a body snippet instead of an
+//     opaque "Unexpected token <" SyntaxError from resp.json().
+//   - uniform !ok error shape: `Memsy <label> failed (<status>): <body>`.
+const FETCH_TIMEOUT_MS = 10_000;
+
+async function httpJson(
+  apiKey: string,
+  url: string,
+  opts: { label: string; method?: string; body?: unknown },
+): Promise<unknown> {
+  const resp = await fetch(url, {
+    method: opts.method ?? "GET",
+    headers: authHeaders(apiKey),
+    ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  const text = await resp.text();
+  let data: unknown;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text.slice(0, 300); // non-JSON body — keep a snippet for the error
+  }
+  if (!resp.ok) {
+    throw new Error(`Memsy ${opts.label} failed (${resp.status}): ${JSON.stringify(data)}`);
+  }
+  return data;
+}
+
+/** httpJson against the configured hot-path base URL. */
+async function memsyFetch(
+  config: PluginConfig,
+  path: string,
+  opts: { label: string; method?: string; body?: unknown; query?: URLSearchParams },
+): Promise<unknown> {
+  const apiKey = resolveApiKey(config);
+  const baseUrl = resolveBaseUrl(config);
+  const qs = opts.query && opts.query.size > 0 ? `?${opts.query.toString()}` : "";
+  return httpJson(apiKey, `${baseUrl}${path}${qs}`, opts);
+}
+
+/** Standard tool result wrapper: pretty JSON text + raw details. */
+function toolResult(data: unknown): {
+  content: Array<{ type: "text"; text: string }>;
+  details: unknown;
+} {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+}
+
 // ── Shared defaults (READ-ONLY) ──────────────────────────────────────────────
 // Read default role_ids / team_ids / actor_id from the shared Memsy config —
 // ~/.memsy/config.json, overridden per-project by ./.memsy/config.json — the
@@ -66,6 +122,8 @@ interface SharedDefaults {
   apiKey?: string;
   roleIds: string[];
   teamIds: string[];
+  /** Every profile in the resolved config file (for memsy_list_orgs parity with the MCP). */
+  profiles: Array<{ name: string; orgLabel?: string; baseUrl?: string }>;
 }
 
 function parseStringList(v: unknown): string[] {
@@ -119,12 +177,29 @@ function sharedDefaults(): SharedDefaults {
     return fromFile.length ? fromFile : envList(env);
   };
 
+  // Enumerate every profile in the resolved file so memsy_list_orgs can show
+  // them all (parity with the MCP's memsy_list_orgs). A legacy flat config —
+  // or no config at all — counts as a single profile named after the active one.
+  const profiles: SharedDefaults["profiles"] = [];
+  if (cfg?.profiles && typeof cfg.profiles === "object") {
+    for (const [name, raw] of Object.entries(cfg.profiles as Record<string, unknown>)) {
+      const p = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      profiles.push({
+        name,
+        orgLabel: typeof p.org_label === "string" ? p.org_label : undefined,
+        baseUrl: typeof p.base_url === "string" ? p.base_url : undefined,
+      });
+    }
+  }
+  if (!profiles.length) profiles.push({ name: profileName });
+
   _sharedDefaults = {
     profileName,
     actorId: (slc.actor_id ?? slc.actorId) as string | undefined,
     apiKey: (slc.api_key ?? slc.apiKey) as string | undefined,
     roleIds: resolveList("default_role_ids", "defaultRoleIds", "MEMSY_DEFAULT_ROLE_IDS"),
     teamIds: resolveList("default_team_ids", "defaultTeamIds", "MEMSY_DEFAULT_TEAM_IDS"),
+    profiles,
   };
   return _sharedDefaults;
 }
@@ -278,10 +353,11 @@ async function resolveOrgId(apiKey: string, baseUrl: string): Promise<string> {
         `(it must end in "/v1"). Needed to look up your org_id for roles/teams.`,
     );
   }
-  const resp = await fetch(`${controlUrl}/me`, { headers: authHeaders(apiKey) });
-  const data = (await resp.json()) as { org_id?: string };
-  if (!resp.ok || !data.org_id) {
-    throw new Error(`Memsy /me failed (${resp.status}): ${JSON.stringify(data)}`);
+  const data = (await httpJson(apiKey, `${controlUrl}/me`, { label: "/me" })) as {
+    org_id?: string;
+  };
+  if (!data.org_id) {
+    throw new Error(`Memsy /me returned no org_id: ${JSON.stringify(data)}`);
   }
   _orgId = data.org_id;
   return _orgId;
@@ -324,9 +400,13 @@ function persistDefaults(update: { roleIds?: string[]; teamIds?: string[]; actor
   writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
   renameSync(tmp, path);
   chmodSync(path, 0o600);
-  // Invalidate caches so subsequent search/ingest pick up the new defaults.
+  // Invalidate ALL the derived caches so subsequent calls pick up the new
+  // state — including _orgId: the re-read config may resolve a different
+  // api_key (user edited the file), and a stale org would route role/team
+  // operations to the wrong org.
   _sharedDefaults = undefined;
   _actorId = undefined;
+  _orgId = undefined;
   return path;
 }
 
@@ -354,7 +434,8 @@ const PROACTIVE_INSTRUCTION_BASE =
   `  - Learnings: "turns out X", "the trick is Y", "found that Z"\n\n` +
   `Pre-flight: skip if <20 chars; skip secret-shaped tokens (msy_/sk_/ghp_/Bearer); skip duplicates.\n` +
   `Call memsy_ingest: content=<substance>, ts=<ISO 8601>, ` +
-  `metadata={"source":"openclaw-proactive","safe_to_delete":true}, and kind matching the speaker the ` +
+  `metadata=the JSON-encoded STRING "{\\"source\\":\\"openclaw-proactive\\",\\"safe_to_delete\\":true}" ` +
+  `(the metadata parameter is a string, not an object), and kind matching the speaker the ` +
   `substance came FROM — "assistant_message" if it's something you produced or concluded, "user_message" ` +
   `if the user stated it (do NOT default everything to user_message).\n` +
   `Acknowledge after the primary answer: → saved to Memsy: "<first 60 chars>..." (event <id>)\n` +
@@ -386,13 +467,18 @@ const IngestEvent = Type.Object({
     Type.Literal("tool_result"),
     Type.Literal("app_event"),
   ]),
-  content: Type.String({ maxLength: 32000 }),
+  content: Type.String({ minLength: 1, maxLength: 32000 }),
   ts: Type.Optional(Type.String()),
-  metadata: Type.Optional(Type.String()),
+  metadata: Type.Optional(
+    Type.String({ maxLength: 4096, description: "JSON-encoded string (not an object)." }),
+  ),
 });
 
+// Bounds mirror the MCP tool and memsy-core's batch caps (1–100 events,
+// ≤4096-char metadata) so invalid batches fail fast at the boundary instead
+// of surfacing as a server 422.
 const IngestParams = Type.Object({
-  events: Type.Array(IngestEvent),
+  events: Type.Array(IngestEvent, { minItems: 1, maxItems: 100 }),
 });
 
 const ListMemoriesParams = Type.Object({
@@ -452,17 +538,7 @@ export default definePluginEntry({
         "Check Memsy service health. Call this first when any other Memsy tool errors.",
       parameters: Type.Object({}),
       async execute(_toolCallId: string, _params: unknown) {
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
-        const resp = await fetch(`${baseUrl}/health`, {
-          headers: authHeaders(apiKey),
-        });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy health check failed (${resp.status}): ${JSON.stringify(data)}`);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
-          details: data,
-        };
+        return toolResult(await memsyFetch(config, "/health", { label: "health check" }));
       },
     });
 
@@ -475,8 +551,6 @@ export default definePluginEntry({
       parameters: SearchParams,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as SearchParamsType;
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
         const body: Record<string, unknown> = {
           query: p.query,
           limit: p.limit ?? 8,
@@ -489,17 +563,9 @@ export default definePluginEntry({
         if (sd.roleIds.length) body.role_ids = sd.roleIds;
         if (sd.teamIds.length) body.team_ids = sd.teamIds;
         if (p.since) body.since = p.since;
-        const resp = await fetch(`${baseUrl}/search`, {
-          method: "POST",
-          headers: authHeaders(apiKey),
-          body: JSON.stringify(body),
-        });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy search failed (${resp.status}): ${JSON.stringify(data)}`);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
-          details: data,
-        };
+        return toolResult(
+          await memsyFetch(config, "/search", { label: "search", method: "POST", body }),
+        );
       },
     });
 
@@ -512,8 +578,6 @@ export default definePluginEntry({
       parameters: IngestParams,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as IngestParamsType;
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
         // The agent supplies kind/content/ts/metadata; inject the identity
         // fields /ingest requires (actor_id + session_id) so the agent never
         // has to — mirroring how the MCP server fills them. Without this every
@@ -531,17 +595,9 @@ export default definePluginEntry({
           ...(roleId ? { role_id: roleId } : {}),
           ...(teamId ? { team_id: teamId } : {}),
         }));
-        const resp = await fetch(`${baseUrl}/ingest`, {
-          method: "POST",
-          headers: authHeaders(apiKey),
-          body: JSON.stringify({ events }),
-        });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy ingest failed (${resp.status}): ${JSON.stringify(data)}`);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
-          details: data,
-        };
+        return toolResult(
+          await memsyFetch(config, "/ingest", { label: "ingest", method: "POST", body: { events } }),
+        );
       },
     });
 
@@ -554,8 +610,6 @@ export default definePluginEntry({
       parameters: ListMemoriesParams,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as ListMemoriesParamsType;
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
         const qs = new URLSearchParams();
         if (p.limit != null) qs.set("limit", String(p.limit));
         if (p.offset != null) qs.set("offset", String(p.offset));
@@ -569,14 +623,9 @@ export default definePluginEntry({
         const explicitActor = p.actor_id?.trim();
         if (explicitActor) qs.set("actor_id", explicitActor);
         else if (!p.all_actors) qs.set("actor_id", resolveActorId());
-        const url = `${baseUrl}/console/memories${qs.size > 0 ? "?" + qs.toString() : ""}`;
-        const resp = await fetch(url, { headers: authHeaders(apiKey) });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy list memories failed (${resp.status}): ${JSON.stringify(data)}`);
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
-          details: data,
-        };
+        return toolResult(
+          await memsyFetch(config, "/console/memories", { label: "list memories", query: qs }),
+        );
       },
     });
 
@@ -589,23 +638,19 @@ export default definePluginEntry({
       parameters: Type.Object({}),
       async execute(_toolCallId: string, _params: unknown) {
         const baseUrl = resolveBaseUrl(config);
-        // Report the profile actually in effect — env OR the config file's
-        // active_profile — not just the env var. The README's "wrong memories?"
-        // troubleshooting points users here, so it must reflect file-selected
-        // profiles too.
-        const profileName = sharedDefaults().profileName;
-        const profiles = [
-          {
-            profile_name: profileName,
-            active: true,
-            base_url: baseUrl,
-            org_label: profileName,
-          },
-        ];
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(profiles, null, 2) }],
-          details: profiles,
-        };
+        // List EVERY profile in the shared config (parity with the MCP's
+        // memsy_list_orgs), marking the one actually in effect — env OR the
+        // config file's active_profile. The README's "wrong memories?"
+        // troubleshooting points users here, so it must show the alternatives,
+        // not just the active one.
+        const sd = sharedDefaults();
+        const profiles = sd.profiles.map((p) => ({
+          profile_name: p.name,
+          active: p.name === sd.profileName,
+          base_url: p.name === sd.profileName ? baseUrl : (p.baseUrl ?? DEFAULT_BASE_URL),
+          org_label: p.orgLabel ?? p.name,
+        }));
+        return toolResult(profiles);
       },
     });
 
@@ -618,7 +663,12 @@ export default definePluginEntry({
       parameters: UseOrgParams,
       async execute(_toolCallId: string, params: unknown) {
         const p = params as UseOrgParamsType;
-        const text = `To switch to profile "${p.profile}", restart OpenClaw with:\n  MEMSY_PROFILE=${p.profile} MEMSY_API_KEY=<that-profile-key> openclaw start`;
+        const text =
+          `To switch to profile "${p.profile}", restart the gateway and your session with the new profile:\n` +
+          `  openclaw gateway restart\n` +
+          `  MEMSY_PROFILE=${p.profile} openclaw chat\n` +
+          `(If the profile's api_key lives in ~/.memsy/config.json it is picked up automatically; ` +
+          `otherwise also set MEMSY_API_KEY.)`;
         return {
           content: [{ type: "text" as const, text }],
           details: { profile: p.profile },
@@ -638,18 +688,13 @@ export default definePluginEntry({
       }),
       async execute(_toolCallId: string, params: unknown) {
         const p = params as { limit?: number; offset?: number };
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
-        const orgId = await resolveOrgId(apiKey, baseUrl);
+        const orgId = await resolveOrgId(resolveApiKey(config), resolveBaseUrl(config));
         const qs = new URLSearchParams({
           org_id: orgId,
           limit: String(p.limit ?? 100),
           offset: String(p.offset ?? 0),
         });
-        const resp = await fetch(`${baseUrl}/roles?${qs.toString()}`, { headers: authHeaders(apiKey) });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy list roles failed (${resp.status}): ${JSON.stringify(data)}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+        return toolResult(await memsyFetch(config, "/roles", { label: "list roles", query: qs }));
       },
     });
 
@@ -670,17 +715,14 @@ export default definePluginEntry({
       }),
       async execute(_toolCallId: string, params: unknown) {
         const p = params as { name: string; focus: string };
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
-        const orgId = await resolveOrgId(apiKey, baseUrl);
-        const resp = await fetch(`${baseUrl}/roles`, {
-          method: "POST",
-          headers: authHeaders(apiKey),
-          body: JSON.stringify({ org_id: orgId, name: p.name, focus: p.focus }),
-        });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy create role failed (${resp.status}): ${JSON.stringify(data)}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+        const orgId = await resolveOrgId(resolveApiKey(config), resolveBaseUrl(config));
+        return toolResult(
+          await memsyFetch(config, "/roles", {
+            label: "create role",
+            method: "POST",
+            body: { org_id: orgId, name: p.name, focus: p.focus },
+          }),
+        );
       },
     });
 
@@ -696,18 +738,13 @@ export default definePluginEntry({
       }),
       async execute(_toolCallId: string, params: unknown) {
         const p = params as { limit?: number; offset?: number };
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
-        const orgId = await resolveOrgId(apiKey, baseUrl);
+        const orgId = await resolveOrgId(resolveApiKey(config), resolveBaseUrl(config));
         const qs = new URLSearchParams({
           org_id: orgId,
           limit: String(p.limit ?? 100),
           offset: String(p.offset ?? 0),
         });
-        const resp = await fetch(`${baseUrl}/teams?${qs.toString()}`, { headers: authHeaders(apiKey) });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy list teams failed (${resp.status}): ${JSON.stringify(data)}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+        return toolResult(await memsyFetch(config, "/teams", { label: "list teams", query: qs }));
       },
     });
 
@@ -728,17 +765,14 @@ export default definePluginEntry({
       }),
       async execute(_toolCallId: string, params: unknown) {
         const p = params as { name: string; focus: string };
-        const apiKey = resolveApiKey(config);
-        const baseUrl = resolveBaseUrl(config);
-        const orgId = await resolveOrgId(apiKey, baseUrl);
-        const resp = await fetch(`${baseUrl}/teams`, {
-          method: "POST",
-          headers: authHeaders(apiKey),
-          body: JSON.stringify({ org_id: orgId, name: p.name, focus: p.focus }),
-        });
-        const data = (await resp.json()) as unknown;
-        if (!resp.ok) throw new Error(`Memsy create team failed (${resp.status}): ${JSON.stringify(data)}`);
-        return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }], details: data };
+        const orgId = await resolveOrgId(resolveApiKey(config), resolveBaseUrl(config));
+        return toolResult(
+          await memsyFetch(config, "/teams", {
+            label: "create team",
+            method: "POST",
+            body: { org_id: orgId, name: p.name, focus: p.focus },
+          }),
+        );
       },
     });
 
@@ -845,7 +879,6 @@ export default definePluginEntry({
         }
 
         if (apiKey) {
-          const baseUrl = resolveBaseUrl(config);
           const limit = contextLimit(config);
           try {
             // Scope the recall block to the active actor — without this the
@@ -856,27 +889,27 @@ export default definePluginEntry({
               sort: "observed_at_desc",
               actor_id: resolveActorId(),
             });
-            const resp = await fetch(`${baseUrl}/console/memories?${qs.toString()}`, {
-              headers: authHeaders(apiKey),
-            });
-            if (resp.ok) {
-              type MemoryItem = { text?: string; content?: string; observed_at?: string };
-              const data = (await resp.json()) as { memories?: MemoryItem[] };
-              const memories = data.memories ?? [];
-              if (memories.length > 0) {
-                const lines = memories
-                  .slice(0, limit)
-                  .map((m, i) => {
-                    const text = (m.text ?? m.content ?? "").slice(0, 200);
-                    const date = m.observed_at ? ` — ${m.observed_at}` : "";
-                    return `${i + 1}. ${text}${date}`;
-                  })
-                  .join("\n");
-                recallPart = `[Memsy recall (top ${memories.length})]\n${lines}`;
-              }
+            type MemoryItem = { text?: string; content?: string; observed_at?: string };
+            // GET /console/memories returns { items: [...] } (see the Node
+            // SDK's MemoryListResponse) — NOT { memories: [...] }.
+            const data = (await memsyFetch(config, "/console/memories", {
+              label: "auto-context recall",
+              query: qs,
+            })) as { items?: MemoryItem[] };
+            const memories = data.items ?? [];
+            if (memories.length > 0) {
+              const lines = memories
+                .slice(0, limit)
+                .map((m, i) => {
+                  const text = (m.text ?? m.content ?? "").slice(0, 200);
+                  const date = m.observed_at ? ` — ${m.observed_at}` : "";
+                  return `${i + 1}. ${text}${date}`;
+                })
+                .join("\n");
+              recallPart = `[Memsy recall (top ${memories.length})]\n${lines}`;
             }
           } catch {
-            // Network failure — never block the agent turn.
+            // Network failure / API error — never block the agent turn.
           }
         }
       }

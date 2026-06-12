@@ -138,4 +138,6 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 **Wrong memories returned** — Ask your agent to call `memsy_list_orgs` and verify the active profile, then `memsy_health` to confirm connectivity.
 
+**Memories don't line up across hosts** — The plugin derives `actor_id` from your git email by reading git's config *files* (it can't spawn `git`; OpenClaw's scanner forbids subprocesses). `[include]`/`[includeIf]` directives and system-scope configs aren't followed, so exotic setups can derive a different identity than the MCP. Pin it once for every host: ask the agent to call `memsy_set_defaults` with an explicit `actor_id`, or set `MEMSY_ACTOR_ID` in `~/.openclaw/.env`.
+
 Full docs: [docs.memsy.io/docs/openclaw](https://docs.memsy.io/docs/openclaw)
