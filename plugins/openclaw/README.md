@@ -8,7 +8,7 @@ Long-term memory for your OpenClaw agent. Recall decisions, store context, and s
 |---|---|
 | **Recall** | Ask "what did we decide about X?" in any connected chat app |
 | **Store** | Say "remember that…" — skill extracts and persists the substance |
-| **Auto-context** | `MEMSY_SESSION_AUTOCONTEXT=on` — recent memories injected at session start |
+| **Auto-context** | `sessionAutoContext` plugin config (or `MEMSY_SESSION_AUTOCONTEXT=on`) — recent memories injected at session start |
 | **Native tools** | `memsy_search`, `memsy_ingest`, `memsy_health`, `memsy_list_memories` |
 | **Onboarding** | `memsy_list_roles` / `memsy_create_role` / `memsy_list_teams` / `memsy_create_team` / `memsy_set_defaults` — surface or create roles/teams and set defaults |
 | **Channel-agnostic** | Store from Telegram, recall from Slack — memory follows the agent, not the channel |
@@ -97,17 +97,29 @@ Skills can also live in your workspace under `./skills/` and override the ClawHu
 
 ## Modes
 
-| Variable | Effect |
-|---|---|
-| `MEMSY_SESSION_AUTOCONTEXT=on` | Fetches recent memories at session start and injects them into the agent's first-turn context |
-| `MEMSY_SESSION_CONTEXT_LIMIT=N` | Number of memories to surface at session start (default 6, max 20) |
-| `MEMSY_PROACTIVE=on` | Watch the conversation for save-worthy content (decisions, preferences) and store without an explicit "remember that" |
-| `MEMSY_CONFIRM_STORE=on` | Ask before every store operation |
-| `MEMSY_ACTOR_ID=<id>` | Pin a stable `actor_id` (top precedence). Otherwise resolved as: config-file `actor_id` → `sha256("<profile>\|<git-email>")` → `sha256("<profile>\|<user>@<host>")` |
-| `MEMSY_DEFAULT_ROLE_IDS=a,b` | Comma-separated default role IDs — search filters + single-default ingest attribution (also read from `~/.memsy/config.json`) |
-| `MEMSY_DEFAULT_TEAM_IDS=a,b` | Comma-separated default team IDs — same as roles |
-| `MEMSY_BASE_URL=https://...` | Override the Memsy API URL (self-hosted installations) |
-| `MEMSY_PROFILE=<name>` | Selects which profile slice to load from `~/.memsy/config.json` (defaults, `actor_id`) and is a component of the derived `actor_id` — not merely informational. Switch API keys by restarting with a new `MEMSY_API_KEY` or a different active profile. |
+The recommended way to enable modes is OpenClaw's **plugin config** — schema-validated, persisted in `openclaw.json`, and independent of which shell launched the process:
+
+```bash
+openclaw config set plugins.entries.memsy.config.proactive true --strict-json
+openclaw config set plugins.entries.memsy.config.sessionAutoContext true --strict-json
+openclaw config set plugins.entries.memsy.config.confirmStore true --strict-json
+openclaw config set plugins.entries.memsy.config.sessionContextLimit 6 --strict-json
+openclaw gateway restart   # then fully relaunch your TUI session
+```
+
+A set plugin-config value wins; the env vars below are the fallback when the config key is unset:
+
+| Variable | Plugin config key | Effect |
+|---|---|---|
+| `MEMSY_SESSION_AUTOCONTEXT=on` | `sessionAutoContext` | Fetches recent memories at session start and injects them into the agent's first-turn context |
+| `MEMSY_SESSION_CONTEXT_LIMIT=N` | `sessionContextLimit` | Number of memories to surface at session start (default 6, max 20) |
+| `MEMSY_PROACTIVE=on` | `proactive` | Watch the conversation for save-worthy content (decisions, preferences) and store without an explicit "remember that" |
+| `MEMSY_CONFIRM_STORE=on` | `confirmStore` | Ask before every store operation |
+| `MEMSY_ACTOR_ID=<id>` | — | Pin a stable `actor_id` (top precedence). Otherwise resolved as: config-file `actor_id` → `sha256("<profile>\|<git-email>")` → `sha256("<profile>\|<user>@<host>")` |
+| `MEMSY_DEFAULT_ROLE_IDS=a,b` | — | Comma-separated default role IDs — search filters + single-default ingest attribution (also read from `~/.memsy/config.json`) |
+| `MEMSY_DEFAULT_TEAM_IDS=a,b` | — | Comma-separated default team IDs — same as roles |
+| `MEMSY_BASE_URL=https://...` | `baseUrl` | Override the Memsy API URL (self-hosted installations) |
+| `MEMSY_PROFILE=<name>` | — | Selects which profile slice to load from `~/.memsy/config.json` (defaults, `actor_id`) and is a component of the derived `actor_id` — not merely informational. Switch API keys by restarting with a new `MEMSY_API_KEY` or a different active profile. |
 
 > **Config file precedence.** A per-project `./.memsy/config.json` is used **exclusively** when present — it is *not* merged key-by-key with `~/.memsy/config.json` (this matches the MCP, so your `actor_id` stays aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
 

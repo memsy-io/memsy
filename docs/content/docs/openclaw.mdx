@@ -109,6 +109,26 @@ Configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org
   A per-project `./.memsy/config.json` is used **exclusively** when present — it is not merged key-by-key with `~/.memsy/config.json` (this matches the MCP, keeping your `actor_id` aligned across hosts). Make a project config complete: if it omits `api_key`, the global key is **not** inherited.
 </Info>
 
+## Modes
+
+Enable opt-in behaviors via OpenClaw's plugin config (recommended — schema-validated and persisted in `openclaw.json`), then restart the gateway and relaunch your TUI session:
+
+```bash
+openclaw config set plugins.entries.memsy.config.proactive true --strict-json
+openclaw config set plugins.entries.memsy.config.sessionAutoContext true --strict-json
+openclaw config set plugins.entries.memsy.config.confirmStore true --strict-json
+openclaw gateway restart
+```
+
+| Config key | Env fallback | Effect |
+|---|---|---|
+| `sessionAutoContext` | `MEMSY_SESSION_AUTOCONTEXT=on` | Inject recent memories into the first turn of each session |
+| `sessionContextLimit` | `MEMSY_SESSION_CONTEXT_LIMIT=N` | Auto-context size (default 6, max 20) |
+| `proactive` | `MEMSY_PROACTIVE=on` | Auto-store save-worthy content (decisions, preferences) without an explicit "remember that" |
+| `confirmStore` | `MEMSY_CONFIRM_STORE=on` | Ask before every store |
+
+A set config key wins; the env var applies only when the key is unset. Env vars go in `~/.openclaw/.env` so the gateway sees them — a shell `export` only reaches `openclaw chat` sessions launched from that shell.
+
 ## Capabilities
 
 | Capability | Supported |
@@ -120,9 +140,9 @@ Configure profiles in `~/.memsy/config.json` (see [MCP docs](/docs/mcp#multi-org
 | Onboarding (create/list roles+teams, set defaults) | ✓ (`memsy_set_defaults` persists to shared config) |
 | Channel-agnostic memory | ✓ |
 | Multi-org / profiles | ✓ |
-| Session-start auto-context | ✓ (`MEMSY_SESSION_AUTOCONTEXT=on`; surfaced via the prompt-contribution hook, `MEMSY_SESSION_CONTEXT_LIMIT` default 6, max 20) |
-| Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
-| Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
+| Session-start auto-context | ✓ (`sessionAutoContext` config / `MEMSY_SESSION_AUTOCONTEXT=on`; surfaced via the prompt-contribution hook, limit default 6, max 20) |
+| Proactive store mode | ✓ (`proactive` config / `MEMSY_PROACTIVE=on`) |
+| Confirm-before-store mode | ✓ (`confirmStore` config / `MEMSY_CONFIRM_STORE=on`) |
 
 ## Troubleshooting
 
