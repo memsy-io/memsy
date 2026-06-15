@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "memsy": {
+      "command": "npx",
+      "args": ["-y", "@memsy-io/mcp"]
+    }
+  }
+}
