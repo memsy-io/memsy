@@ -40,6 +40,7 @@ class TestControlClientInit:
         assert hasattr(client, "keys")
         assert hasattr(client, "events")
         assert hasattr(client, "interest")
+        assert hasattr(client, "connectors")
 
 
 class TestControlClientMe:
@@ -260,6 +261,128 @@ class TestInterestResource:
     def test_interest_status_false(self, mock_request, client):
         mock_request.return_value = _make_response(200, {"expressed": False})
         assert client.interest.status() is False
+
+
+class TestConnectorsResource:
+    @patch("httpx.Client.request")
+    def test_create(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {"connector_id": "conn_1", "authorize_url": "https://slack.com/oauth/v2/authorize?..."},
+        )
+        connection = client.connectors.create("slack")
+        assert connection.connector_id == "conn_1"
+        assert connection.authorize_url.startswith("https://slack.com")
+
+    @patch("httpx.Client.request")
+    def test_list(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            [
+                {
+                    "id": "conn_1",
+                    "provider": "slack",
+                    "status": "active",
+                    "display_name": "acme-workspace",
+                    "external_account_id": "T123",
+                    "configured_by_email": "admin@acme.com",
+                    "scopes": ["channels:read"],
+                    "last_sync_at": None,
+                    "next_sync_at": None,
+                    "last_error": None,
+                    "created_at": "2026-04-01T00:00:00Z",
+                }
+            ],
+        )
+        connectors = client.connectors.list()
+        assert len(connectors) == 1
+        assert connectors[0].provider == "slack"
+        assert connectors[0].status == "active"
+
+    @patch("httpx.Client.request")
+    def test_list_providers(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200, {"providers": ["slack", "google_drive", "gmail"]}
+        )
+        assert client.connectors.list_providers() == ["slack", "google_drive", "gmail"]
+
+    @patch("httpx.Client.request")
+    def test_list_resources(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "resources": [
+                    {
+                        "external_id": "C123",
+                        "resource_type": "channel",
+                        "name": "#general",
+                        "selected": False,
+                    }
+                ]
+            },
+        )
+        resources = client.connectors.list_resources("conn_1")
+        assert len(resources) == 1
+        assert resources[0].name == "#general"
+        assert resources[0].selected is False
+
+    @patch("httpx.Client.request")
+    def test_configure_resources(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "id": "conn_1",
+                "provider": "slack",
+                "status": "active",
+                "display_name": "acme-workspace",
+                "external_account_id": "T123",
+                "configured_by_email": "admin@acme.com",
+                "scopes": ["channels:read"],
+                "last_sync_at": None,
+                "next_sync_at": None,
+                "last_error": None,
+                "created_at": "2026-04-01T00:00:00Z",
+            },
+        )
+        from memsy.models import ResourceSelection
+
+        connector = client.connectors.configure_resources(
+            "conn_1", [ResourceSelection(external_id="C123", name="#general")]
+        )
+        assert connector.status == "active"
+        _, kwargs = mock_request.call_args
+        assert kwargs["json"]["resources"] == [
+            {"external_id": "C123", "resource_type": "channel", "name": "#general"}
+        ]
+
+    @patch("httpx.Client.request")
+    def test_sync(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "id": "conn_1",
+                "provider": "slack",
+                "status": "active",
+                "display_name": None,
+                "external_account_id": None,
+                "configured_by_email": None,
+                "scopes": [],
+                "last_sync_at": None,
+                "next_sync_at": None,
+                "last_error": None,
+                "created_at": "2026-04-01T00:00:00Z",
+            },
+        )
+        connector = client.connectors.sync("conn_1")
+        assert connector.id == "conn_1"
+
+    @patch("httpx.Client.request")
+    def test_delete_204(self, mock_request, client):
+        resp = _make_response(204, {})
+        resp.content = b""
+        resp.is_success = True
+        mock_request.return_value = resp
+        client.connectors.delete("conn_1")
 
 
 class TestControlClientContextManager:

@@ -7,6 +7,7 @@ import httpx
 
 from memsy._http import DEFAULT_MAX_RETRIES, DEFAULT_RETRY_BACKOFF, HttpCoreMixin
 from memsy.control_resources.billing import BillingResource
+from memsy.control_resources.connectors import ConnectorsResource
 from memsy.control_resources.events import EventsResource
 from memsy.control_resources.interest import InterestResource
 from memsy.control_resources.keys import KeysResource
@@ -40,6 +41,10 @@ class MemsyControlClient(HttpCoreMixin):
         invoices = control.billing.invoices()
         key = control.keys.create("ci-key", scopes=["read"])
 
+        # Connectors (Slack, Gmail, Google Drive)
+        connection = control.connectors.create("slack")
+        print(connection.authorize_url)  # send the end user here
+
     Sub-resource accessors::
 
         control.usage       — UsageResource
@@ -47,6 +52,7 @@ class MemsyControlClient(HttpCoreMixin):
         control.keys        — KeysResource
         control.events      — EventsResource
         control.interest    — InterestResource
+        control.connectors  — ConnectorsResource
     """
 
     def __init__(
@@ -71,6 +77,7 @@ class MemsyControlClient(HttpCoreMixin):
         self.keys = KeysResource(self)
         self.events = EventsResource(self)
         self.interest = InterestResource(self)
+        self.connectors = ConnectorsResource(self)
 
     def __enter__(self) -> MemsyControlClient:
         return self

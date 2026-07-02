@@ -669,3 +669,89 @@ export interface ProInterestResponse {
 export function parseProInterestResponse(d: Record<string, unknown>): ProInterestResponse {
   return { message: String(d.message ?? "") };
 }
+
+// ── Connectors (Slack, Gmail, Google Drive) ──────────────────────────────────
+
+/**
+ * Response from initiating a connector OAuth flow. Send the end user to
+ * `authorizeUrl`; once they complete the provider's consent screen, poll
+ * `connectors.get(connectorId)` until its status flips from `pending` to
+ * `active`.
+ */
+export interface ConnectorConnection {
+  connectorId: string;
+  authorizeUrl: string;
+}
+
+export function parseConnectorConnection(d: Record<string, unknown>): ConnectorConnection {
+  return {
+    connectorId: String(d.connector_id),
+    authorizeUrl: String(d.authorize_url),
+  };
+}
+
+/** A connected data source (Slack, Gmail, Google Drive, ...). */
+export interface Connector {
+  id: string;
+  provider: string;
+  status: string;
+  displayName: string | null;
+  externalAccountId: string | null;
+  configuredByEmail: string | null;
+  scopes: string[];
+  lastSyncAt: string | null;
+  nextSyncAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  syncWindowHours: number | null;
+}
+
+export function parseConnector(d: Record<string, unknown>): Connector {
+  return {
+    id: String(d.id),
+    provider: String(d.provider),
+    status: String(d.status),
+    displayName: asStringOrNull(d.display_name),
+    externalAccountId: asStringOrNull(d.external_account_id),
+    configuredByEmail: asStringOrNull(d.configured_by_email),
+    scopes: (d.scopes as string[]) ?? [],
+    lastSyncAt: asStringOrNull(d.last_sync_at),
+    nextSyncAt: asStringOrNull(d.next_sync_at),
+    lastError: asStringOrNull(d.last_error),
+    createdAt: String(d.created_at),
+    syncWindowHours: typeof d.sync_window_hours === "number" ? d.sync_window_hours : null,
+  };
+}
+
+/** A resource (Slack channel, Gmail label, Drive folder) available on a connector. */
+export interface ConnectorResourceItem {
+  externalId: string;
+  resourceType: string;
+  name: string | null;
+  selected: boolean;
+}
+
+export function parseConnectorResourceItem(d: Record<string, unknown>): ConnectorResourceItem {
+  return {
+    externalId: String(d.external_id),
+    resourceType: String(d.resource_type ?? "channel"),
+    name: asStringOrNull(d.name),
+    selected: Boolean(d.selected),
+  };
+}
+
+/** A resource to enable syncing for, passed to `configureResources`. */
+export interface ResourceSelection {
+  externalId: string;
+  resourceType?: string;
+  name?: string;
+}
+
+export function serializeResourceSelection(r: ResourceSelection): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    external_id: r.externalId,
+    resource_type: r.resourceType ?? "channel",
+  };
+  if (r.name !== undefined) out.name = r.name;
+  return out;
+}

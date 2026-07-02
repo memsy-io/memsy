@@ -24,6 +24,8 @@ export { EventsResource } from "./control_resources/events.js";
 export type { ConsoleEventListOptions } from "./control_resources/events.js";
 export { InterestResource } from "./control_resources/interest.js";
 export type { InterestExpressOptions } from "./control_resources/interest.js";
+export { ConnectorsResource } from "./control_resources/connectors.js";
+export type { ConfigureResourcesOptions } from "./control_resources/connectors.js";
 
 // ── Models ───────────────────────────────────────────────────────────────────
 export type {
@@ -65,6 +67,11 @@ export type {
   EventItem,
   EventListResponse,
   ProInterestResponse,
+  // Connectors
+  Connector,
+  ConnectorConnection,
+  ConnectorResourceItem,
+  ResourceSelection,
 } from "./models.js";
 
 // ── Errors ───────────────────────────────────────────────────────────────────

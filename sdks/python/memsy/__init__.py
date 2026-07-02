@@ -31,6 +31,10 @@ Control-plane (billing, keys, usage, events)::
     me = control.me()
     events = control.events.list(limit=20)
 
+    # Connect a data source (Slack, Gmail, Google Drive)
+    connection = control.connectors.create("slack")
+    print(connection.authorize_url)  # send the end user here
+
 Async usage::
 
     from memsy import AsyncMemsyClient, AsyncMemsyControlClient, EventPayload
@@ -64,6 +68,10 @@ from memsy.models import (
     ApiKeyInfo,
     ApiKeyListResponse,
     BillingSummary,
+    # Connector models
+    Connector,
+    ConnectorConnection,
+    ConnectorResourceItem,
     CreateKeyResponse,
     DimensionUsage,
     EventItemResponse,
@@ -84,6 +92,7 @@ from memsy.models import (
     PaymentMethod,
     ProInterestResponse,
     RateLimitInfo,
+    ResourceSelection,
     RoleResource,
     SearchResponse,
     SearchResult,
@@ -137,6 +146,11 @@ __all__ = [
     "EventItemResponse",
     "EventListResponse",
     "ProInterestResponse",
+    # Connector models
+    "Connector",
+    "ConnectorConnection",
+    "ConnectorResourceItem",
+    "ResourceSelection",
     # Usage & Rate Limit
     "UsageInfo",
     "RateLimitInfo",

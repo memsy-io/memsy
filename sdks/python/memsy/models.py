@@ -793,3 +793,92 @@ class ProInterestResponse:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProInterestResponse:
         return cls(message=data["message"])
+
+
+# ============== Connectors (api/) ==============
+
+
+@dataclass
+class ConnectorConnection:
+    """Response from initiating a connector OAuth flow.
+
+    Send the end user to ``authorize_url``; once they complete the provider's
+    consent screen, poll :meth:`ConnectorsResource.get` for ``connector_id``
+    until its status flips from ``pending`` to ``active``.
+    """
+
+    connector_id: str
+    authorize_url: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConnectorConnection:
+        return cls(connector_id=data["connector_id"], authorize_url=data["authorize_url"])
+
+
+@dataclass
+class Connector:
+    """A connected data source (Slack, Gmail, Google Drive, ...)."""
+
+    id: str
+    provider: str
+    status: str
+    display_name: str | None
+    external_account_id: str | None
+    configured_by_email: str | None
+    scopes: list[str]
+    last_sync_at: str | None
+    next_sync_at: str | None
+    last_error: str | None
+    created_at: str
+    sync_window_hours: int | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Connector:
+        return cls(
+            id=data["id"],
+            provider=data["provider"],
+            status=data["status"],
+            display_name=data.get("display_name"),
+            external_account_id=data.get("external_account_id"),
+            configured_by_email=data.get("configured_by_email"),
+            scopes=data.get("scopes") or [],
+            last_sync_at=data.get("last_sync_at"),
+            next_sync_at=data.get("next_sync_at"),
+            last_error=data.get("last_error"),
+            created_at=data["created_at"],
+            sync_window_hours=data.get("sync_window_hours"),
+        )
+
+
+@dataclass
+class ConnectorResourceItem:
+    """A resource (Slack channel, Gmail label, Drive folder) available on a connector."""
+
+    external_id: str
+    resource_type: str
+    name: str | None
+    selected: bool
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConnectorResourceItem:
+        return cls(
+            external_id=data["external_id"],
+            resource_type=data.get("resource_type", "channel"),
+            name=data.get("name"),
+            selected=bool(data.get("selected", False)),
+        )
+
+
+@dataclass
+class ResourceSelection:
+    """A resource to enable syncing for, passed to ``configure_resources``."""
+
+    external_id: str
+    resource_type: str = "channel"
+    name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"external_id": self.external_id, "resource_type": self.resource_type}
+        if self.name is not None:
+            d["name"] = self.name
+        return d
