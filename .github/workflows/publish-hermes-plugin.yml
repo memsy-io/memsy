@@ -1,0 +1,33 @@
+name: Publish Hermes Plugin to PyPI
+
+on:
+  push:
+    tags:
+      - "hermes-v*"
+
+jobs:
+  publish:
+    name: Build and publish memsy-hermes-plugin
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # OIDC trusted publishing — no PyPI token secret needed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Build wheel and sdist
+        working-directory: plugins/hermes
+        run: hatch build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: plugins/hermes/dist/
