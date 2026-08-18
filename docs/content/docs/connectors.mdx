@@ -1,0 +1,151 @@
+---
+title: Connectors
+description: Sync Slack, Google Drive, Notion, GitHub, OneDrive, and S3 into Memsy automatically — no SDK code required.
+---
+
+Connectors pull content from external sources into Memsy without your app calling `ingest()` directly. An org admin connects a workspace (or a member connects their own account) once in the [Memsy console](https://app.memsy.io); Memsy then syncs new content on an ongoing basis and it shows up as searchable memory alongside everything else.
+
+<Info>
+  Connectors are configured and managed from the console UI. This page documents what each connector syncs, how it's scoped, and what an admin needs to set up before it can be connected — useful if you're debugging a sync or deciding which connector fits your data.
+</Info>
+
+## How connectors work
+
+Every connector implements the same contract: authenticate, let the user pick what to sync (a channel, a folder, a bucket, a repo branch...), then fetch content on a recurring basis. Fetched content is normalized into events and ingested through the same pipeline as `append()` calls — connector-sourced memories are indistinguishable from SDK-sourced ones once they land.
+
+Syncs are event-driven, not polled: a webhook (Slack, GitHub), a manual "Sync now" click, or completing setup all trigger an immediate sync.
+
+### Org-scoped vs. user-scoped
+
+| Scoping | Meaning | Connectors |
+|---|---|---|
+| **Org-scoped** | One shared connection per org. Any member can see it; only an org admin (or a service API key) can connect, reconfigure, or disconnect it. Resulting memories are org-visible. | Slack, Notion, GitHub, S3 |
+| **User-scoped** | Each member connects their own account. Only the owner (or a service key) can manage it or list its resources; resulting memories are private to that member. | Google Drive, OneDrive |
+
+## Available connectors
+
+| Connector | Syncs | Scoping | Live updates |
+|---|---|---|---|
+| [Slack](#slack) | Public channel messages | Org | Webhook (Events API) |
+| [Google Drive](#google-drive) | Files picked via Google Picker | User | Manual / recurring sync |
+| [Notion](#notion) | Pages in a shared workspace | Org | Manual / recurring sync |
+| [GitHub](#github) | Markdown/doc files in selected repo branches | Org | Webhook (push events) |
+| [OneDrive](#onedrive) | Files/folders picked from a Microsoft Graph folder browser | User | Manual / recurring sync |
+| [S3](#s3) | Objects in one bucket | Org | Manual / recurring sync |
+
+---
+
+## Slack
+
+Streams messages from public channels the bot has joined. Phase 1 covers public channels only — private channels and DMs aren't synced.
+
+- **OAuth scopes:** `channels:read`, `channels:history`, `channels:join`, `users:read`, `users:read.email`, `team:read`
+- **Live updates:** the Slack Events API webhook triggers a resync on new messages; bot tokens (`xoxb-`) don't expire, so there's no refresh step.
+- **Setup:** create a Slack app with the scopes above, then set:
+
+```bash
+SLACK_CLIENT_ID=...
+SLACK_CLIENT_SECRET=...
+SLACK_SIGNING_SECRET=...
+```
+
+An admin connects the workspace, picks channels from the picker (the bot auto-joins each one), and sync starts immediately.
+
+## Google Drive
+
+Syncs individual files a user grants through the browser-based [Google Picker](https://developers.google.com/picker) — not a folder tree. Memsy requests the narrow `drive.file` scope, so it can only ever see files explicitly picked, never a user's whole Drive. Google-native Docs/Sheets/Slides are exported (to docx/xlsx/pptx) before text extraction; everything else is read as-is.
+
+- **Scoping:** user-scoped — each member connects their own Drive, and only they can pick files or see the connection's resources.
+- **Live updates:** no webhook (Drive push notifications are a future phase) — re-sync on demand or on schedule.
+- **Setup:**
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_PICKER_API_KEY=...
+GOOGLE_APP_ID=...
+```
+
+Because `drive.file` can't enumerate a user's Drive server-side, the console mints a short-lived Picker token (`GET /connectors/{id}/picker-token`) and the file selection happens entirely in the browser.
+
+## Notion
+
+Syncs pages across a whole shared workspace as one synthetic resource — there's no per-page picker. Each sync sweep re-runs Notion's Search API and pulls pages edited since the last run, pulling full content via the Markdown export endpoint.
+
+- **OAuth scopes:** `read_content`
+- **Scoping:** org-scoped — a Notion connection is a workspace-level grant made by a workspace admin; resulting memories are org-visible.
+- **Live updates:** no inbound webhook — pull-based sweeps only.
+- **Setup:**
+
+```bash
+NOTION_CLIENT_ID=...
+NOTION_CLIENT_SECRET=...
+```
+
+Connecting activates automatically (no resource-picker step) — Notion has a single implicit resource, the shared workspace.
+
+## GitHub
+
+A *documentation* connector: for each selected repository branch, it ingests supported doc files (Markdown and similar text formats), not general source code. The default branch gets a full backfill on first sync; other branches are register-only until their next push.
+
+- **OAuth scopes:** `repo`, `user:email`, `admin:repo_hook`
+- **Scoping:** org-scoped.
+- **Live updates:** installs a per-repo webhook (push/create/delete), verified against `GITHUB_WEBHOOK_SECRET` — removed automatically when the connector is disconnected.
+- **Setup:**
+
+```bash
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+GITHUB_WEBHOOK_SECRET=...
+GITHUB_WEBHOOK_URL=...
+# optional — restrict incremental (post-backfill) ingestion to specific
+# GitHub logins; empty (default) trusts GitHub's own repo permissions
+GITHUB_INGEST_AUTHOR_ALLOWLIST=alice,bob
+```
+
+Repos load lazily in the picker; expanding one calls `GET /connectors/{id}/branches?repo=...` to list its branches without fetching every repo's branches up front.
+
+## OneDrive
+
+Like Google Drive, syncs individual files — but because the delegated `Files.Read` scope allows server-side enumeration, resources are picked from a real folder browser (drill down via `parent_id`) rather than a client-side Picker. Selecting a folder syncs its whole subtree.
+
+- **OAuth scopes:** `openid`, `profile`, `offline_access`, `User.Read`, `Files.Read`
+- **Scoping:** user-scoped — each member connects their own OneDrive; memories are private to that member, attributed to the file's last editor when Graph reports one.
+- **Live updates:** no webhook yet (Graph change notifications are a future phase) — manual/recurring sync.
+- **Setup:**
+
+```bash
+ONEDRIVE_CLIENT_ID=...
+ONEDRIVE_CLIENT_SECRET=...
+# optional — defaults to the Microsoft "common" multi-tenant authority
+ONEDRIVE_AUTHORITY=...
+```
+
+## S3
+
+Syncs every object in one bucket using static IAM credentials — no OAuth, no browser redirect. One S3 connection per org.
+
+- **Auth:** direct IAM access key + secret (submitted once via the console; no refresh, no expiry)
+- **Scoping:** org-scoped.
+- **Live updates:** no webhook yet (SNS/SQS notifications are a future phase) — manual/recurring sync, using a continuation-token cursor plus a last-modified high-water mark to skip unchanged objects.
+- **Setup:** no environment variables — an admin submits `access_key_id`, `secret_access_key`, `region`, and `bucket` directly. Memsy validates the credentials and resolves the underlying IAM identity before saving them.
+
+---
+
+## Managing connections
+
+All connector management goes through the control-plane API (the console UI is a thin client over it):
+
+| Action | Endpoint |
+|---|---|
+| List available providers | `GET /connectors/providers` |
+| Start an OAuth connection | `POST /connectors/{provider}/connect` |
+| Configure S3 (no OAuth) | `POST /connectors/s3/configure` |
+| List your org's connections | `GET /connectors` |
+| Check if a provider is connected | `GET /connectors/{provider}/status` |
+| Browse a connection's resources | `GET /connectors/{connector_id}/resources` |
+| Select resources to sync | `PUT /connectors/{connector_id}/resources` |
+| Trigger a sync immediately | `POST /connectors/{connector_id}/sync` |
+| Disconnect | `DELETE /connectors/{connector_id}` |
+
+Disconnecting revokes the stored token/credentials and — for providers that installed one (GitHub) — removes the webhook, so nothing is left behind on the external side.
