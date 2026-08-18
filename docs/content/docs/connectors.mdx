@@ -1,0 +1,77 @@
+---
+title: Connectors
+description: Connect Slack, Google Drive, Notion, GitHub, OneDrive, and S3 to Memsy from the console — no code required.
+---
+
+Connectors bring content from the tools you already use into Memsy automatically. Connect one from the [Memsy console](https://app.memsy.io) → **Connectors**, and its content becomes searchable memory alongside everything else — no SDK, no code.
+
+## Available connectors
+
+| Connector | Brings in | Who can connect it |
+|---|---|---|
+| [Slack](#slack) | Messages from public channels | Org admin |
+| [Google Drive](#google-drive) | Files you pick | Any member (your own Drive) |
+| [Notion](#notion) | Pages across your workspace | Org admin |
+| [GitHub](#github) | Docs/README files from selected repos | Org admin |
+| [OneDrive](#onedrive) | Files/folders you pick | Any member (your own OneDrive) |
+| [S3](#s3) | Objects in a bucket | Org admin |
+
+Slack, Notion, GitHub, and S3 are **shared** connections — one per organization, visible to every member once an admin sets it up. Google Drive and OneDrive are **personal** — each person connects their own account, and only they can see and manage that connection.
+
+## Slack
+
+1. Go to **Connectors → Slack → Connect**.
+2. Sign in to your Slack workspace and approve the requested permissions.
+3. Pick the channels you want Memsy to read. Memsy joins each one automatically.
+4. That's it — new messages in those channels start showing up as memory.
+
+Only public channels are supported today; private channels and DMs aren't synced.
+
+## Google Drive
+
+1. Go to **Connectors → Google Drive → Connect**.
+2. Sign in with Google.
+3. A file picker opens — select the files you want Memsy to read. Memsy only ever sees the files you pick, never your whole Drive.
+4. Come back anytime to pick more files, or disconnect from the same page.
+
+This connection is personal to you — your teammates need to connect their own Drive to bring in their own files.
+
+## Notion
+
+1. Go to **Connectors → Notion → Connect**.
+2. Sign in to Notion and choose which pages/workspace to share with Memsy on Notion's own permission screen.
+3. Connecting activates immediately — there's no separate page picker in Memsy; Notion decides what's shared at the point you grant access.
+
+Everything shared this way becomes visible org-wide.
+
+## GitHub
+
+1. Go to **Connectors → GitHub → Connect**.
+2. Sign in to GitHub and authorize access.
+3. Pick the repositories (and branches) you want synced. Expand a repo to see its branches.
+4. Memsy reads documentation files (READMEs, Markdown docs, etc.) — not general source code — and keeps them up to date automatically as they're pushed.
+
+## OneDrive
+
+1. Go to **Connectors → OneDrive → Connect**.
+2. Sign in with your Microsoft account.
+3. Browse your OneDrive and select the files or folders to sync — picking a folder brings in everything inside it.
+4. This connection is personal — teammates connect their own OneDrive separately.
+
+## S3
+
+1. Go to **Connectors → S3 → Connect**.
+2. Enter your AWS access key, secret key, region, and bucket name.
+3. Memsy validates the credentials and starts syncing every object in that bucket.
+
+Only one S3 bucket connection is supported per organization at a time.
+
+## Managing a connection
+
+From any connector's page in the console you can:
+
+- **Sync now** — trigger an immediate sync instead of waiting for the next automatic one
+- **Change selection** — pick different channels/folders/repos (Slack, Drive, GitHub, OneDrive)
+- **Disconnect** — revoke access; Memsy stops syncing and cleans up anything it installed on the provider's side (e.g. GitHub webhooks)
+
+Shared connectors (Slack, Notion, GitHub, S3) can only be connected, reconfigured, or disconnected by an org admin — other members can see that it's connected but can't change it. Personal connectors (Google Drive, OneDrive) can only be managed by the person who connected them.

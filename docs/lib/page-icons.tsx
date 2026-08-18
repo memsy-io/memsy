@@ -133,6 +133,7 @@ const PAGE_ICONS: Record<string, IconComponent> = {
   // Integrations
   langchain: LangChainIcon,
   mcp: McpIcon,
+  connectors: Plug,
 
   // Plugins
   'claude-code': AnthropicIcon,
