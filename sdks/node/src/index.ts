@@ -24,6 +24,17 @@ export { EventsResource } from "./control_resources/events.js";
 export type { ConsoleEventListOptions } from "./control_resources/events.js";
 export { InterestResource } from "./control_resources/interest.js";
 export type { InterestExpressOptions } from "./control_resources/interest.js";
+export {
+  ConnectorsResource,
+  USER_SCOPED_PROVIDERS,
+  ORG_SCOPED_PROVIDERS,
+  NON_OAUTH_PROVIDERS,
+  requiresOrgAdmin,
+} from "./control_resources/connectors.js";
+export type {
+  ConfigureS3Options,
+  WaitUntilAuthorizedOptions,
+} from "./control_resources/connectors.js";
 
 // ── Models ───────────────────────────────────────────────────────────────────
 export type {
@@ -65,6 +76,13 @@ export type {
   EventItem,
   EventListResponse,
   ProInterestResponse,
+  // Connectors
+  Connector,
+  ConnectorConnection,
+  ConnectorResourceItem,
+  ResourceSelection,
+  ConnectorStatus,
+  PickerConfig,
 } from "./models.js";
 
 // ── Errors ───────────────────────────────────────────────────────────────────

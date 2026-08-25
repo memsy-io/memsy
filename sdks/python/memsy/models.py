@@ -793,3 +793,165 @@ class ProInterestResponse:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProInterestResponse:
         return cls(message=data["message"])
+
+
+# ============== Connectors (control-plane) ==============
+
+
+@dataclass
+class ConnectorConnection:
+    """Response from initiating a connector OAuth flow.
+
+    Send the end user to ``authorize_url``; once they complete the provider's
+    consent screen the provider redirects to Memsy's own callback, which
+    attaches the token server-side. Poll
+    :meth:`~memsy.control_resources.connectors.ConnectorsResource.get` (or
+    ``wait_until_authorized``) until the connector leaves ``pending``.
+    """
+
+    connector_id: str
+    authorize_url: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConnectorConnection:
+        return cls(connector_id=data["connector_id"], authorize_url=data["authorize_url"])
+
+
+@dataclass
+class Connector:
+    """A connected data source (Slack, Google Drive, S3, Notion, GitHub, OneDrive)."""
+
+    id: str
+    provider: str
+    status: str
+    display_name: str | None
+    external_account_id: str | None
+    configured_by_email: str | None
+    scopes: list[str]
+    last_sync_at: str | None
+    next_sync_at: str | None
+    last_error: str | None
+    created_at: str
+    # S3-only: the connected bucket + region. None for every other provider.
+    bucket: str | None = None
+    region: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Connector:
+        return cls(
+            id=data["id"],
+            provider=data["provider"],
+            status=data["status"],
+            display_name=data.get("display_name"),
+            external_account_id=data.get("external_account_id"),
+            configured_by_email=data.get("configured_by_email"),
+            scopes=data.get("scopes") or [],
+            last_sync_at=data.get("last_sync_at"),
+            next_sync_at=data.get("next_sync_at"),
+            last_error=data.get("last_error"),
+            created_at=data["created_at"],
+            bucket=data.get("bucket"),
+            region=data.get("region"),
+        )
+
+
+@dataclass
+class ConnectorResourceItem:
+    """A resource available on a connector, with its current selection state.
+
+    ``resource_type`` is provider-specific: ``channel`` (Slack), ``bucket``
+    (S3), ``workspace`` (Notion), ``repo`` / ``branch`` / ``default_branch``
+    (GitHub), ``folder`` / ``file`` (OneDrive, Google Drive).
+    """
+
+    external_id: str
+    resource_type: str
+    name: str | None
+    selected: bool
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConnectorResourceItem:
+        return cls(
+            external_id=data["external_id"],
+            resource_type=data.get("resource_type", "channel"),
+            name=data.get("name"),
+            selected=bool(data.get("selected", False)),
+        )
+
+
+@dataclass
+class ResourceSelection:
+    """A resource to enable syncing for, passed to ``configure_resources``.
+
+    ``resource_type`` must match what the provider expects — see
+    :class:`ConnectorResourceItem`. When you build selections from
+    ``list_resources()`` output, carry each item's ``resource_type`` through
+    unchanged rather than relying on the default.
+    """
+
+    external_id: str
+    resource_type: str = "channel"
+    name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"external_id": self.external_id, "resource_type": self.resource_type}
+        if self.name is not None:
+            d["name"] = self.name
+        return d
+
+    @classmethod
+    def from_item(cls, item: ConnectorResourceItem) -> ResourceSelection:
+        """Build a selection from a listed resource, preserving its type."""
+        return cls(
+            external_id=item.external_id,
+            resource_type=item.resource_type,
+            name=item.name,
+        )
+
+
+@dataclass
+class ConnectorStatus:
+    """Whether the caller's org (or, for user-scoped providers, the caller)
+    has a live connection for a provider.
+
+    Member-safe: any seated caller may read this, unlike ``connectors.list()``.
+    """
+
+    connected: bool
+    display_name: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConnectorStatus:
+        return cls(
+            connected=bool(data.get("connected", False)),
+            display_name=data.get("display_name"),
+        )
+
+
+@dataclass
+class PickerConfig:
+    """Google Drive only: a short-lived access token + config for opening the
+    Google Picker in a browser.
+
+    Drive cannot enumerate files server-side (the app only ever sees files the
+    user explicitly grants), so ``list_resources()`` returns just the already
+    selected files. Real selection happens in the browser Picker; the chosen
+    file ids are then passed to ``configure_resources()``.
+
+    ``access_token`` is a live Google credential — never log it or hand it to
+    anything but the Picker.
+    """
+
+    access_token: str
+    expires_in: int
+    api_key: str
+    app_id: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PickerConfig:
+        return cls(
+            access_token=data["access_token"],
+            expires_in=int(data["expires_in"]),
+            api_key=data["api_key"],
+            app_id=data["app_id"],
+        )

@@ -206,7 +206,62 @@ await control.usage.summary();          // monthly usage roll-up (admin)
 await control.usage.timeseries({ ... }); // per-day series
 await control.billing.invoices();       // billing history (admin)
 await control.events.list({ ... });     // console event browser
+await control.connectors.list();        // knowledge-source connectors (admin)
 ```
+
+---
+
+## Connectors — `control.connectors`
+
+Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive — and choose what they sync.
+
+**Who may connect what.** Org-scoped providers (`slack`, `s3`, `notion`, `github`) are one shared connection per org: only an **org admin — or any API key, which the server treats as a service caller acting org-wide** — may connect, configure, sync or disconnect them. A seated non-admin member gets a 403 and may only read. User-scoped providers (`google_drive`, `onedrive`) are per-member: the owner manages their own connection, and an admin can see it for auditing but never mutate it. `requiresOrgAdmin(provider)` answers this client-side for pre-flight checks — the server is the enforcement point.
+
+```ts
+import { MemsyControlClient, requiresOrgAdmin } from "@memsy-io/memsy";
+
+const control = new MemsyControlClient({
+  baseUrl: process.env.MEMSY_CONTROL_URL!,
+  apiKey: process.env.MEMSY_API_KEY!,
+});
+
+await control.connectors.listProviders();
+// ["slack", "google_drive", "s3", "notion", "github", "onedrive"]
+requiresOrgAdmin("slack");        // true — admin/API key only
+requiresOrgAdmin("google_drive"); // false — per-member connection
+
+// 1. Start OAuth and send the end user to the consent screen
+const connection = await control.connectors.create("slack");
+console.log(connection.authorizeUrl);
+
+// 2. The provider redirects back to Memsy's own callback, which attaches the
+//    token. listResources() answers 409 until then, so poll:
+const resources = await control.connectors.waitUntilAuthorized(connection.connectorId);
+
+// 3. Pick what to sync — this activates the connector and starts the backfill.
+//    The selection replaces the previous one, so send the full set.
+await control.connectors.configureResources(connection.connectorId, resources);
+
+// Later
+await control.connectors.status("slack");        // member-safe: connected? (no ids)
+await control.connectors.list();                 // admin/API-key view
+await control.connectors.get(connectorId);       // status, lastSyncAt, lastError
+await control.connectors.sync(connectorId);      // manual refresh (must be active)
+await control.connectors.delete(connectorId);    // disconnect + revoke
+```
+
+Provider-specific bits:
+
+| Provider | Notes |
+|---|---|
+| `slack` | Org-scoped. `resourceType: "channel"`. |
+| `s3` | Org-scoped, **no OAuth** — `create()` returns 400. Use `configureS3({ accessKeyId, secretAccessKey, region, bucket })`, which validates the credentials, selects the bucket and starts the backfill in one call. |
+| `notion` | Org-scoped. `resourceType: "workspace"`. |
+| `github` | Org-scoped. `listResources()` returns repos (`resourceType: "repo"`); call `listBranches(connectorId, repo)` to expand one repo's branches lazily. |
+| `google_drive` | User-scoped. Drive can't enumerate server-side, so `listResources()` returns only what's already selected — real selection happens in the browser Google Picker via `pickerConfig(connectorId)`, then the chosen file ids go to `configureResources()`. |
+| `onedrive` | User-scoped. `listResources(connectorId, { parentId })` drills into folders. |
+
+> Gmail is deprecated and is no longer a registered provider.
 
 ---
 
