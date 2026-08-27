@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 from memsy.exceptions import MemsyAPIError
 from memsy.models import (
@@ -62,6 +63,17 @@ def requires_org_admin(provider: str) -> bool:
     enforces this and is authoritative for providers this SDK doesn't know.
     """
     return provider not in USER_SCOPED_PROVIDERS
+
+
+def _seg(value: str) -> str:
+    """Percent-encode a caller-supplied value as one opaque URL path segment.
+
+    ``safe=""`` so ``/``, ``..``, ``?`` and ``#`` can't be smuggled in to
+    resolve outside ``/connectors/`` — matches ``encodeURIComponent`` in the
+    Node SDK.
+    """
+    return quote(str(value), safe="")
+
 
 
 def _selection_body(
@@ -126,7 +138,7 @@ class ConnectorsResource:
         Member-safe — use this instead of :meth:`list` when the caller may not
         be an org admin.
         """
-        data, _, _ = self._client._request("GET", f"/connectors/{provider}/status")
+        data, _, _ = self._client._request("GET", f"/connectors/{_seg(provider)}/status")
         return ConnectorStatus.from_dict(data)
 
     # -- connecting ----------------------------------------------------------
@@ -146,7 +158,7 @@ class ConnectorsResource:
             :meth:`configure_s3`), 403 if an org-scoped provider is being
             connected by a non-admin, 409 if a workspace is already connected.
         """
-        data, _, _ = self._client._request("POST", f"/connectors/{provider}/connect")
+        data, _, _ = self._client._request("POST", f"/connectors/{_seg(provider)}/connect")
         return ConnectorConnection.from_dict(data)
 
     def configure_s3(
@@ -188,7 +200,7 @@ class ConnectorsResource:
 
     def get(self, connector_id: str) -> Connector:
         """Retrieve a single connector."""
-        data, _, _ = self._client._request("GET", f"/connectors/{connector_id}")
+        data, _, _ = self._client._request("GET", f"/connectors/{_seg(connector_id)}")
         return Connector.from_dict(data)
 
     def list_resources(
@@ -204,7 +216,7 @@ class ConnectorsResource:
         """
         params = {"parent_id": parent_id} if parent_id is not None else None
         data, _, _ = self._client._request(
-            "GET", f"/connectors/{connector_id}/resources", params=params
+            "GET", f"/connectors/{_seg(connector_id)}/resources", params=params
         )
         return [ConnectorResourceItem.from_dict(r) for r in data.get("resources", [])]
 
@@ -216,7 +228,7 @@ class ConnectorsResource:
         over every branch. 400 on providers without branch support.
         """
         data, _, _ = self._client._request(
-            "GET", f"/connectors/{connector_id}/branches", params={"repo": repo}
+            "GET", f"/connectors/{_seg(connector_id)}/branches", params={"repo": repo}
         )
         return [ConnectorResourceItem.from_dict(r) for r in data.get("resources", [])]
 
@@ -224,7 +236,7 @@ class ConnectorsResource:
         """Google Drive only: mint a short-lived token + config for the browser
         Google Picker. Owner-only — an admin cannot mint one for someone else.
         """
-        data, _, _ = self._client._request("GET", f"/connectors/{connector_id}/picker-token")
+        data, _, _ = self._client._request("GET", f"/connectors/{_seg(connector_id)}/picker-token")
         return PickerConfig.from_dict(data)
 
     def wait_until_authorized(
@@ -274,18 +286,18 @@ class ConnectorsResource:
         Org-scoped connectors: admins / API keys only. User-scoped: owner only.
         """
         data, _, _ = self._client._request(
-            "PUT", f"/connectors/{connector_id}/resources", json=_selection_body(resources)
+            "PUT", f"/connectors/{_seg(connector_id)}/resources", json=_selection_body(resources)
         )
         return Connector.from_dict(data)
 
     def sync(self, connector_id: str) -> Connector:
         """Trigger an immediate sync. 409 unless the connector is ``active``."""
-        data, _, _ = self._client._request("POST", f"/connectors/{connector_id}/sync")
+        data, _, _ = self._client._request("POST", f"/connectors/{_seg(connector_id)}/sync")
         return Connector.from_dict(data)
 
     def delete(self, connector_id: str) -> None:
         """Disconnect and revoke the connector's stored credentials."""
-        self._client._request("DELETE", f"/connectors/{connector_id}")
+        self._client._request("DELETE", f"/connectors/{_seg(connector_id)}")
 
 
 class AsyncConnectorsResource:
@@ -307,7 +319,7 @@ class AsyncConnectorsResource:
 
     async def status(self, provider: str) -> ConnectorStatus:
         """Whether a live connection exists for ``provider`` (member-safe)."""
-        data, _, _ = await self._client._request("GET", f"/connectors/{provider}/status")
+        data, _, _ = await self._client._request("GET", f"/connectors/{_seg(provider)}/status")
         return ConnectorStatus.from_dict(data)
 
     # -- connecting ----------------------------------------------------------
@@ -318,7 +330,7 @@ class AsyncConnectorsResource:
         Org-scoped providers (Slack, Notion, GitHub) require an org admin or an
         API key. S3 doesn't use OAuth — call :meth:`configure_s3`.
         """
-        data, _, _ = await self._client._request("POST", f"/connectors/{provider}/connect")
+        data, _, _ = await self._client._request("POST", f"/connectors/{_seg(provider)}/connect")
         return ConnectorConnection.from_dict(data)
 
     async def configure_s3(
@@ -350,7 +362,7 @@ class AsyncConnectorsResource:
 
     async def get(self, connector_id: str) -> Connector:
         """Retrieve a single connector."""
-        data, _, _ = await self._client._request("GET", f"/connectors/{connector_id}")
+        data, _, _ = await self._client._request("GET", f"/connectors/{_seg(connector_id)}")
         return Connector.from_dict(data)
 
     async def list_resources(
@@ -363,20 +375,22 @@ class AsyncConnectorsResource:
         """
         params = {"parent_id": parent_id} if parent_id is not None else None
         data, _, _ = await self._client._request(
-            "GET", f"/connectors/{connector_id}/resources", params=params
+            "GET", f"/connectors/{_seg(connector_id)}/resources", params=params
         )
         return [ConnectorResourceItem.from_dict(r) for r in data.get("resources", [])]
 
     async def list_branches(self, connector_id: str, repo: str) -> list[ConnectorResourceItem]:
         """GitHub only: list branches for one repo."""
         data, _, _ = await self._client._request(
-            "GET", f"/connectors/{connector_id}/branches", params={"repo": repo}
+            "GET", f"/connectors/{_seg(connector_id)}/branches", params={"repo": repo}
         )
         return [ConnectorResourceItem.from_dict(r) for r in data.get("resources", [])]
 
     async def picker_config(self, connector_id: str) -> PickerConfig:
         """Google Drive only: mint a short-lived token for the browser Picker."""
-        data, _, _ = await self._client._request("GET", f"/connectors/{connector_id}/picker-token")
+        data, _, _ = await self._client._request(
+            "GET", f"/connectors/{_seg(connector_id)}/picker-token"
+        )
         return PickerConfig.from_dict(data)
 
     async def wait_until_authorized(
@@ -413,15 +427,15 @@ class AsyncConnectorsResource:
         """Select resources to sync (replaces the current set), activate the
         connector, and trigger the backfill."""
         data, _, _ = await self._client._request(
-            "PUT", f"/connectors/{connector_id}/resources", json=_selection_body(resources)
+            "PUT", f"/connectors/{_seg(connector_id)}/resources", json=_selection_body(resources)
         )
         return Connector.from_dict(data)
 
     async def sync(self, connector_id: str) -> Connector:
         """Trigger an immediate sync. 409 unless the connector is ``active``."""
-        data, _, _ = await self._client._request("POST", f"/connectors/{connector_id}/sync")
+        data, _, _ = await self._client._request("POST", f"/connectors/{_seg(connector_id)}/sync")
         return Connector.from_dict(data)
 
     async def delete(self, connector_id: str) -> None:
         """Disconnect and revoke the connector's stored credentials."""
-        await self._client._request("DELETE", f"/connectors/{connector_id}")
+        await self._client._request("DELETE", f"/connectors/{_seg(connector_id)}")

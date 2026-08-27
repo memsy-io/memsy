@@ -413,6 +413,20 @@ class TestConnectorsResource:
         mock_request.return_value = _make_response(204, None)
         assert client.connectors.delete("conn_1") is None
 
+    @patch("httpx.Client.request")
+    def test_path_segments_are_url_encoded(self, mock_request, client):
+        """A caller-supplied id can't escape /connectors/ via path characters."""
+        mock_request.return_value = _make_response(200, _CONNECTOR)
+        client.connectors.get("../../billing/invoices")
+        assert mock_request.call_args[0] == (
+            "GET",
+            "/connectors/..%2F..%2Fbilling%2Finvoices",
+        )
+
+        mock_request.return_value = _make_response(200, {"connected": False})
+        client.connectors.status("slack?x=1#y")
+        assert mock_request.call_args[0] == ("GET", "/connectors/slack%3Fx%3D1%23y/status")
+
     @patch("memsy.control_resources.connectors.time.sleep")
     @patch("httpx.Client.request")
     def test_wait_until_authorized_polls_through_409(self, mock_request, mock_sleep, client):
