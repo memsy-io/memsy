@@ -5,13 +5,16 @@ import {
   Bookmark,
   BookOpen,
   Box,
+  ChefHat,
   Clock,
   Code,
   Code2,
   Gauge,
+  Globe,
   HelpCircle,
   Lightbulb,
   type LucideIcon,
+  MessageCircle,
   MessageSquare,
   Package,
   Plug,
@@ -19,10 +22,12 @@ import {
   Rocket,
   RotateCw,
   Search,
+  Server,
   Sparkles,
   Upload,
   UserPlus,
   Users,
+  Wrench,
   Zap,
 } from 'lucide-react'
 
@@ -140,6 +145,14 @@ const PAGE_ICONS: Record<string, IconComponent> = {
   codex: OpenAIIcon,
   hermes: NousResearchIcon,
 
+  // Cookbooks — keyed by the full slug after /docs/, since these pages are
+  // nested. (The reference/* pages are keyed flat and so fall back to BookOpen.)
+  cookbooks: ChefHat,
+  'cookbooks/nextjs-chat': Globe,
+  'cookbooks/fastapi-support-agent': Server,
+  'cookbooks/slack-bot': MessageCircle,
+  'cookbooks/agent-memory-tool': Wrench,
+
   // API Reference
   'memsy-client': Code,
   'async-memsy-client': Code2,
@@ -157,6 +170,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   Guides: BookOpen,
   Integrations: Plug,
   Plugins: Puzzle,
+  Cookbooks: ChefHat,
   'API Reference': Code,
   Reference: Bookmark,
 }

@@ -1,0 +1,236 @@
+---
+title: FastAPI support agent
+description: An async FastAPI service that recalls a customer's history from Memsy before answering, with ingest moved off the request path.
+---
+
+Support agents live or die on continuity. A customer who explained their setup last Tuesday should not explain it again today — and if they do, they will tell you about it in the CSAT score.
+
+This recipe builds a **FastAPI** endpoint that answers a support question with the customer's own history in the prompt. The integration point is **the async runtime**: FastAPI serves requests on an event loop, so this uses `AsyncMemsyClient` throughout. The synchronous client would block that loop for the duration of every Memsy call, stalling every other request the worker is handling.
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pip install memsy fastapi uvicorn openai
+    ```
+
+    Python 3.10 or later.
+  </Step>
+
+  <Step title="Set your credentials">
+    ```bash
+    export MEMSY_BASE_URL="https://api.memsy.io/v1"
+    export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    export OPENAI_API_KEY="sk-..."
+    ```
+  </Step>
+
+  <Step title="Own the client's lifecycle with a lifespan handler">
+    `AsyncMemsyClient` wraps an `httpx.AsyncClient` with its own connection pool. Build it once at startup and close it at shutdown — a client created per request opens a fresh pool each time and leaks the sockets when the request ends.
+
+    ```python
+    # main.py
+    import os
+    from contextlib import asynccontextmanager
+
+    from fastapi import FastAPI
+    from memsy import AsyncMemsyClient
+
+
+    def _required(name: str) -> str:
+        value = os.environ.get(name)
+        if not value:
+            raise RuntimeError(f"Missing required env var: {name}")
+        return value
+
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Fail at boot, not on the first customer request.
+        app.state.memsy = AsyncMemsyClient(
+            base_url=_required("MEMSY_BASE_URL"),
+            api_key=_required("MEMSY_API_KEY"),
+        )
+        try:
+            yield
+        finally:
+            await app.state.memsy.close()
+
+
+    app = FastAPI(lifespan=lifespan)
+    ```
+
+    <Tip>
+    `AsyncMemsyClient` also works as an async context manager (`async with AsyncMemsyClient(...) as client:`) for scripts and tests. In a long-lived server the lifespan handler is the equivalent, scoped to the process rather than a block.
+    </Tip>
+  </Step>
+
+  <Step title="Validate the request at the boundary">
+    The customer id decides whose memories get read. Validate it as strictly as any other identifier — and take it from your authenticated session, not from the body, once you have one.
+
+    ```python
+    from pydantic import BaseModel, Field
+
+
+    class AskRequest(BaseModel):
+        question: str = Field(min_length=1, max_length=4000)
+        ticket_id: str = Field(min_length=1, max_length=64)
+
+
+    class AskResponse(BaseModel):
+        answer: str
+        recalled: int
+    ```
+  </Step>
+
+  <Step title="Write the endpoint">
+    ```python
+    from fastapi import BackgroundTasks, Depends, HTTPException, Request
+    from memsy import EventPayload
+    from memsy.exceptions import MemsyError, RateLimitExceeded
+    from openai import AsyncOpenAI
+
+    openai = AsyncOpenAI()
+
+    # Replace with your real auth dependency. The point is that the customer id
+    # is derived server-side; a body-supplied one would let any caller read any
+    # customer's history.
+    async def current_customer_id(request: Request) -> str:
+        customer_id = request.headers.get("X-Customer-Id")
+        if not customer_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return customer_id
+
+
+    @app.post("/ask", response_model=AskResponse)
+    async def ask(
+        body: AskRequest,
+        background: BackgroundTasks,
+        request: Request,
+        customer_id: str = Depends(current_customer_id),
+    ) -> AskResponse:
+        memsy: AsyncMemsyClient = request.app.state.memsy
+
+        # 1. Recall. A failure here degrades the answer; it must not 500 the
+        #    request, because an answer without memory still helps the customer.
+        try:
+            recalled = await memsy.search(
+                body.question,
+                actor_id=customer_id,
+                limit=5,
+                threshold=0.3,
+            )
+            memories = [r.content for r in recalled.results]
+        except RateLimitExceeded:
+            memories = []
+        except MemsyError:
+            # Full context stays server-side; the customer sees a normal answer.
+            import logging
+
+            logging.getLogger(__name__).exception("memsy recall failed")
+            memories = []
+
+        context = "\n".join(f"- {m}" for m in memories) or "(no prior history)"
+
+        # 2. Ground.
+        completion = await openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a support agent. The customer's prior history is "
+                        "below — use it instead of asking them to repeat "
+                        "themselves. If it contradicts the current question, "
+                        "trust the current question.\n\n"
+                        f"History:\n{context}"
+                    ),
+                },
+                {"role": "user", "content": body.question},
+            ],
+        )
+        answer = completion.choices[0].message.content or ""
+
+        # 3. Record — after the response is sent.
+        background.add_task(
+            _record_turn, memsy, customer_id, body.ticket_id, body.question, answer
+        )
+
+        return AskResponse(answer=answer, recalled=len(memories))
+    ```
+  </Step>
+
+  <Step title="Record the turn in the background">
+    `BackgroundTasks` runs after the response is written, so the write costs the customer nothing. FastAPI awaits async background tasks on the same event loop — which is another reason the async client matters here.
+
+    ```python
+    async def _record_turn(
+        memsy: AsyncMemsyClient,
+        customer_id: str,
+        ticket_id: str,
+        question: str,
+        answer: str,
+    ) -> None:
+        import logging
+
+        try:
+            await memsy.ingest(
+                [
+                    EventPayload(
+                        actor_id=customer_id,
+                        session_id=f"ticket_{ticket_id}",
+                        kind="user_message",
+                        content=question,
+                    ),
+                    EventPayload(
+                        actor_id=customer_id,
+                        session_id=f"ticket_{ticket_id}",
+                        kind="assistant_message",
+                        content=answer,
+                    ),
+                ]
+            )
+        except MemsyError:
+            # The response has already gone out. Raising here would only produce
+            # an unhandled-task traceback in the logs, so log it deliberately.
+            logging.getLogger(__name__).exception("memsy ingest failed")
+    ```
+
+    <Warning>
+    Background tasks die with the process. If a deploy restarts the worker between the response and the write, that turn is never recorded. For a support system where the transcript is the product, write to your own database synchronously and ingest to Memsy from a durable queue instead.
+    </Warning>
+  </Step>
+
+  <Step title="Run it">
+    ```bash
+    uvicorn main:app --reload --port 8000
+    ```
+
+    ```bash
+    curl -X POST http://localhost:8000/ask \
+      -H "Content-Type: application/json" \
+      -H "X-Customer-Id: cust_42" \
+      -d '{"question": "Is my export still failing?", "ticket_id": "T-1001"}'
+    ```
+
+    The first call returns `"recalled": 0` — there is nothing on file yet. Ask a follow-up a minute later and the count climbs as extraction completes.
+  </Step>
+</Steps>
+
+## Why `threshold=0.3`
+
+The default `threshold=0.0` returns the top `limit` results regardless of how weakly they match, so a question with no relevant history still pulls five loosely-related memories into the prompt. In a support context that produces confidently wrong answers about the wrong ticket.
+
+A floor makes "no relevant history" an outcome the model can see. Tune it against your own data — see [Searching memory](/docs/searching-memory#threshold) for the tier-specific ranges.
+
+## What to watch for
+
+- **The sync `MemsyClient` in an async handler.** It blocks the event loop for the whole HTTP call. Every concurrent request on that worker waits. This is the single most common version of this mistake.
+- **A client per request.** Build it in `lifespan`, read it from `app.state`.
+- **Letting a recall failure 500 the request.** Memory is an enhancement here, not a dependency. Degrade to no context.
+- **Returning the exception text to the caller.** Log the detail server-side; return a generic message. Memsy error details can name internal hosts.
+
+## Next steps
+
+- [Async client](/docs/async-client) — the full `AsyncMemsyClient` surface.
+- [Error handling](/docs/error-handling) — every typed exception and when it fires.
+- [Retries](/docs/retries) — the built-in 429 backoff, and when to override it.
