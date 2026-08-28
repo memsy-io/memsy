@@ -221,6 +221,141 @@ An empty result immediately after ingest is expected, not a bug — see [Async p
 - **Awaiting `ingest()` on the hot path.** Costs the user latency for a write they never see the result of.
 - **Searching org-wide by accident.** Omitting `actorId` searches across *every* actor in your org. That is a deliberate feature for admin tooling, and wrong in a user-facing chat.
 
+## Complete code
+
+Three files, ready to paste into an App Router project. The route handler is the
+Step 5 form — ingest deferred with `waitUntil` — since that is the version you
+want in production.
+
+**`lib/memsy.ts`**
+
+```ts
+// lib/memsy.ts
+import { MemsyClient } from "@memsy-io/memsy";
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}
+
+// Module scope: Next reuses the module across requests in a warm server.
+export const memsy = new MemsyClient({
+  baseUrl: required("MEMSY_BASE_URL"),
+  apiKey: required("MEMSY_API_KEY"),
+});
+```
+
+**`app/api/chat/route.ts`**
+
+```ts
+// app/api/chat/route.ts
+import { auth } from "@clerk/nextjs/server"; // or your auth of choice
+import { waitUntil } from "@vercel/functions";
+import OpenAI from "openai";
+import { memsy } from "@/lib/memsy";
+
+const openai = new OpenAI();
+
+export async function POST(req: Request) {
+  // The actor id comes from the server-side session — NEVER from the
+  // request body. A client-supplied actor_id lets any user read any
+  // other user's memories by editing one JSON field.
+  const { userId } = await auth();
+  if (!userId) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const { message, sessionId } = (await req.json()) as {
+    message: string;
+    sessionId: string;
+  };
+
+  // 1. Recall — what has this user told us before that bears on this?
+  const recalled = await memsy.search(message, {
+    actorId: userId,
+    limit: 5,
+  });
+
+  const context = recalled.results.length
+    ? recalled.results.map((r) => `- ${r.content}`).join("\n")
+    : "(nothing on file for this user yet)";
+
+  // 2. Ground.
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a helpful assistant with a long memory. Use the facts " +
+          "below when they are relevant, and refer to them naturally — " +
+          "do not announce that you are consulting your memory.\n\n" +
+          `What you know about this user:\n${context}`,
+      },
+      { role: "user", content: message },
+    ],
+  });
+
+  const reply = completion.choices[0]?.message?.content ?? "";
+
+  // 3. Record — deferred, so the user does not wait on a write.
+  waitUntil(
+    memsy
+      .ingest([
+        { actorId: userId, sessionId, kind: "user_message", content: message },
+        { actorId: userId, sessionId, kind: "assistant_message", content: reply },
+      ])
+      // A failed write must not take down a reply the user already sees.
+      .catch((err) => console.error("[memsy] ingest failed", err)),
+  );
+
+  return Response.json({ reply });
+}
+```
+
+**`components/chat.tsx`**
+
+```tsx
+"use client";
+import { useState } from "react";
+
+export function Chat({ threadId }: { threadId: string }) {
+  const [reply, setReply] = useState("");
+
+  async function send(message: string) {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // No actor id here — the server reads it from the session.
+      body: JSON.stringify({ message, sessionId: `chat_${threadId}` }),
+    });
+    const data = await res.json();
+    setReply(data.reply);
+  }
+
+  return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
+}
+```
+
+Set up:
+
+```bash
+npm install @memsy-io/memsy openai @clerk/nextjs @vercel/functions
+```
+
+```bash
+# .env.local
+MEMSY_BASE_URL="https://api.memsy.io/v1"
+MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+OPENAI_API_KEY="sk-..."
+```
+
+<Warning>
+Swap `@clerk/nextjs` for whatever auth you already run. The only requirement is
+that `userId` comes from a **server-side** session — see Step 4.
+</Warning>
+
 ## Next steps
 
 - [Memory as an agent tool](/docs/cookbooks/agent-memory-tool) — let the model decide when to recall instead of prefetching every turn.

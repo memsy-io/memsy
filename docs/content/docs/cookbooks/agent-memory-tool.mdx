@@ -319,37 +319,54 @@ The alternative is to make recall a **tool** the model calls when it decides it 
   </Step>
 
   <Step title="Record the turn">
-    Recall being on demand does not make recording optional — an agent that only reads never accumulates anything to read.
+    Recall being on demand does not make recording optional — an agent that only reads never accumulates anything to read. `run()` deliberately knows nothing about sessions, so the write lives in a thin wrapper around it.
 
     <Tabs>
       <Tab title="Python">
         ```python
-        from memsy import EventPayload
+        def chat(actor_id: str, session_id: str, user_message: str) -> str:
+            answer = run(actor_id, user_message)
 
-        memsy.ingest(
-            [
-                EventPayload(
-                    actor_id=actor_id,
-                    session_id=session_id,
-                    kind="user_message",
-                    content=user_message,
-                ),
-                EventPayload(
-                    actor_id=actor_id,
-                    session_id=session_id,
-                    kind="assistant_message",
-                    content=answer,
-                ),
-            ]
-        )
+            memsy.ingest(
+                [
+                    EventPayload(
+                        actor_id=actor_id,
+                        session_id=session_id,
+                        kind="user_message",
+                        content=user_message,
+                    ),
+                    EventPayload(
+                        actor_id=actor_id,
+                        session_id=session_id,
+                        kind="assistant_message",
+                        content=answer,
+                    ),
+                ]
+            )
+            return answer
+        ```
+
+        `EventPayload` joins the `MemsyClient` import from the executor step:
+
+        ```python
+        from memsy import EventPayload, MemsyClient
         ```
       </Tab>
       <Tab title="Node">
         ```ts
-        await memsy.ingest([
-          { actorId, sessionId, kind: "user_message", content: userMessage },
-          { actorId, sessionId, kind: "assistant_message", content: answer },
-        ]);
+        async function chat(
+          actorId: string,
+          sessionId: string,
+          userMessage: string,
+        ): Promise<string> {
+          const answer = await run(actorId, userMessage);
+
+          await memsy.ingest([
+            { actorId, sessionId, kind: "user_message", content: userMessage },
+            { actorId, sessionId, kind: "assistant_message", content: answer },
+          ]);
+          return answer;
+        }
         ```
       </Tab>
     </Tabs>
@@ -379,6 +396,313 @@ Neither dominates. Prefetch for a chat UI, tool for a multi-step agent — and n
 - **No iteration bound.** A loop with no `MAX_STEPS` can spin until your rate limit stops it.
 - **Conflating "no results" with "lookup failed".** Different strings, always.
 - **Re-ingesting recalled memories.** Record what the user said and what you answered, not what you looked up.
+
+## Complete code
+
+The whole agent, assembled from the steps above. Imports are collected at the
+top; every other line is exactly as it appears in the walkthrough.
+
+<Tabs>
+  <Tab title="Python">
+```python
+# agent.py
+import json
+import os
+
+from memsy import EventPayload, MemsyClient
+from memsy.exceptions import MemsyError
+from openai import OpenAI
+
+memsy = MemsyClient(
+    base_url=os.environ["MEMSY_BASE_URL"],
+    api_key=os.environ["MEMSY_API_KEY"],
+)
+
+
+def make_recall(actor_id: str):
+    """Bind the actor once; the model only ever supplies `query`."""
+
+    def recall(query: str) -> str:
+        try:
+            # No threshold: the default 0.0 returns the top 5 on any
+            # tier. A floor cuts noise, but the useful value is
+            # tier-dependent — see /docs/searching-memory#threshold.
+            found = memsy.search(query, actor_id=actor_id, limit=5)
+        except MemsyError:
+            # Tell the model the truth: the lookup failed, the user has
+            # no history. Otherwise it reports "you have never mentioned
+            # that" — a confident, wrong claim.
+            return "Memory lookup failed. Proceed without it."
+
+        if not found.results:
+            return "No relevant memories found."
+        return "\n".join(f"- {r.content}" for r in found.results)
+
+    return recall
+
+
+RECALL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "recall_memory",
+        "description": (
+            "Search this user's long-term memory for things they have "
+            "told you in past sessions — preferences, decisions, prior "
+            "context, and facts about their work. Call this when the "
+            "user refers to something from before ('like last time', "
+            "'the usual', 'what we decided'), when a personal "
+            "preference would change your answer, or when you are "
+            "missing context the user plainly expects you to have. Do "
+            "not call it for general knowledge or for facts already "
+            "stated in this conversation."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "What to look for, as a natural-language "
+                        "phrase. Search is semantic, so describe the "
+                        "topic rather than guessing keywords."
+                    ),
+                }
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+
+openai = OpenAI()
+
+MAX_STEPS = 6
+
+
+def run(actor_id: str, user_message: str) -> str:
+    recall = make_recall(actor_id)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a personal assistant with access to the user's "
+                "long-term memory. Use the recall_memory tool when past "
+                "context would change your answer."
+            ),
+        },
+        {"role": "user", "content": user_message},
+    ]
+
+    for _ in range(MAX_STEPS):
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini", messages=messages, tools=[RECALL_TOOL]
+        )
+        message = response.choices[0].message
+        messages.append(message)
+
+        if not message.tool_calls:
+            return message.content or ""
+
+        for call in message.tool_calls:
+            # `tool_calls` is a union of function and custom tool calls,
+            # and only the function variant carries `.function`. Every
+            # call still needs a reply: an assistant message whose tool
+            # calls go unanswered is rejected on the next request.
+            if call.type != "function":
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": "Unsupported tool call.",
+                    }
+                )
+                continue
+
+            args = json.loads(call.function.arguments)
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": recall(args["query"]),
+                }
+            )
+
+    # Out of steps. Returning a truthful failure beats returning the
+    # model's last half-finished thought as if it were an answer.
+    return "I could not finish that request."
+
+
+def chat(actor_id: str, session_id: str, user_message: str) -> str:
+    answer = run(actor_id, user_message)
+
+    memsy.ingest(
+        [
+            EventPayload(
+                actor_id=actor_id,
+                session_id=session_id,
+                kind="user_message",
+                content=user_message,
+            ),
+            EventPayload(
+                actor_id=actor_id,
+                session_id=session_id,
+                kind="assistant_message",
+                content=answer,
+            ),
+        ]
+    )
+    return answer
+```
+
+```bash
+pip install memsy openai
+export MEMSY_BASE_URL="https://api.memsy.io/v1"
+export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export OPENAI_API_KEY="sk-..."
+
+python -c 'from agent import chat; print(chat("user_1", "sess_1", "What did we decide about pricing?"))'
+```
+  </Tab>
+  <Tab title="Node">
+```ts
+// agent.ts
+import { MemsyClient } from "@memsy-io/memsy";
+import OpenAI from "openai";
+
+const memsy = new MemsyClient({
+  baseUrl: process.env.MEMSY_BASE_URL!,
+  apiKey: process.env.MEMSY_API_KEY!,
+});
+
+/** Bind the actor once; the model only ever supplies `query`. */
+function makeRecall(actorId: string) {
+  return async (query: string): Promise<string> => {
+    try {
+      // No threshold: the default 0.0 returns the top 5 on any tier.
+      // A floor cuts noise, but the useful value is tier-dependent —
+      // see /docs/searching-memory#threshold.
+      const found = await memsy.search(query, { actorId, limit: 5 });
+      if (found.results.length === 0) return "No relevant memories found.";
+      return found.results.map((r) => `- ${r.content}`).join("\n");
+    } catch {
+      // Tell the model the truth: the lookup failed, not that the user
+      // has no history. Otherwise it confidently claims the latter.
+      return "Memory lookup failed. Proceed without it.";
+    }
+  };
+}
+
+const RECALL_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "recall_memory",
+    description:
+      "Search this user's long-term memory for things they have told " +
+      "you in past sessions — preferences, decisions, prior context, " +
+      "and facts about their work. Call this when the user refers to " +
+      "something from before ('like last time', 'the usual', 'what we " +
+      "decided'), when a personal preference would change your answer, " +
+      "or when you are missing context the user plainly expects you to " +
+      "have. Do not call it for general knowledge or for facts already " +
+      "stated in this conversation.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "What to look for, as a natural-language phrase. Search is " +
+            "semantic, so describe the topic rather than guessing keywords.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+};
+
+const openai = new OpenAI();
+const MAX_STEPS = 6;
+
+async function run(actorId: string, userMessage: string): Promise<string> {
+  const recall = makeRecall(actorId);
+  const messages: OpenAI.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content:
+        "You are a personal assistant with access to the user's " +
+        "long-term memory. Use the recall_memory tool when past " +
+        "context would change your answer.",
+    },
+    { role: "user", content: userMessage },
+  ];
+
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages,
+      tools: [RECALL_TOOL],
+    });
+    const message = response.choices[0].message;
+    messages.push(message);
+
+    if (!message.tool_calls?.length) return message.content ?? "";
+
+    for (const call of message.tool_calls) {
+      // `tool_calls` is a union of function and custom tool calls, and
+      // only the function variant carries `.function` — TypeScript
+      // rejects the access without this narrowing. Every call still
+      // needs a reply: an assistant message whose tool calls go
+      // unanswered is rejected on the next request.
+      if (call.type !== "function") {
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: "Unsupported tool call.",
+        });
+        continue;
+      }
+
+      const { query } = JSON.parse(call.function.arguments) as { query: string };
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: await recall(query),
+      });
+    }
+  }
+
+  // Out of steps — a truthful failure beats the model's last
+  // half-finished thought presented as an answer.
+  return "I could not finish that request.";
+}
+
+async function chat(
+  actorId: string,
+  sessionId: string,
+  userMessage: string,
+): Promise<string> {
+  const answer = await run(actorId, userMessage);
+
+  await memsy.ingest([
+    { actorId, sessionId, kind: "user_message", content: userMessage },
+    { actorId, sessionId, kind: "assistant_message", content: answer },
+  ]);
+  return answer;
+}
+
+export { chat };
+```
+
+```bash
+npm install @memsy-io/memsy openai
+export MEMSY_BASE_URL="https://api.memsy.io/v1"
+export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export OPENAI_API_KEY="sk-..."
+
+npx tsx -e 'import { chat } from "./agent.ts"; console.log(await chat("user_1", "sess_1", "What did we decide about pricing?"))'
+```
+  </Tab>
+</Tabs>
 
 ## Next steps
 
