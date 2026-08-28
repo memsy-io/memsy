@@ -91,6 +91,11 @@ This recipe builds a **FastAPI** endpoint that answers a support question with t
 
     openai = AsyncOpenAI()
 
+    # A floor on relevance, so "no history" is an outcome the model can see.
+    # The right value is tier-dependent — see "Choosing a threshold" below —
+    # so it is configuration, not a constant baked into the handler.
+    RECALL_THRESHOLD = float(os.environ.get("MEMSY_RECALL_THRESHOLD", "0.0"))
+
     # Replace with your real auth dependency. The point is that the customer id
     # is derived server-side; a body-supplied one would let any caller read any
     # customer's history.
@@ -117,7 +122,7 @@ This recipe builds a **FastAPI** endpoint that answers a support question with t
                 body.question,
                 actor_id=customer_id,
                 limit=5,
-                threshold=0.3,
+                threshold=RECALL_THRESHOLD,
             )
             memories = [r.content for r in recalled.results]
         except RateLimitExceeded:
@@ -213,14 +218,40 @@ This recipe builds a **FastAPI** endpoint that answers a support question with t
     ```
 
     The first call returns `"recalled": 0` — there is nothing on file yet. Ask a follow-up a minute later and the count climbs as extraction completes.
+
+    <Tip>
+    If `recalled` is still `0` after several exchanges, check `MEMSY_RECALL_THRESHOLD` before suspecting extraction: a floor set too high for your tier filters out every result and looks identical to having no history. See [Choosing a threshold](#choosing-a-threshold).
+    </Tip>
   </Step>
 </Steps>
 
-## Why `threshold=0.3`
+## Choosing a threshold
 
-The default `threshold=0.0` returns the top `limit` results regardless of how weakly they match, so a question with no relevant history still pulls five loosely-related memories into the prompt. In a support context that produces confidently wrong answers about the wrong ticket.
+The default `threshold=0.0` returns the top `limit` results however weakly they
+match, so a question with no relevant history still pulls five loosely-related
+memories into the prompt. In a support context that produces confidently wrong
+answers about the wrong ticket. A floor makes "no relevant history" an outcome
+the model can see.
 
-A floor makes "no relevant history" an outcome the model can see. Tune it against your own data — see [Searching memory](/docs/searching-memory#threshold) for the tier-specific ranges.
+The catch is that **the useful value depends on your tier**, because the scores
+themselves are on different scales:
+
+| Tier | Score range | Sensible floor |
+|---|---|---|
+| Free (no reranking) | Raw scores cluster in `0.0`–`0.1`, even for strong matches | `0.0`–`0.05` |
+| Pro and above (Cohere reranking) | Normalised to `0.0`–`1.0` | `0.3`–`0.5` |
+
+<Warning>
+Setting `0.3` on the free tier filters out **everything** — free-tier scores
+rarely reach it, so every recall returns empty and the agent looks like it has
+amnesia rather than a misconfigured floor. That is why `MEMSY_RECALL_THRESHOLD`
+defaults to `0.0` above: raise it once you are on a reranked tier and have
+looked at your own score distribution.
+</Warning>
+
+Scores are not comparable across queries either — `0.6` on one question does not
+mean what it means on another. Treat this as a tuning knob, not a quality bar.
+See [Searching memory](/docs/searching-memory#threshold) for the full guidance.
 
 ## What to watch for
 

@@ -119,7 +119,7 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
 
         # 1. Recall. Scoped to this person — see the note below on team-wide recall.
         try:
-            recalled = memsy.search(question, actor_id=actor, limit=5, threshold=0.3)
+            recalled = memsy.search(question, actor_id=actor, limit=5)
             memories = [r.content for r in recalled.results]
         except MemsyError:
             log.exception("memsy recall failed")
@@ -182,7 +182,11 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
     python app.py
     ```
 
-    Invite the bot to a channel and mention it. Reply in the same thread and it carries the context; start a new thread and it starts a new session — but still recalls what you told it in the old one, because recall is scoped to the actor, not the session.
+<Tip>
+    No `threshold` here, so recall uses the default `0.0` and returns the top 5 however weakly they match. Raising it cuts noise, but the useful value depends on your tier — free-tier scores cluster in `0.0`–`0.1`, so a floor of `0.3` copied from a reranked-tier example filters out everything. See [Searching memory](/docs/searching-memory#threshold).
+    </Tip>
+
+        Invite the bot to a channel and mention it. Reply in the same thread and it carries the context; start a new thread and it starts a new session — but still recalls what you told it in the old one, because recall is scoped to the actor, not the session.
   </Step>
 
   <Step title="Optional: recall across the whole team">

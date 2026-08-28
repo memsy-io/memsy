@@ -14,6 +14,12 @@ The integration point that matters here is **identity**: your auth system's user
     ```
 
     Node 18 or later (the SDK uses the global `fetch`). This recipe assumes an existing Next.js 14+ app using the App Router.
+
+    Two of the steps below reach for packages outside that list: `@clerk/nextjs` for the session in Step 4 (substitute your own auth — only the user id matters) and `@vercel/functions` for `waitUntil` in Step 5. Install whichever you actually use:
+
+    ```bash
+    npm install @clerk/nextjs @vercel/functions
+    ```
   </Step>
 
   <Step title="Set your credentials">

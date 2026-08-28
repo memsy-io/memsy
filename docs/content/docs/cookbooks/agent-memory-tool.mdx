@@ -134,9 +134,10 @@ The alternative is to make recall a **tool** the model calls when it decides it 
 
             def recall(query: str) -> str:
                 try:
-                    found = memsy.search(
-                        query, actor_id=actor_id, limit=5, threshold=0.3
-                    )
+                    # No threshold: the default 0.0 returns the top 5 on any
+                    # tier. A floor cuts noise, but the useful value is
+                    # tier-dependent — see /docs/searching-memory#threshold.
+                    found = memsy.search(query, actor_id=actor_id, limit=5)
                 except MemsyError:
                     # Tell the model the truth: the lookup failed, the user has
                     # no history. Otherwise it reports "you have never mentioned
@@ -163,11 +164,10 @@ The alternative is to make recall a **tool** the model calls when it decides it 
         function makeRecall(actorId: string) {
           return async (query: string): Promise<string> => {
             try {
-              const found = await memsy.search(query, {
-                actorId,
-                limit: 5,
-                threshold: 0.3,
-              });
+              // No threshold: the default 0.0 returns the top 5 on any tier.
+              // A floor cuts noise, but the useful value is tier-dependent —
+              // see /docs/searching-memory#threshold.
+              const found = await memsy.search(query, { actorId, limit: 5 });
               if (found.results.length === 0) return "No relevant memories found.";
               return found.results.map((r) => `- ${r.content}`).join("\n");
             } catch {
