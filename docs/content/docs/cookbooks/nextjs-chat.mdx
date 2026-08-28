@@ -15,7 +15,7 @@ The integration point that matters here is **identity**: your auth system's user
 
     Node 18 or later (the SDK uses the global `fetch`). This recipe assumes an existing Next.js 14+ app using the App Router.
 
-    Two of the steps below reach for packages outside that list: `@clerk/nextjs` for the session in Step 4 (substitute your own auth — only the user id matters) and `@vercel/functions` for `waitUntil` in Step 5. Install whichever you actually use:
+    Two of the steps below reach for packages outside that list: `@clerk/nextjs` for the session in Steps 4 and 5 (substitute your own auth — only the user id matters) and `@vercel/functions` for `waitUntil` in Step 6. Install whichever you actually use:
 
     ```bash
     npm install @clerk/nextjs @vercel/functions
@@ -58,6 +58,46 @@ The integration point that matters here is **identity**: your auth system's user
     <Tip>
     Throwing on a missing variable at import time turns a silent production misconfiguration into a loud boot failure. A missing `MEMSY_API_KEY` would otherwise surface as a 401 on the first user message.
     </Tip>
+  </Step>
+
+  <Step title="Wire up Clerk's middleware">
+    `auth()` reads the session from a request context that only `clerkMiddleware()`
+    establishes. Without this file the route does not fail closed — it throws:
+
+    ```
+    Error: Clerk: auth() was called but Clerk can't detect usage of clerkMiddleware().
+    ```
+
+    It goes at the project root — or inside `src/`, if that is where your `app/`
+    directory lives.
+
+    ```ts
+    // middleware.ts
+    import { clerkMiddleware } from "@clerk/nextjs/server";
+
+    export default clerkMiddleware();
+
+    export const config = {
+      matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
+    };
+    ```
+
+    The matcher has to cover `/api/(.*)`, or the route handler runs outside the
+    middleware and `auth()` throws there specifically — the one place it matters.
+
+    Clerk also needs its own keys alongside the ones from Step 2:
+
+    ```bash
+    # .env.local
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
+    CLERK_SECRET_KEY="sk_test_..."
+    ```
+
+    <Note>
+    Using different auth? Skip this step — it exists because `auth()` in the next
+    step is Clerk's. Every other step is auth-agnostic; all the handler needs is a
+    user id it can trust.
+    </Note>
   </Step>
 
   <Step title="Write the route handler">
@@ -223,9 +263,14 @@ An empty result immediately after ingest is expected, not a bug — see [Async p
 
 ## Complete code
 
-Three files, ready to paste into an App Router project. The route handler is the
-Step 5 form — ingest deferred with `waitUntil` — since that is the version you
+Four files, ready to paste into an App Router project. The route handler is the
+Step 6 form — ingest deferred with `waitUntil` — since that is the version you
 want in production.
+
+<Warning>
+`middleware.ts` is not optional. Omit it and `auth()` throws on every request
+rather than returning a null session, so the route 500s instead of 401ing.
+</Warning>
 
 **`lib/memsy.ts`**
 
@@ -244,6 +289,19 @@ export const memsy = new MemsyClient({
   baseUrl: required("MEMSY_BASE_URL"),
   apiKey: required("MEMSY_API_KEY"),
 });
+```
+
+**`middleware.ts`**
+
+```ts
+// middleware.ts
+import { clerkMiddleware } from "@clerk/nextjs/server";
+
+export default clerkMiddleware();
+
+export const config = {
+  matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
+};
 ```
 
 **`app/api/chat/route.ts`**
@@ -349,11 +407,13 @@ npm install @memsy-io/memsy openai @clerk/nextjs @vercel/functions
 MEMSY_BASE_URL="https://api.memsy.io/v1"
 MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 OPENAI_API_KEY="sk-..."
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
+CLERK_SECRET_KEY="sk_test_..."
 ```
 
 <Warning>
 Swap `@clerk/nextjs` for whatever auth you already run. The only requirement is
-that `userId` comes from a **server-side** session — see Step 4.
+that `userId` comes from a **server-side** session — see Step 5.
 </Warning>
 
 ## Next steps
