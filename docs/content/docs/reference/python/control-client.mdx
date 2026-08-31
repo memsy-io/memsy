@@ -165,6 +165,81 @@ resp: ProInterestResponse = control.interest.express(
 already_expressed: bool = control.interest.status()
 ```
 
+### `control.connectors`
+
+Connect knowledge sources and choose what they sync. 
+Providers today: `slack`, `google_drive`, `s3`, `notion`, `github`, `onedrive`. 
+
+> **Org-scoped providers require an admin.** `slack`, `s3`, `notion` and `github` are a single shared connection per org — only an org admin, or an API key (which the server treats as a service caller acting org-wide), may connect, configure, sync or disconnect them. A seated non-admin member gets `AuthorizationError` (403) and read-only access. `google_drive` and `onedrive` are user-scoped: each member connects their own account, and an admin may audit but never mutate it. `requires_org_admin(provider)` is a client-side pre-flight helper only — the server enforces the rule.
+
+```python
+from memsy import MemsyControlClient, ResourceSelection
+
+# 1. Start OAuth — send the end user to authorize_url
+connection: ConnectorConnection = control.connectors.create("slack")
+
+# 2. The provider redirects to Memsy's own callback, which attaches the token.
+#    list_resources() answers 409 until then, so poll:
+resources: list[ConnectorResourceItem] = control.connectors.wait_until_authorized(
+    connection.connector_id, timeout=300
+)
+
+# 3. Select what to sync — activates the connector and starts the backfill.
+#    Replaces the previous selection, so always send the full set.
+connector: Connector = control.connectors.configure_resources(
+    connection.connector_id,
+    [ResourceSelection.from_item(r) for r in resources],
+)
+
+control.connectors.status("slack")        # member-safe: {connected, display_name}
+control.connectors.list_providers()
+control.connectors.list()                 # admin / API-key view
+control.connectors.get(connector.id)      # status, last_sync_at, last_error
+control.connectors.sync(connector.id)     # manual refresh (must be active)
+control.connectors.delete(connector.id)   # disconnect + revoke
+```
+
+Provider-specific methods:
+
+- **S3** does not use OAuth — `create("s3")` returns 400. Use
+  `configure_s3(access_key_id=..., secret_access_key=..., region=..., bucket=...)`,
+  which validates the credentials, selects the bucket and starts the backfill in one call.
+- **GitHub** — `list_resources()` returns repos; `list_branches(connector_id, repo=...)`
+  expands one repo's branches lazily.
+- **OneDrive** — `list_resources(connector_id, parent_id=...)` drills into a folder.
+- **Google Drive** — cannot enumerate server-side; `list_resources()` returns only the
+  already-selected files. Real selection happens in the browser Google Picker, configured
+  via `picker_config(connector_id)` (owner-only, mints a live Google token).
+
+---
+
+## Async variant
+
+`AsyncMemsyControlClient` is the async counterpart. Every method is identical but returns a coroutine.
+
+```python
+import os
+
+async with AsyncMemsyControlClient(
+    base_url=os.environ["MEMSY_CONTROL_URL"],
+    api_key=os.environ["MEMSY_API_KEY"],
+) as control:
+    me = await control.me()
+    summary = await control.usage.summary()
+    events = await control.events.list(limit=20)
+```
+
+Sub-resources (`control.usage`, `control.billing`, `control.keys`, `control.events`, `control.interest`, `control.connectors`) are all available with `await` equivalents.
+
+---
+
+## See also
+
+- **[`MemsyClient`](/docs/reference/python/memsy-client)** — hot-path memory client.
+- **[Models](/docs/reference/python/models)** — all control-plane response dataclasses.
+- **[Exceptions](/docs/reference/python/exceptions)** — `BillingNotEnabledError`, `KeyLimitReachedError`, `SeatLimitReachedError`, and others raised by this client.
+
+
 ---
 
 ## Async variant
