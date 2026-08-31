@@ -669,3 +669,126 @@ export interface ProInterestResponse {
 export function parseProInterestResponse(d: Record<string, unknown>): ProInterestResponse {
   return { message: String(d.message ?? "") };
 }
+
+// ── Connectors (control plane) ───────────────────────────────────────────────
+
+/** Response from initiating a connector OAuth flow. */
+export interface ConnectorConnection {
+  connectorId: string;
+  /** Send the end user here to complete the provider's consent screen. */
+  authorizeUrl: string;
+}
+
+/** A connected data source (Slack, Google Drive, S3, Notion, GitHub, OneDrive). */
+export interface Connector {
+  id: string;
+  provider: string;
+  status: string;
+  displayName: string | null;
+  externalAccountId: string | null;
+  configuredByEmail: string | null;
+  scopes: string[];
+  lastSyncAt: string | null;
+  nextSyncAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  /** S3 only; null for every other provider. */
+  bucket: string | null;
+  /** S3 only; null for every other provider. */
+  region: string | null;
+}
+
+/**
+ * A resource available on a connector, with its current selection state.
+ *
+ * `resourceType` is provider-specific: `channel` (Slack), `bucket` (S3),
+ * `workspace` (Notion), `repo` / `branch` / `default_branch` (GitHub),
+ * `folder` / `file` (OneDrive, Google Drive).
+ */
+export interface ConnectorResourceItem {
+  externalId: string;
+  resourceType: string;
+  name: string | null;
+  selected: boolean;
+}
+
+/**
+ * A resource to enable syncing for, passed to `configureResources`.
+ *
+ * Carry `resourceType` through from `listResources()` rather than guessing —
+ * the provider relies on it.
+ */
+export interface ResourceSelection {
+  externalId: string;
+  resourceType?: string;
+  name?: string | null;
+}
+
+/** Member-safe connection status for a provider (no ids, no secrets). */
+export interface ConnectorStatus {
+  connected: boolean;
+  displayName: string | null;
+}
+
+/**
+ * Google Drive only: short-lived credentials for opening the Google Picker in
+ * a browser. `accessToken` is a live Google credential — never log it.
+ */
+export interface PickerConfig {
+  accessToken: string;
+  expiresIn: number;
+  apiKey: string;
+  appId: string;
+}
+
+export function parseConnectorConnection(d: Record<string, unknown>): ConnectorConnection {
+  return {
+    connectorId: String(d.connector_id),
+    authorizeUrl: String(d.authorize_url),
+  };
+}
+
+export function parseConnector(d: Record<string, unknown>): Connector {
+  return {
+    id: String(d.id),
+    provider: String(d.provider),
+    status: String(d.status),
+    displayName: asStringOrNull(d.display_name),
+    externalAccountId: asStringOrNull(d.external_account_id),
+    configuredByEmail: asStringOrNull(d.configured_by_email),
+    scopes: (d.scopes as string[]) ?? [],
+    lastSyncAt: asStringOrNull(d.last_sync_at),
+    nextSyncAt: asStringOrNull(d.next_sync_at),
+    lastError: asStringOrNull(d.last_error),
+    createdAt: String(d.created_at),
+    bucket: asStringOrNull(d.bucket),
+    region: asStringOrNull(d.region),
+  };
+}
+
+export function parseConnectorResourceItem(
+  d: Record<string, unknown>
+): ConnectorResourceItem {
+  return {
+    externalId: String(d.external_id),
+    resourceType: typeof d.resource_type === "string" ? d.resource_type : "channel",
+    name: asStringOrNull(d.name),
+    selected: Boolean(d.selected),
+  };
+}
+
+export function parseConnectorStatus(d: Record<string, unknown>): ConnectorStatus {
+  return {
+    connected: Boolean(d.connected),
+    displayName: asStringOrNull(d.display_name),
+  };
+}
+
+export function parsePickerConfig(d: Record<string, unknown>): PickerConfig {
+  return {
+    accessToken: String(d.access_token),
+    expiresIn: Number(d.expires_in ?? 0),
+    apiKey: String(d.api_key),
+    appId: String(d.app_id),
+  };
+}

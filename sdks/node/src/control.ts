@@ -5,6 +5,7 @@ import { UsageResource } from "./control_resources/usage.js";
 import { BillingResource } from "./control_resources/billing.js";
 import { EventsResource } from "./control_resources/events.js";
 import { InterestResource } from "./control_resources/interest.js";
+import { ConnectorsResource } from "./control_resources/connectors.js";
 
 export type MemsyControlClientOptions = BaseClientOptions;
 
@@ -22,6 +23,9 @@ export type MemsyControlClientOptions = BaseClientOptions;
  *   control.billing    — billing summary + invoices (admin-only)
  *   control.events     — raw event browsing (seat-required)
  *   control.interest   — Pro plan interest signaling
+ *   control.connectors — knowledge-source connectors (Slack, Google Drive,
+ *                        S3, Notion, GitHub, OneDrive). Org-scoped ones
+ *                        (Slack, S3, Notion, GitHub) are admin/API-key only.
  */
 export class MemsyControlClient extends BaseHttpClient {
   readonly keys: KeysResource;
@@ -29,6 +33,7 @@ export class MemsyControlClient extends BaseHttpClient {
   readonly billing: BillingResource;
   readonly events: EventsResource;
   readonly interest: InterestResource;
+  readonly connectors: ConnectorsResource;
 
   constructor(options: MemsyControlClientOptions) {
     super(options);
@@ -37,6 +42,7 @@ export class MemsyControlClient extends BaseHttpClient {
     this.billing = new BillingResource(this);
     this.events = new EventsResource(this);
     this.interest = new InterestResource(this);
+    this.connectors = new ConnectorsResource(this);
   }
 
   async me(): Promise<MeResponse> {

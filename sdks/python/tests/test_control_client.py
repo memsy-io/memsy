@@ -1,4 +1,5 @@
 """Tests for MemsyControlClient and its sub-resources."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -6,8 +7,12 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from memsy import MemsyControlClient
-from memsy.exceptions import AuthenticationError, MemsyConnectionError
+from memsy import ConnectorResourceItem, MemsyControlClient, requires_org_admin
+from memsy.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    MemsyConnectionError,
+)
 
 
 def _make_response(status_code: int, body: object, headers: dict | None = None) -> MagicMock:
@@ -40,6 +45,7 @@ class TestControlClientInit:
         assert hasattr(client, "keys")
         assert hasattr(client, "events")
         assert hasattr(client, "interest")
+        assert hasattr(client, "connectors")
 
 
 class TestControlClientMe:
@@ -264,9 +270,7 @@ class TestInterestResource:
 
 class TestControlClientContextManager:
     def test_context_manager_closes_client(self):
-        with MemsyControlClient(
-            base_url="https://api.test.memsy.io", api_key="test_key"
-        ) as c:
+        with MemsyControlClient(base_url="https://api.test.memsy.io", api_key="test_key") as c:
             assert c._client is not None
 
 
@@ -275,3 +279,199 @@ class TestControlClientConnectionError:
     def test_connection_error(self, mock_request, client):
         with pytest.raises(MemsyConnectionError):
             client.me()
+
+
+_CONNECTOR = {
+    "id": "conn_1",
+    "provider": "slack",
+    "status": "active",
+    "display_name": "acme-workspace",
+    "external_account_id": "T123",
+    "configured_by_email": "admin@acme.com",
+    "scopes": ["channels:read"],
+    "last_sync_at": None,
+    "next_sync_at": None,
+    "last_error": None,
+    "created_at": "2026-04-01T00:00:00Z",
+}
+
+
+class TestConnectorsResource:
+    @patch("httpx.Client.request")
+    def test_create(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {"connector_id": "conn_1", "authorize_url": "https://slack.com/oauth/v2/authorize?x=1"},
+        )
+        connection = client.connectors.create("slack")
+        assert connection.connector_id == "conn_1"
+        assert connection.authorize_url.startswith("https://slack.com")
+        assert mock_request.call_args[0] == ("POST", "/connectors/slack/connect")
+
+    @patch("httpx.Client.request")
+    def test_list(self, mock_request, client):
+        mock_request.return_value = _make_response(200, [_CONNECTOR])
+        connectors = client.connectors.list()
+        assert len(connectors) == 1
+        assert connectors[0].provider == "slack"
+        assert connectors[0].status == "active"
+
+    @patch("httpx.Client.request")
+    def test_list_providers(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200, {"providers": ["slack", "google_drive", "s3", "notion", "github", "onedrive"]}
+        )
+        assert "onedrive" in client.connectors.list_providers()
+
+    @patch("httpx.Client.request")
+    def test_status(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200, {"connected": True, "display_name": "acme-workspace"}
+        )
+        status = client.connectors.status("slack")
+        assert status.connected is True
+        assert status.display_name == "acme-workspace"
+
+    @patch("httpx.Client.request")
+    def test_list_resources(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "resources": [
+                    {
+                        "external_id": "C123",
+                        "resource_type": "channel",
+                        "name": "general",
+                        "selected": False,
+                    }
+                ]
+            },
+        )
+        resources = client.connectors.list_resources("conn_1")
+        assert resources[0].external_id == "C123"
+        assert resources[0].selected is False
+        assert mock_request.call_args.kwargs["params"] is None
+
+    @patch("httpx.Client.request")
+    def test_list_resources_drilldown_passes_parent_id(self, mock_request, client):
+        mock_request.return_value = _make_response(200, {"resources": []})
+        client.connectors.list_resources("conn_1", parent_id="folder_9")
+        assert mock_request.call_args.kwargs["params"] == {"parent_id": "folder_9"}
+
+    @patch("httpx.Client.request")
+    def test_list_branches(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "resources": [
+                    {
+                        "external_id": "acme/app#main",
+                        "resource_type": "default_branch",
+                        "name": "main",
+                        "selected": True,
+                    }
+                ]
+            },
+        )
+        branches = client.connectors.list_branches("conn_1", repo="acme/app")
+        assert branches[0].resource_type == "default_branch"
+        assert mock_request.call_args.kwargs["params"] == {"repo": "acme/app"}
+
+    @patch("httpx.Client.request")
+    def test_configure_resources_preserves_resource_type(self, mock_request, client):
+        mock_request.return_value = _make_response(200, _CONNECTOR)
+        items = [
+            ConnectorResourceItem(
+                external_id="b1", resource_type="folder", name="Docs", selected=False
+            )
+        ]
+        connector = client.connectors.configure_resources("conn_1", items)
+        assert connector.id == "conn_1"
+        assert mock_request.call_args.kwargs["json"] == {
+            "resources": [{"external_id": "b1", "resource_type": "folder", "name": "Docs"}]
+        }
+
+    @patch("httpx.Client.request")
+    def test_configure_s3(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200, {**_CONNECTOR, "provider": "s3", "bucket": "my-bucket", "region": "us-east-1"}
+        )
+        connector = client.connectors.configure_s3(
+            access_key_id="AKIA...",
+            secret_access_key="secret",
+            region="us-east-1",
+            bucket="my-bucket",
+        )
+        assert connector.bucket == "my-bucket"
+        assert connector.region == "us-east-1"
+        assert "connector_id" not in mock_request.call_args.kwargs["json"]
+
+    @patch("httpx.Client.request")
+    def test_sync_and_delete(self, mock_request, client):
+        mock_request.return_value = _make_response(200, _CONNECTOR)
+        assert client.connectors.sync("conn_1").id == "conn_1"
+        mock_request.return_value = _make_response(204, None)
+        assert client.connectors.delete("conn_1") is None
+
+    @patch("httpx.Client.request")
+    def test_path_segments_are_url_encoded(self, mock_request, client):
+        """A caller-supplied id can't escape /connectors/ via path characters."""
+        mock_request.return_value = _make_response(200, _CONNECTOR)
+        client.connectors.get("../../billing/invoices")
+        assert mock_request.call_args[0] == (
+            "GET",
+            "/connectors/..%2F..%2Fbilling%2Finvoices",
+        )
+
+        mock_request.return_value = _make_response(200, {"connected": False})
+        client.connectors.status("slack?x=1#y")
+        assert mock_request.call_args[0] == ("GET", "/connectors/slack%3Fx%3D1%23y/status")
+
+    @patch("memsy.control_resources.connectors.time.sleep")
+    @patch("httpx.Client.request")
+    def test_wait_until_authorized_polls_through_409(self, mock_request, mock_sleep, client):
+        mock_request.side_effect = [
+            _make_response(409, {"detail": "Connector not authorized yet"}),
+            _make_response(
+                200,
+                {
+                    "resources": [
+                        {
+                            "external_id": "C1",
+                            "resource_type": "channel",
+                            "name": "general",
+                            "selected": False,
+                        }
+                    ]
+                },
+            ),
+        ]
+        resources = client.connectors.wait_until_authorized("conn_1", poll_interval=0.01)
+        assert len(resources) == 1
+        assert mock_sleep.called
+
+    @patch("memsy.control_resources.connectors.time.sleep")
+    @patch("httpx.Client.request")
+    def test_wait_until_authorized_times_out(self, mock_request, mock_sleep, client):
+        mock_request.return_value = _make_response(409, {"detail": "not authorized"})
+        with pytest.raises(TimeoutError):
+            client.connectors.wait_until_authorized("conn_1", timeout=0.02, poll_interval=0.01)
+
+    @patch("httpx.Client.request")
+    def test_wait_until_authorized_reraises_other_errors(self, mock_request, client):
+        mock_request.return_value = _make_response(403, {"detail": "Only an org admin can manage"})
+        with pytest.raises(AuthorizationError):
+            client.connectors.wait_until_authorized("conn_1", poll_interval=0.01)
+
+
+class TestProviderScoping:
+    def test_org_scoped_providers_require_admin(self):
+        for provider in ("slack", "s3", "notion", "github"):
+            assert requires_org_admin(provider) is True
+
+    def test_user_scoped_providers_do_not(self):
+        for provider in ("google_drive", "onedrive"):
+            assert requires_org_admin(provider) is False
+
+    def test_unknown_provider_defaults_to_admin_required(self):
+        assert requires_org_admin("some_future_provider") is True

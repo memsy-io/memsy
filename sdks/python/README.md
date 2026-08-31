@@ -311,6 +311,68 @@ records = control.keys.usage(new_key.key_id)
 control.keys.delete(new_key.key_id)
 ```
 
+### `control.connectors`
+
+Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive —
+and choose what they sync.
+
+**Who may connect what.** 
+Org-scoped providers (`slack`, `s3`, `notion`,
+`github`) are one shared connection per org: only an **org admin — or any API
+key, which the server treats as a service caller acting org-wide** — may
+connect, configure, sync or disconnect them. A seated non-admin member gets
+`AuthorizationError` (403) and may only read. User-scoped providers
+(`google_drive`, `onedrive`) are per-member: the owner manages their own
+connection, and an admin can see it for auditing but never mutate it.
+`requires_org_admin(provider)` answers this client-side for pre-flight checks —
+the server is the enforcement point.
+
+```python
+from memsy import MemsyControlClient, ResourceSelection, requires_org_admin
+
+control = MemsyControlClient(base_url=MEMSY_CONTROL_URL, api_key=MEMSY_API_KEY)
+
+control.connectors.list_providers()
+# ['slack', 'google_drive', 's3', 'notion', 'github', 'onedrive']
+requires_org_admin("slack")         # True — admin/API key only
+requires_org_admin("google_drive")  # False — per-member connection
+
+# 1. Start OAuth and send the end user to the consent screen
+connection = control.connectors.create("slack")
+print(connection.authorize_url)
+
+# 2. The provider redirects back to Memsy's own callback, which attaches the
+#    token. list_resources() answers 409 until then, so poll:
+resources = control.connectors.wait_until_authorized(connection.connector_id)
+
+# 3. Pick what to sync — this activates the connector and starts the backfill.
+#    The selection replaces the previous one, so send the full set.
+control.connectors.configure_resources(
+    connection.connector_id,
+    [ResourceSelection.from_item(r) for r in resources if r.name != "random"],
+)
+
+# Later
+control.connectors.status("slack")            # member-safe: connected? (no ids)
+control.connectors.list()                     # admin/API-key view
+control.connectors.get(connector_id)          # status, last_sync_at, last_error
+control.connectors.sync(connector_id)         # manual refresh (must be active)
+control.connectors.delete(connector_id)       # disconnect + revoke
+```
+
+Provider-specific bits:
+
+| Provider | Notes |
+|---|---|
+| `slack` | Org-scoped. `resource_type="channel"`. |
+| `s3` | Org-scoped, **no OAuth** — `create()` returns 400. Use `configure_s3(access_key_id=..., secret_access_key=..., region=..., bucket=...)`, which validates the credentials, selects the bucket and starts the backfill in one call. |
+| `notion` | Org-scoped. `resource_type="workspace"`. |
+| `github` | Org-scoped. `list_resources()` returns repos (`resource_type="repo"`); call `list_branches(connector_id, repo=...)` to expand one repo's branches lazily. |
+| `google_drive` | User-scoped. Drive can't enumerate server-side, so `list_resources()` returns only what's already selected — real selection happens in the browser Google Picker via `picker_config(connector_id)`, then the chosen file ids go to `configure_resources()`. |
+| `onedrive` | User-scoped. `list_resources(connector_id, parent_id=...)` drills into folders. |
+
+> Gmail is deprecated and is no longer a registered provider.
+
 ### `control.interest`
 
 ```python

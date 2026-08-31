@@ -23,13 +23,16 @@ Quick start::
     client.roles.list(org_id="my-org")
     client.memories.stats()
 
-Control-plane (billing, keys, usage, events)::
+Control-plane (billing, keys, usage, events, connectors)::
 
     from memsy import MemsyControlClient
 
     control = MemsyControlClient(base_url="https://your-api-url", api_key="msy_...")
     me = control.me()
     events = control.events.list(limit=20)
+
+    # Connect a knowledge source (Slack, Google Drive, S3, Notion, GitHub, OneDrive)
+    connection = control.connectors.create("slack")
 
 Async usage::
 
@@ -43,6 +46,11 @@ from memsy.async_client import AsyncMemsyClient
 from memsy.async_control import AsyncMemsyControlClient
 from memsy.client import MemsyClient
 from memsy.control import MemsyControlClient
+from memsy.control_resources.connectors import (
+    ORG_SCOPED_PROVIDERS,
+    USER_SCOPED_PROVIDERS,
+    requires_org_admin,
+)
 from memsy.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -64,6 +72,11 @@ from memsy.models import (
     ApiKeyInfo,
     ApiKeyListResponse,
     BillingSummary,
+    # Connector models
+    Connector,
+    ConnectorConnection,
+    ConnectorResourceItem,
+    ConnectorStatus,
     CreateKeyResponse,
     DimensionUsage,
     EventItemResponse,
@@ -82,8 +95,10 @@ from memsy.models import (
     # Onboarding models
     OrgResource,
     PaymentMethod,
+    PickerConfig,
     ProInterestResponse,
     RateLimitInfo,
+    ResourceSelection,
     RoleResource,
     SearchResponse,
     SearchResult,
@@ -137,6 +152,16 @@ __all__ = [
     "EventItemResponse",
     "EventListResponse",
     "ProInterestResponse",
+    # Connector models
+    "ConnectorConnection",
+    "Connector",
+    "ConnectorResourceItem",
+    "ResourceSelection",
+    "ConnectorStatus",
+    "PickerConfig",
+    "USER_SCOPED_PROVIDERS",
+    "ORG_SCOPED_PROVIDERS",
+    "requires_org_admin",
     # Usage & Rate Limit
     "UsageInfo",
     "RateLimitInfo",
