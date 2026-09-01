@@ -233,6 +233,16 @@ The integration point that matters here is **identity**: your auth system's user
           // No actor id here — the server reads it from the session.
           body: JSON.stringify({ message, sessionId: `chat_${threadId}` }),
         });
+
+        // Check res.ok before parsing. A 401 returns the plain text
+        // "Unauthorized", so res.json() would throw while parsing it and the
+        // button would appear to do nothing — which is exactly what a reader
+        // hits first, before they are signed in.
+        if (!res.ok) {
+          setReply(`Request failed (${res.status}).`);
+          return;
+        }
+
         const data = await res.json();
         setReply(data.reply);
       }
@@ -272,129 +282,146 @@ want in production.
 rather than returning a null session, so the route 500s instead of 401ing.
 </Warning>
 
-**`lib/memsy.ts`**
+<CodeWorkspace title="my-app">
+  <CodeFile name="lib/memsy.ts">
 
-```ts
-// lib/memsy.ts
-import { MemsyClient } from "@memsy-io/memsy";
+    ```ts
+    // lib/memsy.ts
+    import { MemsyClient } from "@memsy-io/memsy";
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
-}
+    function required(name: string): string {
+      const value = process.env[name];
+      if (!value) throw new Error(`Missing required env var: ${name}`);
+      return value;
+    }
 
-// Module scope: Next reuses the module across requests in a warm server.
-export const memsy = new MemsyClient({
-  baseUrl: required("MEMSY_BASE_URL"),
-  apiKey: required("MEMSY_API_KEY"),
-});
-```
-
-**`middleware.ts`**
-
-```ts
-// middleware.ts
-import { clerkMiddleware } from "@clerk/nextjs/server";
-
-export default clerkMiddleware();
-
-export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
-};
-```
-
-**`app/api/chat/route.ts`**
-
-```ts
-// app/api/chat/route.ts
-import { auth } from "@clerk/nextjs/server"; // or your auth of choice
-import { waitUntil } from "@vercel/functions";
-import OpenAI from "openai";
-import { memsy } from "@/lib/memsy";
-
-const openai = new OpenAI();
-
-export async function POST(req: Request) {
-  // The actor id comes from the server-side session — NEVER from the
-  // request body. A client-supplied actor_id lets any user read any
-  // other user's memories by editing one JSON field.
-  const { userId } = await auth();
-  if (!userId) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const { message, sessionId } = (await req.json()) as {
-    message: string;
-    sessionId: string;
-  };
-
-  // 1. Recall — what has this user told us before that bears on this?
-  const recalled = await memsy.search(message, {
-    actorId: userId,
-    limit: 5,
-  });
-
-  const context = recalled.results.length
-    ? recalled.results.map((r) => `- ${r.content}`).join("\n")
-    : "(nothing on file for this user yet)";
-
-  // 2. Ground.
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a helpful assistant with a long memory. Use the facts " +
-          "below when they are relevant, and refer to them naturally — " +
-          "do not announce that you are consulting your memory.\n\n" +
-          `What you know about this user:\n${context}`,
-      },
-      { role: "user", content: message },
-    ],
-  });
-
-  const reply = completion.choices[0]?.message?.content ?? "";
-
-  // 3. Record — deferred, so the user does not wait on a write.
-  waitUntil(
-    memsy
-      .ingest([
-        { actorId: userId, sessionId, kind: "user_message", content: message },
-        { actorId: userId, sessionId, kind: "assistant_message", content: reply },
-      ])
-      // A failed write must not take down a reply the user already sees.
-      .catch((err) => console.error("[memsy] ingest failed", err)),
-  );
-
-  return Response.json({ reply });
-}
-```
-
-**`components/chat.tsx`**
-
-```tsx
-"use client";
-import { useState } from "react";
-
-export function Chat({ threadId }: { threadId: string }) {
-  const [reply, setReply] = useState("");
-
-  async function send(message: string) {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // No actor id here — the server reads it from the session.
-      body: JSON.stringify({ message, sessionId: `chat_${threadId}` }),
+    // Module scope: Next reuses the module across requests in a warm server.
+    export const memsy = new MemsyClient({
+      baseUrl: required("MEMSY_BASE_URL"),
+      apiKey: required("MEMSY_API_KEY"),
     });
-    const data = await res.json();
-    setReply(data.reply);
-  }
+    ```
 
-  return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
-}
-```
+  </CodeFile>
+  <CodeFile name="middleware.ts">
+
+    ```ts
+    // middleware.ts
+    import { clerkMiddleware } from "@clerk/nextjs/server";
+
+    export default clerkMiddleware();
+
+    export const config = {
+      matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
+    };
+    ```
+
+  </CodeFile>
+  <CodeFile name="app/api/chat/route.ts">
+
+    ```ts
+    // app/api/chat/route.ts
+    import { auth } from "@clerk/nextjs/server"; // or your auth of choice
+    import { waitUntil } from "@vercel/functions";
+    import OpenAI from "openai";
+    import { memsy } from "@/lib/memsy";
+
+    const openai = new OpenAI();
+
+    export async function POST(req: Request) {
+      // The actor id comes from the server-side session — NEVER from the
+      // request body. A client-supplied actor_id lets any user read any
+      // other user's memories by editing one JSON field.
+      const { userId } = await auth();
+      if (!userId) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const { message, sessionId } = (await req.json()) as {
+        message: string;
+        sessionId: string;
+      };
+
+      // 1. Recall — what has this user told us before that bears on this?
+      const recalled = await memsy.search(message, {
+        actorId: userId,
+        limit: 5,
+      });
+
+      const context = recalled.results.length
+        ? recalled.results.map((r) => `- ${r.content}`).join("\n")
+        : "(nothing on file for this user yet)";
+
+      // 2. Ground.
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant with a long memory. Use the facts " +
+              "below when they are relevant, and refer to them naturally — " +
+              "do not announce that you are consulting your memory.\n\n" +
+              `What you know about this user:\n${context}`,
+          },
+          { role: "user", content: message },
+        ],
+      });
+
+      const reply = completion.choices[0]?.message?.content ?? "";
+
+      // 3. Record — deferred, so the user does not wait on a write.
+      waitUntil(
+        memsy
+          .ingest([
+            { actorId: userId, sessionId, kind: "user_message", content: message },
+            { actorId: userId, sessionId, kind: "assistant_message", content: reply },
+          ])
+          // A failed write must not take down a reply the user already sees.
+          .catch((err) => console.error("[memsy] ingest failed", err)),
+      );
+
+      return Response.json({ reply });
+    }
+    ```
+
+  </CodeFile>
+  <CodeFile name="components/chat.tsx">
+
+    ```tsx
+    "use client";
+    import { useState } from "react";
+
+    export function Chat({ threadId }: { threadId: string }) {
+      const [reply, setReply] = useState("");
+
+      async function send(message: string) {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // No actor id here — the server reads it from the session.
+          body: JSON.stringify({ message, sessionId: `chat_${threadId}` }),
+        });
+
+        // Check res.ok before parsing. A 401 returns the plain text
+        // "Unauthorized", so res.json() would throw while parsing it and the
+        // button would appear to do nothing — which is exactly what a reader
+        // hits first, before they are signed in.
+        if (!res.ok) {
+          setReply(`Request failed (${res.status}).`);
+          return;
+        }
+
+        const data = await res.json();
+        setReply(data.reply);
+      }
+
+      return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
+    }
+    ```
+
+  </CodeFile>
+</CodeWorkspace>
 
 Set up:
 

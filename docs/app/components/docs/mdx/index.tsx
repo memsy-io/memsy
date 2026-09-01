@@ -8,6 +8,7 @@ import { Card, CardGroup } from './card'
 import { Info, Tip, Warning, Note, Check } from './callout'
 import { Steps, Step } from './steps'
 import { Tabs, Tab } from './tabs'
+import { CodeWorkspace, CodeFile } from './code-workspace'
 import { Accordion, AccordionGroup } from './accordion'
 import { CodeBlock } from './code-block'
 import { Frame } from './frame'
@@ -19,6 +20,7 @@ export { Card, CardGroup } from './card'
 export { Info, Tip, Warning, Note, Check } from './callout'
 export { Steps, Step } from './steps'
 export { Tabs, Tab } from './tabs'
+export { CodeWorkspace, CodeFile } from './code-workspace'
 export { Accordion, AccordionGroup } from './accordion'
 export { CodeBlock } from './code-block'
 export { Frame } from './frame'
@@ -39,6 +41,8 @@ export function getMDXComponents(): MDXComponents {
     Step,
     Tabs,
     Tab,
+    CodeWorkspace,
+    CodeFile,
     Accordion,
     AccordionGroup,
     CodeBlock,
