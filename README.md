@@ -66,7 +66,14 @@ Benchmark: full LoCoMo suite (1,540 questions), GPT-4.1 Mini, single pass, no po
 
 ## Connectors
 
-Coming soon: Claude MCP, OpenAI, LangChain, LlamaIndex.
+Sync content into Memsy automatically, no SDK code required: Slack, Google Drive, Notion, GitHub, OneDrive, and S3. Connect one from the [console](https://app.memsy.io) — see the [connectors guide](https://docs.memsy.io/docs/connectors).
+
+## Plugins & MCP
+
+Memsy plugs directly into your coding agent or assistant:
+
+- **[MCP server](https://docs.memsy.io/docs/mcp)** — works with any MCP-compatible client (Cursor, Claude Desktop, etc.)
+- **[Claude Code](https://docs.memsy.io/docs/claude-code)**, **[Codex](https://docs.memsy.io/docs/codex)**, and **[Hermes Agent](https://docs.memsy.io/docs/hermes)** plugins — native memory, no MCP layer
 
 ## Repository Structure
 
@@ -75,7 +82,9 @@ memsy/
 ├── sdks/
 │   ├── python/       ← Python SDK (pip install memsy)
 │   └── node/         ← Node.js SDK (npm install @memsy-io/memsy)
-└── connectors/       ← Claude, OpenAI and other connectors (coming soon)
+├── plugins/          ← Claude Code, Codex, Hermes, OpenClaw
+├── mcp/              ← Hosted Streamable-HTTP MCP server
+└── docs/             ← docs.memsy.io source
 ```
 
 ## Contributing

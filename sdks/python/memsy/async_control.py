@@ -7,6 +7,7 @@ import httpx
 
 from memsy._http import DEFAULT_MAX_RETRIES, DEFAULT_RETRY_BACKOFF, HttpCoreMixin
 from memsy.control_resources.billing import AsyncBillingResource
+from memsy.control_resources.connectors import AsyncConnectorsResource
 from memsy.control_resources.events import AsyncEventsResource
 from memsy.control_resources.interest import AsyncInterestResource
 from memsy.control_resources.keys import AsyncKeysResource
@@ -41,6 +42,7 @@ class AsyncMemsyControlClient(HttpCoreMixin):
         control.keys        — AsyncKeysResource
         control.events      — AsyncEventsResource
         control.interest    — AsyncInterestResource
+        control.connectors  — AsyncConnectorsResource
     """
 
     def __init__(
@@ -65,6 +67,7 @@ class AsyncMemsyControlClient(HttpCoreMixin):
         self.keys = AsyncKeysResource(self)
         self.events = AsyncEventsResource(self)
         self.interest = AsyncInterestResource(self)
+        self.connectors = AsyncConnectorsResource(self)
 
     async def __aenter__(self) -> AsyncMemsyControlClient:
         return self

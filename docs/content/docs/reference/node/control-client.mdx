@@ -136,6 +136,54 @@ const expressed = await control.interest.status();   // boolean
 | `express(email, name, options?)` | `Promise<ProInterestResponse>` |
 | `status()` | `Promise<boolean>` |
 
+### `control.connectors`
+
+Connect knowledge sources and choose what they sync. Providers today: `slack`, `google_drive`, `s3`, `notion`, `github`, `onedrive`. (Gmail is deprecated and no longer registered.)
+
+> **Org-scoped providers require an admin.** `slack`, `s3`, `notion` and `github` are a single shared connection per org — only an org admin, or an API key (which the server treats as a service caller acting org-wide), may connect, configure, sync or disconnect them. A seated non-admin member gets `MemsyAuthorizationError` (403) and read-only access. `google_drive` and `onedrive` are user-scoped: each member connects their own account, and an admin may audit but never mutate it. `requiresOrgAdmin(provider)` is a client-side pre-flight helper only — the server enforces the rule.
+
+```ts
+// 1. Start OAuth — send the end user to authorizeUrl
+const connection = await control.connectors.create("slack");
+
+// 2. The provider redirects to Memsy's own callback, which attaches the token.
+//    listResources() answers 409 until then, so poll:
+const resources = await control.connectors.waitUntilAuthorized(connection.connectorId);
+
+// 3. Select what to sync — activates the connector and starts the backfill.
+//    Replaces the previous selection, so always send the full set.
+const connector = await control.connectors.configureResources(
+  connection.connectorId,
+  resources,
+);
+```
+
+| Method | Signature |
+|---|---|
+| `listProviders()` | `Promise<string[]>` |
+| `status(provider)` | `Promise<ConnectorStatus>` — member-safe |
+| `create(provider)` | `Promise<ConnectorConnection>` — OAuth providers only |
+| `configureS3(options)` | `Promise<Connector>` — S3 has no OAuth step |
+| `list()` | `Promise<Connector[]>` |
+| `get(connectorId)` | `Promise<Connector>` |
+| `listResources(connectorId, { parentId? })` | `Promise<ConnectorResourceItem[]>` — 409 until authorized |
+| `listBranches(connectorId, repo)` | `Promise<ConnectorResourceItem[]>` — GitHub only |
+| `pickerConfig(connectorId)` | `Promise<PickerConfig>` — Google Drive only, owner-only |
+| `waitUntilAuthorized(connectorId, options?)` | `Promise<ConnectorResourceItem[]>` |
+| `configureResources(connectorId, resources)` | `Promise<Connector>` |
+| `sync(connectorId)` | `Promise<Connector>` — must be active |
+| `delete(connectorId)` | `Promise<void>` |
+
+## Error classes you may see
+
+`MemsyAuthError` (401), `MemsyAuthorizationError` (admin/seat scope mismatch on 403), `MemsyBillingNotEnabledError` (free-tier hitting billing routes), `MemsyKeyLimitReachedError`, `MemsySeatLimitReachedError`. See [Errors](/docs/reference/node/errors) for the full list and the per-class fields.
+
+## See also
+
+- [Models reference](/docs/reference/node/models) — `MeResponse`, `BillingSummary`, `ApiKeyInfo`, `EventItem`, …
+- [`MemsyClient`](/docs/reference/node/memsy-client) — the hot-path client
+- Python equivalents: [`MemsyControlClient` (Python)](/docs/reference/python/control-client)
+
 ## Error classes you may see
 
 `MemsyAuthError` (401), `MemsyAuthorizationError` (admin/seat scope mismatch on 403), `MemsyBillingNotEnabledError` (free-tier hitting billing routes), `MemsyKeyLimitReachedError`, `MemsySeatLimitReachedError`. See [Errors](/docs/reference/node/errors) for the full list and the per-class fields.
