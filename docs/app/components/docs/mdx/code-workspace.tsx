@@ -5,9 +5,11 @@ import {
   isValidElement,
   useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { cn } from '@/lib/utils'
+import { zipStore } from '@/lib/zip'
 
 interface CodeFileProps {
   /** Path as it should appear in the tree, e.g. "app/api/chat/route.ts". */
@@ -80,6 +82,64 @@ function FileIcon({ className }: { className?: string }) {
   )
 }
 
+/** Fence language for a path, used only to label blocks in the copied bundle. */
+const FENCE_LANG: Record<string, string> = {
+  ts: 'ts',
+  tsx: 'tsx',
+  js: 'js',
+  jsx: 'jsx',
+  py: 'python',
+  json: 'json',
+  sh: 'bash',
+}
+
+function fenceLang(path: string): string {
+  return FENCE_LANG[path.split('.').pop()?.toLowerCase() ?? ''] ?? ''
+}
+
+/**
+ * Hand the browser a file. `download` only honours a bare filename -- a nested
+ * path saves as its last segment either way -- so the caller passes the name it
+ * wants rather than the archive path.
+ */
+function save(filename: string, body: BlobPart, type: string) {
+  const url = URL.createObjectURL(new Blob([body], { type }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function ActionButton({
+  onClick,
+  label,
+  title,
+  children,
+}: {
+  onClick: () => void
+  label: string
+  title: string
+  children?: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={cn(
+        'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-sans transition-colors',
+        'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+      )}
+    >
+      {children}
+      {label}
+    </button>
+  )
+}
+
 interface CodeWorkspaceProps {
   children: React.ReactNode
   /** Optional label shown above the tree, e.g. "my-app". */
@@ -101,7 +161,56 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
 
   const tree = useMemo(() => buildTree(files), [files])
   const [active, setActive] = useState(0)
+  const [copied, setCopied] = useState<'file' | 'all' | null>(null)
   const current = Math.min(active, Math.max(files.length - 1, 0))
+
+  /**
+   * One entry per panel of THIS workspace. The source text is only available
+   * as rendered, highlighted markup, so it is read back off the DOM -- the
+   * same thing Pre's own copy button does. Scoping the query to the panel ref
+   * matters: a page-wide `document.querySelector('pre')` would return the
+   * first block on the page, which is the bug CodeBlock still has.
+   */
+  const panes = useRef<Array<HTMLDivElement | null>>([])
+
+  const textOf = (index: number): string => {
+    const text = panes.current[index]?.querySelector('pre')?.textContent ?? ''
+    // Shiki emits no trailing newline; files should end with one.
+    return text.endsWith('\n') ? text : `${text}\n`
+  }
+
+  const flash = (which: 'file' | 'all') => {
+    setCopied(which)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const copyFile = async () => {
+    await navigator.clipboard.writeText(textOf(current))
+    flash('file')
+  }
+
+  /**
+   * Markdown rather than raw concatenation: the common reason to want every
+   * file at once is to paste the whole recipe somewhere, and a bare join loses
+   * which lines belong to which file.
+   */
+  const copyAll = async () => {
+    const bundle = files
+      .map((file, i) => `## ${file.path}\n\n\`\`\`${fenceLang(file.path)}\n${textOf(i)}\`\`\`\n`)
+      .join('\n')
+    await navigator.clipboard.writeText(bundle)
+    flash('all')
+  }
+
+  const downloadFile = () => {
+    const path = files[current].path
+    save(path.split('/').pop() ?? path, textOf(current), 'text/plain;charset=utf-8')
+  }
+
+  const downloadZip = () => {
+    const entries = files.map((file, i) => ({ name: file.path, text: textOf(i) }))
+    save(`${title || 'files'}.zip`, zipStore(entries), 'application/zip')
+  }
 
   if (files.length === 0) return null
 
@@ -212,12 +321,48 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
         {/* Content pane. Every panel stays mounted so Ctrl+F finds code in
             files that are not currently selected. */}
         <div className="min-w-0 flex-1">
-          <div className="hidden sm:block px-4 pt-2.5 pb-1 text-[11px] font-mono text-muted-foreground border-b border-border/60">
-            {files[current]?.path}
+          {/* Path, plus the actions for the active file and the whole set. */}
+          <div className="flex items-center gap-1 px-2 sm:px-4 py-1.5 border-b border-border/60">
+            <span className="min-w-0 flex-1 truncate text-[11px] font-mono text-muted-foreground">
+              <span className="hidden sm:inline">{files[current]?.path}</span>
+              <span className="sm:hidden">
+                {files[current]?.path.split('/').pop()}
+              </span>
+            </span>
+            <ActionButton
+              onClick={copyFile}
+              label={copied === 'file' ? 'Copied' : 'Copy'}
+              title={`Copy ${files[current]?.path} to the clipboard`}
+            />
+            <ActionButton
+              onClick={downloadFile}
+              label="Download"
+              title={`Download ${files[current]?.path.split('/').pop()}`}
+            />
+            {files.length > 1 && (
+              <>
+                <span aria-hidden="true" className="mx-0.5 text-border">
+                  |
+                </span>
+                <ActionButton
+                  onClick={copyAll}
+                  label={copied === 'all' ? 'Copied' : 'Copy all'}
+                  title={`Copy all ${files.length} files as markdown, with their paths`}
+                />
+                <ActionButton
+                  onClick={downloadZip}
+                  label=".zip"
+                  title={`Download all ${files.length} files as ${title || 'files'}.zip`}
+                />
+              </>
+            )}
           </div>
           {files.map((file, i) => (
             <div
               key={file.path}
+              ref={(node) => {
+                panes.current[i] = node
+              }}
               role="tabpanel"
               id={`${workspaceId}-panel-${i}`}
               aria-labelledby={`${workspaceId}-tab-${i}`}
@@ -225,6 +370,9 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
               tabIndex={0}
               className={cn(
                 'min-w-0 [&>div]:my-0 [&>div>div]:border-0 [&>div>div]:rounded-none [&>div>div]:bg-transparent',
+                // Pre ships its own hover copy button; the header bar above now
+                // has one that is always visible, so two would just compete.
+                '[&>div>div>button]:hidden',
                 i !== current && 'hidden',
               )}
             >
