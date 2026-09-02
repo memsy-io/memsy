@@ -11,7 +11,7 @@ import {
 } from '@/lib/docs-tabs'
 import type { Root } from 'fumadocs-core/page-tree'
 import { useMemo } from 'react'
-import { BookOpen, Code } from 'lucide-react'
+import { BookOpen, ChefHat, Code } from 'lucide-react'
 
 interface DocsTabsProps {
   tree: Root
@@ -19,6 +19,8 @@ interface DocsTabsProps {
 
 const TAB_ICONS: Record<DocsTabId, typeof BookOpen> = {
   guides: BookOpen,
+  // Same icon the Cookbooks section heading used in the sidebar.
+  cookbooks: ChefHat,
   api: Code,
 }
 
