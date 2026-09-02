@@ -3,11 +3,13 @@
 import {
   Children,
   isValidElement,
+  useEffect,
   useId,
   useMemo,
   useRef,
   useState,
 } from 'react'
+import { Maximize2, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { zipStore } from '@/lib/zip'
 
@@ -115,11 +117,16 @@ function ActionButton({
   onClick,
   label,
   title,
+  expanded,
+  className,
   children,
 }: {
   onClick: () => void
+  /** Visible text. Empty for icon-only buttons, which are named by `title`. */
   label: string
   title: string
+  expanded?: boolean
+  className?: string
   children?: React.ReactNode
 }) {
   return (
@@ -128,10 +135,12 @@ function ActionButton({
       onClick={onClick}
       title={title}
       aria-label={title}
+      aria-expanded={expanded}
       className={cn(
         'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-sans transition-colors',
         'text-muted-foreground hover:text-foreground hover:bg-foreground/5',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+        className,
       )}
     >
       {children}
@@ -162,7 +171,45 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
   const tree = useMemo(() => buildTree(files), [files])
   const [active, setActive] = useState(0)
   const [copied, setCopied] = useState<'file' | 'all' | null>(null)
+  const [railOpen, setRailOpen] = useState(true)
+  const [expanded, setExpanded] = useState(false)
+  const [placeholderHeight, setPlaceholderHeight] = useState<number | null>(null)
   const current = Math.min(active, Math.max(files.length - 1, 0))
+
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const dialogRef = useRef<HTMLDialogElement | null>(null)
+
+  /**
+   * The workspace is MOVED into the dialog rather than duplicated inside it.
+   * Rendering a second copy would put two <pre> elements per file on the page,
+   * and since the source text is read back off the DOM, Copy and Download
+   * would then be reading from whichever copy mounted last.
+   *
+   * Moving it leaves a hole in the page, so the placeholder is given the box's
+   * measured height -- otherwise closing the dialog would land the reader
+   * somewhere else on the page than where they opened it.
+   */
+  const expand = () => {
+    const height = boxRef.current?.offsetHeight
+    if (height) setPlaceholderHeight(height)
+    setExpanded(true)
+  }
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!expanded || !dialog) return
+
+    // showModal gives Escape, focus containment and top-layer stacking for
+    // free; it does not stop the page behind from scrolling.
+    dialog.showModal?.()
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = previous
+      if (dialog.open) dialog.close()
+    }
+  }, [expanded])
 
   /**
    * One entry per panel of THIS workspace. The source text is only available
@@ -271,20 +318,61 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
     })
   }
 
-  return (
-    <div className="my-6 rounded-lg border border-border overflow-hidden bg-muted/20 dark:bg-[#0d0d0f]">
-      <div className="flex flex-col sm:flex-row">
-        {/* Sidebar on sm+, a horizontal strip below that — a 9rem rail leaves
-            no usable width for code on a phone. */}
+  const strip = files.length > 1 && (
+    /* Flat switcher: always on narrow screens, and on wide ones when the rail
+       is collapsed -- collapsing must not leave a multi-file workspace with no
+       way to change files. */
+    <div
+      role="tablist"
+      aria-orientation="horizontal"
+      aria-label={title ? `${title} files` : 'Files'}
+      className={cn(
+        'flex overflow-x-auto border-b border-border/60 text-[13px] font-mono',
+        railOpen && 'sm:hidden',
+      )}
+    >
+      {files.map((file, i) => (
+        <button
+          key={file.path}
+          role="tab"
+          aria-selected={i === current}
+          aria-controls={`${workspaceId}-panel-${i}`}
+          tabIndex={i === current ? 0 : -1}
+          onClick={() => setActive(i)}
+          className={cn(
+            'px-3 py-1.5 whitespace-nowrap border-b-2 -mb-px transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
+            i === current
+              ? 'border-[var(--accent)] text-[var(--accent)]'
+              : 'border-transparent text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {file.path.split('/').pop()}
+        </button>
+      ))}
+    </div>
+  )
+
+  const workspace = (
+    <div
+      ref={boxRef}
+      className={cn(
+        'rounded-lg border border-border overflow-hidden bg-muted/20 dark:bg-[#0d0d0f]',
+        expanded ? 'flex flex-col h-full min-h-0' : 'my-6',
+      )}
+    >
+      <div className={cn('flex flex-col sm:flex-row', expanded && 'flex-1 min-h-0')}>
+        {/* The tree. Hidden on narrow screens, where a rail leaves no usable
+            width for code, and whenever the reader collapses it. */}
         <div
           role="tablist"
           aria-orientation="vertical"
           aria-label={title ? `${title} files` : 'Files'}
           className={cn(
-            'shrink-0 text-[13px] font-mono',
-            'border-b sm:border-b-0 sm:border-r border-border',
-            'sm:w-56 sm:max-h-[32rem] sm:overflow-y-auto',
-            'bg-background/40 dark:bg-black/20',
+            'hidden shrink-0 text-[13px] font-mono overflow-y-auto',
+            'sm:border-r border-border bg-background/40 dark:bg-black/20',
+            railOpen && 'sm:block',
+            expanded ? 'sm:w-60' : 'sm:w-44 sm:max-h-[26rem]',
           )}
         >
           {title && (
@@ -292,37 +380,28 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
               {title}
             </div>
           )}
-          {/* Vertical tree on sm+ */}
-          <ul className="hidden sm:block py-2 px-1.5">{renderNodes(tree, 0)}</ul>
-          {/* Flat horizontal strip on narrow screens */}
-          <div className="sm:hidden flex overflow-x-auto">
-            {files.map((file, i) => (
-              <button
-                key={file.path}
-                role="tab"
-                aria-selected={i === current}
-                aria-controls={`${workspaceId}-panel-${i}`}
-                tabIndex={i === current ? 0 : -1}
-                onClick={() => setActive(i)}
-                className={cn(
-                  'px-3 py-2 whitespace-nowrap border-b-2 -mb-px transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
-                  i === current
-                    ? 'border-[var(--accent)] text-[var(--accent)]'
-                    : 'border-transparent text-muted-foreground',
-                )}
-              >
-                {file.path.split('/').pop()}
-              </button>
-            ))}
-          </div>
+          <ul className="py-2 px-1.5">{renderNodes(tree, 0)}</ul>
         </div>
 
-        {/* Content pane. Every panel stays mounted so Ctrl+F finds code in
-            files that are not currently selected. */}
-        <div className="min-w-0 flex-1">
-          {/* Path, plus the actions for the active file and the whole set. */}
-          <div className="flex items-center gap-1 px-2 sm:px-4 py-1.5 border-b border-border/60">
+        <div className={cn('min-w-0 flex-1 flex flex-col', expanded && 'min-h-0')}>
+          {/* Path, the actions for the active file and the whole set, and the
+              two view controls. */}
+          <div className="flex items-center gap-1 px-2 sm:px-3 py-1.5 border-b border-border/60">
+            {files.length > 1 && (
+              <ActionButton
+                onClick={() => setRailOpen((open) => !open)}
+                label=""
+                title={railOpen ? 'Hide the file list' : 'Show the file list'}
+                expanded={railOpen}
+                className="hidden sm:flex"
+              >
+                {railOpen ? (
+                  <PanelLeftClose aria-hidden="true" className="w-3.5 h-3.5" />
+                ) : (
+                  <PanelLeftOpen aria-hidden="true" className="w-3.5 h-3.5" />
+                )}
+              </ActionButton>
+            )}
             <span className="min-w-0 flex-1 truncate text-[11px] font-mono text-muted-foreground">
               <span className="hidden sm:inline">{files[current]?.path}</span>
               <span className="sm:hidden">
@@ -356,31 +435,93 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
                 />
               </>
             )}
-          </div>
-          {files.map((file, i) => (
-            <div
-              key={file.path}
-              ref={(node) => {
-                panes.current[i] = node
-              }}
-              role="tabpanel"
-              id={`${workspaceId}-panel-${i}`}
-              aria-labelledby={`${workspaceId}-tab-${i}`}
-              hidden={i !== current}
-              tabIndex={0}
-              className={cn(
-                'min-w-0 [&>div]:my-0 [&>div>div]:border-0 [&>div>div]:rounded-none [&>div>div]:bg-transparent',
-                // Pre ships its own hover copy button; the header bar above now
-                // has one that is always visible, so two would just compete.
-                '[&>div>div>button]:hidden',
-                i !== current && 'hidden',
-              )}
+            <span aria-hidden="true" className="mx-0.5 text-border">
+              |
+            </span>
+            <ActionButton
+              onClick={expanded ? () => setExpanded(false) : expand}
+              label=""
+              title={expanded ? 'Close the full-screen view' : 'Open full screen'}
             >
-              {file.content}
-            </div>
-          ))}
+              {expanded ? (
+                <X aria-hidden="true" className="w-3.5 h-3.5" />
+              ) : (
+                <Maximize2 aria-hidden="true" className="w-3.5 h-3.5" />
+              )}
+            </ActionButton>
+          </div>
+
+          {strip}
+
+          {/* Both panes are capped at the same height, so switching files does
+              not resize the box and shove the rest of the page around. Full
+              screen lifts the cap -- that is the point of it. */}
+          <div
+            className={cn(
+              'min-w-0 overflow-auto',
+              expanded ? 'flex-1' : 'max-h-[26rem]',
+            )}
+          >
+            {files.map((file, i) => (
+              <div
+                key={file.path}
+                ref={(node) => {
+                  // Defensive, not load-bearing: React 19 detaches the old
+                  // pane's ref before attaching the dialog's, so storing null
+                  // would be harmless today. Ignoring it means the DOM read
+                  // does not depend on that ordering holding.
+                  if (node) panes.current[i] = node
+                }}
+                role="tabpanel"
+                id={`${workspaceId}-panel-${i}`}
+                aria-labelledby={`${workspaceId}-tab-${i}`}
+                hidden={i !== current}
+                tabIndex={0}
+                className={cn(
+                  'min-w-0 [&>div]:my-0 [&>div>div]:border-0 [&>div>div]:rounded-none [&>div>div]:bg-transparent',
+                  // Pre ships its own hover copy button; the header bar has one
+                  // that is always visible, so two would just compete.
+                  '[&>div>div>button]:hidden',
+                  i !== current && 'hidden',
+                )}
+              >
+                {file.content}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
+  )
+
+  if (!expanded) return workspace
+
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        style={placeholderHeight ? { height: placeholderHeight } : undefined}
+        className="my-6 grid place-items-center rounded-lg border border-dashed border-border text-xs text-muted-foreground"
+      >
+        Open in full screen
+      </div>
+      <dialog
+        ref={dialogRef}
+        aria-label={title ? `${title} files` : 'Files'}
+        onClose={() => setExpanded(false)}
+        onClick={(event) => {
+          // A click that lands on the dialog itself is a click on the backdrop:
+          // every part of the panel is covered by a child.
+          if (event.target === dialogRef.current) setExpanded(false)
+        }}
+        className={cn(
+          'p-3 sm:p-6 border-0 bg-transparent',
+          'w-[min(96vw,88rem)] h-[min(92vh,60rem)] max-w-none max-h-none',
+          'backdrop:bg-black/60 backdrop:backdrop-blur-sm',
+        )}
+      >
+        {workspace}
+      </dialog>
+    </>
   )
 }

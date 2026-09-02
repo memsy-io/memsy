@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -149,5 +149,121 @@ describe('CodeWorkspace actions', () => {
     expect(screen.getByRole('button', { name: /^Copy app/ })).toBeDefined()
     expect(screen.queryByRole('button', { name: /^Copy all/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Download all/ })).toBeNull()
+  })
+})
+
+describe('CodeWorkspace views', () => {
+  const railToggle = () => screen.getByRole('button', { name: /file list$/ })
+  const expandButton = () => screen.getByRole('button', { name: 'Open full screen' })
+
+  /** The horizontal switcher, which is in the DOM at every width. */
+  function flatStrip(): HTMLElement {
+    const lists = screen.getAllByRole('tablist', {
+      name: 'my-app files',
+      hidden: true,
+    })
+    const strip = lists.find(
+      (el) => el.getAttribute('aria-orientation') === 'horizontal',
+    )
+    if (!strip) throw new Error('no horizontal tablist rendered')
+    return strip
+  }
+
+  it('reports the rail state on the toggle', () => {
+    renderWorkspace()
+    expect(railToggle().getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(railToggle())
+    expect(railToggle().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  /**
+   * The flat strip is what a reader switches files with once the tree is gone.
+   * It is always in the DOM and hidden by a breakpoint class, so the guard is
+   * that the class is dropped when the rail closes -- a collapse that left the
+   * strip hidden would leave no way at all to change files.
+   */
+  it('reveals the flat switcher when the rail is collapsed', () => {
+    renderWorkspace()
+    expect(flatStrip().className).toContain('sm:hidden')
+
+    fireEvent.click(railToggle())
+    expect(flatStrip().className).not.toContain('sm:hidden')
+    expect(within(flatStrip()).getAllByRole('tab', { hidden: true })).toHaveLength(2)
+  })
+
+  it('has no rail toggle when there is only one file', () => {
+    renderWorkspace(true)
+    expect(screen.queryByRole('button', { name: /file list$/ })).toBeNull()
+  })
+
+  /**
+   * The one that matters most. The workspace is moved into the dialog, not
+   * copied: a second copy would put two <pre> per file on the page, and since
+   * the text is read back off the DOM, Copy would start reading whichever one
+   * mounted last.
+   */
+  it('keeps exactly one copy of each file when expanded', () => {
+    const { baseElement } = renderWorkspace()
+    expect(baseElement.querySelectorAll('pre')).toHaveLength(2)
+
+    fireEvent.click(expandButton())
+    expect(baseElement.querySelector('dialog')).not.toBeNull()
+    expect(baseElement.querySelectorAll('pre')).toHaveLength(2)
+  })
+
+  it('still copies the right file once expanded', () => {
+    renderWorkspace()
+    fireEvent.click(expandButton())
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Copy app\/api\/chat\/route\.ts/ }),
+    )
+    expect(written).toEqual([`${ROUTE}\n`])
+  })
+
+  it('leaves a placeholder at the height the box had', () => {
+    const offsetHeight = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockReturnValue(342)
+    renderWorkspace()
+    fireEvent.click(expandButton())
+    offsetHeight.mockRestore()
+
+    expect(screen.getByText('Open in full screen').style.height).toBe('342px')
+  })
+
+  it("closes on the dialog's own close event, which is what Escape fires", () => {
+    const { baseElement } = renderWorkspace()
+    fireEvent.click(expandButton())
+
+    fireEvent(baseElement.querySelector('dialog')!, new Event('close'))
+    expect(baseElement.querySelector('dialog')).toBeNull()
+    expect(screen.queryByText('Open in full screen')).toBeNull()
+  })
+
+  it('closes on a click that lands on the backdrop, not the panel', () => {
+    const { baseElement } = renderWorkspace()
+    fireEvent.click(expandButton())
+    const dialog = baseElement.querySelector('dialog')!
+
+    // A click inside the panel must not close it.
+    fireEvent.click(dialog.querySelector('[role="tabpanel"]')!)
+    expect(baseElement.querySelector('dialog')).not.toBeNull()
+
+    fireEvent.click(dialog)
+    expect(baseElement.querySelector('dialog')).toBeNull()
+  })
+  /**
+   * Without a cap the box is as tall as whichever file is selected, so
+   * switching from an 8-line file to a 60-line one resizes it and shoves
+   * everything below it down the page. Full screen is where the cap is lifted.
+   */
+  it('caps the code pane inline and lifts the cap in full screen', () => {
+    const { baseElement } = renderWorkspace()
+    const scroller = () => baseElement.querySelector('[role="tabpanel"]')!.parentElement!
+
+    expect(scroller().className).toContain('max-h-[26rem]')
+    fireEvent.click(expandButton())
+    expect(scroller().className).not.toContain('max-h-[26rem]')
+    expect(scroller().className).toContain('flex-1')
   })
 })
