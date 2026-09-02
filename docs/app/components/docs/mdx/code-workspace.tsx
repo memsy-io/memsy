@@ -387,21 +387,21 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
           {/* Path, the actions for the active file and the whole set, and the
               two view controls. */}
           <div className="flex items-center gap-1 px-2 sm:px-3 py-1.5 border-b border-border/60">
-            {files.length > 1 && (
-              <ActionButton
-                onClick={() => setRailOpen((open) => !open)}
-                label=""
-                title={railOpen ? 'Hide the file list' : 'Show the file list'}
-                expanded={railOpen}
-                className="hidden sm:flex"
-              >
-                {railOpen ? (
-                  <PanelLeftClose aria-hidden="true" className="w-3.5 h-3.5" />
-                ) : (
-                  <PanelLeftOpen aria-hidden="true" className="w-3.5 h-3.5" />
-                )}
-              </ActionButton>
-            )}
+            {/* Offered whatever the file count. A one-entry rail still costs
+                the code 11rem of width, which is the reason to close it. */}
+            <ActionButton
+              onClick={() => setRailOpen((open) => !open)}
+              label=""
+              title={railOpen ? 'Hide the file list' : 'Show the file list'}
+              expanded={railOpen}
+              className="hidden sm:flex"
+            >
+              {railOpen ? (
+                <PanelLeftClose aria-hidden="true" className="w-3.5 h-3.5" />
+              ) : (
+                <PanelLeftOpen aria-hidden="true" className="w-3.5 h-3.5" />
+              )}
+            </ActionButton>
             <span className="min-w-0 flex-1 truncate text-[11px] font-mono text-muted-foreground">
               <span className="hidden sm:inline">{files[current]?.path}</span>
               <span className="sm:hidden">

@@ -191,9 +191,17 @@ describe('CodeWorkspace views', () => {
     expect(within(flatStrip()).getAllByRole('tab', { hidden: true })).toHaveLength(2)
   })
 
-  it('has no rail toggle when there is only one file', () => {
+  /**
+   * Offered on a single-file workspace too. Closing a one-entry rail still
+   * hands the code 11rem it did not have, and three of the four cookbooks
+   * have single-file listings -- gating this on the file count left them
+   * without the control entirely.
+   */
+  it('offers the rail toggle even with a single file', () => {
     renderWorkspace(true)
-    expect(screen.queryByRole('button', { name: /file list$/ })).toBeNull()
+    expect(railToggle().getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(railToggle())
+    expect(railToggle().getAttribute('aria-expanded')).toBe('false')
   })
 
   /**
