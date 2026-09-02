@@ -264,154 +264,160 @@ See [Searching memory](/docs/searching-memory#threshold) for the full guidance.
 The whole service, assembled from the steps above. The imports are collected at
 the top; every other line is exactly as it appears in the walkthrough.
 
-```python
-# main.py
-import logging
-import os
-from contextlib import asynccontextmanager
+<CodeWorkspace title="support-agent">
+  <CodeFile name="main.py">
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
-from memsy import AsyncMemsyClient, EventPayload
-from memsy.exceptions import MemsyError, RateLimitExceeded
-from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+    ```python
+    # main.py
+    import logging
+    import os
+    from contextlib import asynccontextmanager
 
-
-def _required(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise RuntimeError(f"Missing required env var: {name}")
-    return value
+    from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+    from memsy import AsyncMemsyClient, EventPayload
+    from memsy.exceptions import MemsyError, RateLimitExceeded
+    from openai import AsyncOpenAI
+    from pydantic import BaseModel, Field
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Fail at boot, not on the first customer request.
-    app.state.memsy = AsyncMemsyClient(
-        base_url=_required("MEMSY_BASE_URL"),
-        api_key=_required("MEMSY_API_KEY"),
-    )
-    try:
-        yield
-    finally:
-        await app.state.memsy.close()
+    def _required(name: str) -> str:
+        value = os.environ.get(name)
+        if not value:
+            raise RuntimeError(f"Missing required env var: {name}")
+        return value
 
 
-app = FastAPI(lifespan=lifespan)
-
-
-class AskRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=4000)
-    ticket_id: str = Field(min_length=1, max_length=64)
-
-
-class AskResponse(BaseModel):
-    answer: str
-    recalled: int
-
-
-log = logging.getLogger(__name__)
-openai = AsyncOpenAI()
-
-# A floor on relevance, so "no history" is an outcome the model can see.
-# The right value is tier-dependent — see "Choosing a threshold" below —
-# so it is configuration, not a constant baked into the handler.
-RECALL_THRESHOLD = float(os.environ.get("MEMSY_RECALL_THRESHOLD", "0.0"))
-
-# Replace with your real auth dependency. The point is that the customer id
-# is derived server-side; a body-supplied one would let any caller read any
-# customer's history.
-async def current_customer_id(request: Request) -> str:
-    customer_id = request.headers.get("X-Customer-Id")
-    if not customer_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return customer_id
-
-
-@app.post("/ask", response_model=AskResponse)
-async def ask(
-    body: AskRequest,
-    background: BackgroundTasks,
-    request: Request,
-    customer_id: str = Depends(current_customer_id),
-) -> AskResponse:
-    memsy: AsyncMemsyClient = request.app.state.memsy
-
-    # 1. Recall. A failure here degrades the answer; it must not 500 the
-    #    request, because an answer without memory still helps the customer.
-    try:
-        recalled = await memsy.search(
-            body.question,
-            actor_id=customer_id,
-            limit=5,
-            threshold=RECALL_THRESHOLD,
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Fail at boot, not on the first customer request.
+        app.state.memsy = AsyncMemsyClient(
+            base_url=_required("MEMSY_BASE_URL"),
+            api_key=_required("MEMSY_API_KEY"),
         )
-        memories = [r.content for r in recalled.results]
-    except RateLimitExceeded:
-        memories = []
-    except MemsyError:
-        # Full context stays server-side; the customer sees a normal answer.
-        log.exception("memsy recall failed")
-        memories = []
-
-    context = "\n".join(f"- {m}" for m in memories) or "(no prior history)"
-
-    # 2. Ground.
-    completion = await openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a support agent. The customer's prior history is "
-                    "below — use it instead of asking them to repeat "
-                    "themselves. If it contradicts the current question, "
-                    "trust the current question.\n\n"
-                    f"History:\n{context}"
-                ),
-            },
-            {"role": "user", "content": body.question},
-        ],
-    )
-    answer = completion.choices[0].message.content or ""
-
-    # 3. Record — after the response is sent.
-    background.add_task(
-        _record_turn, memsy, customer_id, body.ticket_id, body.question, answer
-    )
-
-    return AskResponse(answer=answer, recalled=len(memories))
+        try:
+            yield
+        finally:
+            await app.state.memsy.close()
 
 
-async def _record_turn(
-    memsy: AsyncMemsyClient,
-    customer_id: str,
-    ticket_id: str,
-    question: str,
-    answer: str,
-) -> None:
-    try:
-        await memsy.ingest(
-            [
-                EventPayload(
-                    actor_id=customer_id,
-                    session_id=f"ticket_{ticket_id}",
-                    kind="user_message",
-                    content=question,
-                ),
-                EventPayload(
-                    actor_id=customer_id,
-                    session_id=f"ticket_{ticket_id}",
-                    kind="assistant_message",
-                    content=answer,
-                ),
-            ]
+    app = FastAPI(lifespan=lifespan)
+
+
+    class AskRequest(BaseModel):
+        question: str = Field(min_length=1, max_length=4000)
+        ticket_id: str = Field(min_length=1, max_length=64)
+
+
+    class AskResponse(BaseModel):
+        answer: str
+        recalled: int
+
+
+    log = logging.getLogger(__name__)
+    openai = AsyncOpenAI()
+
+    # A floor on relevance, so "no history" is an outcome the model can see.
+    # The right value is tier-dependent — see "Choosing a threshold" below —
+    # so it is configuration, not a constant baked into the handler.
+    RECALL_THRESHOLD = float(os.environ.get("MEMSY_RECALL_THRESHOLD", "0.0"))
+
+    # Replace with your real auth dependency. The point is that the customer id
+    # is derived server-side; a body-supplied one would let any caller read any
+    # customer's history.
+    async def current_customer_id(request: Request) -> str:
+        customer_id = request.headers.get("X-Customer-Id")
+        if not customer_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return customer_id
+
+
+    @app.post("/ask", response_model=AskResponse)
+    async def ask(
+        body: AskRequest,
+        background: BackgroundTasks,
+        request: Request,
+        customer_id: str = Depends(current_customer_id),
+    ) -> AskResponse:
+        memsy: AsyncMemsyClient = request.app.state.memsy
+
+        # 1. Recall. A failure here degrades the answer; it must not 500 the
+        #    request, because an answer without memory still helps the customer.
+        try:
+            recalled = await memsy.search(
+                body.question,
+                actor_id=customer_id,
+                limit=5,
+                threshold=RECALL_THRESHOLD,
+            )
+            memories = [r.content for r in recalled.results]
+        except RateLimitExceeded:
+            memories = []
+        except MemsyError:
+            # Full context stays server-side; the customer sees a normal answer.
+            log.exception("memsy recall failed")
+            memories = []
+
+        context = "\n".join(f"- {m}" for m in memories) or "(no prior history)"
+
+        # 2. Ground.
+        completion = await openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a support agent. The customer's prior history is "
+                        "below — use it instead of asking them to repeat "
+                        "themselves. If it contradicts the current question, "
+                        "trust the current question.\n\n"
+                        f"History:\n{context}"
+                    ),
+                },
+                {"role": "user", "content": body.question},
+            ],
         )
-    except MemsyError:
-        # The response has already gone out. Raising here would only produce
-        # an unhandled-task traceback in the logs, so log it deliberately.
-        log.exception("memsy ingest failed")
-```
+        answer = completion.choices[0].message.content or ""
+
+        # 3. Record — after the response is sent.
+        background.add_task(
+            _record_turn, memsy, customer_id, body.ticket_id, body.question, answer
+        )
+
+        return AskResponse(answer=answer, recalled=len(memories))
+
+
+    async def _record_turn(
+        memsy: AsyncMemsyClient,
+        customer_id: str,
+        ticket_id: str,
+        question: str,
+        answer: str,
+    ) -> None:
+        try:
+            await memsy.ingest(
+                [
+                    EventPayload(
+                        actor_id=customer_id,
+                        session_id=f"ticket_{ticket_id}",
+                        kind="user_message",
+                        content=question,
+                    ),
+                    EventPayload(
+                        actor_id=customer_id,
+                        session_id=f"ticket_{ticket_id}",
+                        kind="assistant_message",
+                        content=answer,
+                    ),
+                ]
+            )
+        except MemsyError:
+            # The response has already gone out. Raising here would only produce
+            # an unhandled-task traceback in the logs, so log it deliberately.
+            log.exception("memsy ingest failed")
+    ```
+
+  </CodeFile>
+</CodeWorkspace>
 
 Run it:
 
