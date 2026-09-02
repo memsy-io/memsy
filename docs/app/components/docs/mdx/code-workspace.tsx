@@ -516,7 +516,10 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
         }}
         className={cn(
           'p-3 sm:p-6 border-0 bg-transparent',
-          'w-[min(96vw,88rem)] h-[min(92vh,60rem)] max-w-none max-h-none',
+          // m-auto is what centres it. The UA centres a modal dialog with
+          // `margin: auto`, and Tailwind's preflight resets `margin: 0` on
+          // everything -- without this the panel pins to the top-left inset.
+          'm-auto w-[96vw] h-[92vh] max-w-none max-h-none',
           'backdrop:bg-black/60 backdrop:backdrop-blur-sm',
         )}
       >

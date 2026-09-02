@@ -266,4 +266,18 @@ describe('CodeWorkspace views', () => {
     expect(scroller().className).not.toContain('max-h-[26rem]')
     expect(scroller().className).toContain('flex-1')
   })
+  /**
+   * The UA centres a modal dialog with `margin: auto`, and Tailwind's
+   * preflight resets `margin: 0` on every element -- so without an explicit
+   * m-auto the panel pins to the top-left corner of the viewport.
+   */
+  it('centres the dialog and sizes it to the viewport', () => {
+    const { baseElement } = renderWorkspace()
+    fireEvent.click(expandButton())
+
+    const dialog = baseElement.querySelector('dialog')!
+    expect(dialog.className).toContain('m-auto')
+    expect(dialog.className).toContain('w-[96vw]')
+    expect(dialog.className).toContain('h-[92vh]')
+  })
 })
