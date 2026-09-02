@@ -1,0 +1,2567 @@
+# Memsy Python SDK
+
+> Official Python SDK for Memsy — persistent memory for AI agents and applications.
+
+This document contains the full content of all documentation pages for AI consumption.
+
+---
+
+## Actors and Sessions
+
+**URL:** https://docs.memsy.io/docs/actors-and-sessions
+**Description:** How actor_id and session_id control grouping and retrieval.
+
+Events carry two identifiers that control how Memsy groups and retrieves memories: `actor_id` and `session_id`. Getting these right upfront makes search meaningfully better later.
+
+## `actor_id` — *who*
+
+The actor is the entity the memory is **about**. In most applications this is the end user. It can also be an AI agent, a customer account, or any stable identity you want to attach memories to.
+
+- Pick an ID that is stable across sessions (your internal user UUID), not something that rotates (like a JWT).
+- Use the same `actor_id` across all event kinds for a given person — `user_message`, `assistant_message`, `tool_result` all share the actor.
+- Scope a search to one actor:
+
+  ```python
+  client.search("preferences", actor_id="user_42")
+  ```
+
+## `session_id` — *where in the conversation*
+
+The session is the immediate context window the event belongs to — a conversation, a thread, a job run.
+
+- Start a new `session_id` when the context logically resets (new chat, new task).
+- Keep the same `session_id` for every event that belongs to one conversational flow, including assistant replies and tool results.
+
+Sessions aren't used to filter `search()` today, but Memsy uses them during extraction to understand what's in scope.
+
+## A complete example
+
+```python
+from memsy import MemsyClient, EventPayload
+
+client = MemsyClient(base_url="...", api_key="***")
+
+client.ingest([
+    EventPayload(
+        actor_id="user_42", session_id="sess_abc",
+        kind="user_message",
+        content="My dog's name is Rex.",
+    ),
+    EventPayload(
+        actor_id="user_42", session_id="sess_abc",
+        kind="assistant_message",
+        content="Nice — Rex is a great name.",
+    ),
+])
+
+# Later, a different conversation
+client.ingest([
+    EventPayload(
+        actor_id="user_42", session_id="sess_xyz",
+        kind="user_message",
+        content="Book a vet visit for tomorrow.",
+    ),
+])
+
+# Both sessions contribute memories to user_42
+results = client.search("pets", actor_id="user_42")
+```
+
+## Shared actor IDs vs. isolation
+
+Memories are always isolated per organization (each API key belongs to one org). Within an org, memories are keyed by `actor_id`. If two users share an `actor_id`, they share memories — so don't reuse IDs across people.
+
+## Next
+
+- How `ingest()` returns before processing completes → **[Async Processing](/docs/async-processing)**.
+
+---
+
+## Async Client
+
+**URL:** https://docs.memsy.io/docs/async-client
+**Description:** AsyncMemsyClient mirrors the sync client method-for-method.
+
+`AsyncMemsyClient` mirrors `MemsyClient` method-for-method. If you're building on `asyncio` — FastAPI, agent runtimes, worker pools — use it.
+
+## Setup
+
+```python
+
+from memsy import AsyncMemsyClient, EventPayload
+
+async def main():
+    async with AsyncMemsyClient(
+        base_url="https://api.memsy.io",
+        api_key="***",
+    ) as client:
+        health = await client.health()
+        print(health.status)
+
+asyncio.run(main())
+```
+
+The `async with` block closes the underlying connection pool for you. If you can't use a context manager, call `await client.close()` explicitly.
+
+## Every method is `async`
+
+The interface is identical to the sync client — just add `await`:
+
+```python
+await client.ingest([...])
+await client.search("query", actor_id="user_42")
+await client.status(event_ids=[...])
+await client.health()
+await client.clear("container_tag")
+```
+
+All parameter names, defaults, return types, and exceptions match the sync client.
+
+## Parallel calls
+
+```python
+
+async def personalise(user_id: str):
+    async with AsyncMemsyClient(...) as client:
+        prefs, recent = await asyncio.gather(
+            client.search("preferences", actor_id=user_id, limit=5),
+            client.search("recent topics", actor_id=user_id, limit=5),
+        )
+    return prefs.results, recent.results
+```
+
+`httpx.AsyncClient` (the underlying transport) pools connections per-client, so repeated calls within one `AsyncMemsyClient` share TCP connections.
+
+## Long-lived clients in web servers
+
+In a FastAPI or Starlette app, create one `AsyncMemsyClient` per process and reuse it — don't create one per request.
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from memsy import AsyncMemsyClient
+
+memsy: AsyncMemsyClient | None = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global memsy
+    memsy = AsyncMemsyClient(
+        base_url=os.environ["MEMSY_BASE_URL"],
+        api_key=os.environ["MEMSY_API_KEY"],
+    )
+    yield
+    await memsy.close()
+
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/chat")
+async def chat(msg: str):
+    results = await memsy.search(msg, actor_id="user_42")
+    ...
+```
+
+## Parity guarantee
+
+Every public method on `MemsyClient` also exists on `AsyncMemsyClient` with the same signature. When a new method is added to one, the other follows in the same release.
+
+---
+
+## AsyncMemsyClient
+
+**URL:** https://docs.memsy.io/docs/async-memsy-client
+**Description:** Async HTTP client — mirrors MemsyClient method-for-method.
+
+Asynchronous HTTP client for the Memsy hot-path API. Mirrors **[`MemsyClient`](/docs/memsy-client)** method-for-method.
+
+```python
+from memsy import AsyncMemsyClient
+```
+
+## Constructor
+
+```python
+AsyncMemsyClient(
+    base_url: str,
+    api_key: str,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    retry_backoff: float = 1.0,
+)
+```
+
+Parameters are identical to `MemsyClient`. See [that page](/docs/memsy-client) for the full table.
+
+## Async context manager
+
+```python
+async with AsyncMemsyClient(base_url="...", api_key="***") as client:
+    await client.health()
+```
+
+If you can't use `async with`, call `await client.close()` explicitly.
+
+## Methods
+
+Each method has the same signature as the sync client but returns a coroutine.
+
+| Method | Returns |
+|---|---|
+| `await ingest(events)` | `IngestResponse` |
+| `await search(query, *, actor_id, limit, threshold, include_source_events)` | `SearchResponse` |
+| `await status(event_ids)` | `StatusResponse` |
+| `await health()` | `HealthResponse` |
+| `await clear(container_tag)` | `ClearResponse` |
+| `await close()` | `None` |
+
+All raise the same exceptions as the sync client.
+
+## Sub-resource accessors
+
+`AsyncMemsyClient` exposes async versions of all sub-resources.
+
+| Accessor | Methods |
+|---|---|
+| `client.orgs` | `await list()`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
+| `client.roles` | `await list(org_id)`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
+| `client.teams` | `await list(org_id)`, `await create(...)`, `await get(...)`, `await update(...)`, `await regenerate_prompt(...)`, `await delete(...)` |
+| `client.memories` | `await list(...)`, `await get(memory_id)`, `await stats()` |
+
+See **[`MemsyClient`](/docs/memsy-client)** for the full method signatures — async versions are identical except for `await`.
+
+## Parallel calls
+
+```python
+
+async def two_in_parallel(client: AsyncMemsyClient, user_id: str):
+    prefs, recent = await asyncio.gather(
+        client.search("preferences", actor_id=user_id),
+        client.search("recent topics", actor_id=user_id),
+    )
+    return prefs.results, recent.results
+```
+
+## See also
+
+- **[Async client guide](/docs/async-client)** — FastAPI/Starlette integration patterns.
+- **[`MemsyClient`](/docs/memsy-client)** — the synchronous twin.
+- **[`AsyncMemsyControlClient`](/docs/control-client)** — async control-plane client.
+
+---
+
+## Async Processing
+
+**URL:** https://docs.memsy.io/docs/async-processing
+**Description:** Why ingest returns before processing completes — and how to poll.
+
+Memsy intentionally decouples ingestion from processing. This matters in a few places, so it's worth understanding the model.
+
+## What happens when you call `ingest()`
+
+```python
+result = client.ingest(events)
+# <-- returns here, usually within ~100ms
+```
+
+The server:
+
+1. Validates the payload.
+2. Writes the raw events to durable storage.
+3. Returns a list of `event_ids`.
+4. **Enqueues** the events for downstream processing (LLM extraction → embedding → indexing).
+
+Steps 1–3 happen synchronously over HTTP. Step 4 happens on the server's worker pool, after your call has already returned.
+
+## Why it's designed this way
+
+- Applications in the hot path (chat loops, agent runtimes) log events without blocking on LLM latency.
+- Extraction can batch, retry, and prioritize without the client caring.
+- Costs and failures on the extraction side don't punish the caller.
+
+## When can I search for a newly ingested event?
+
+Usually within a few seconds, but there's no guarantee. If your UX depends on memory being present immediately after ingest, poll for completion:
+
+```python
+
+result = client.ingest(events)
+
+status = client.status(event_ids=result.event_ids)
+while status.pending_ids:
+    time.sleep(1.0)
+    status = client.status(event_ids=result.event_ids)
+
+print("done:", status.completed_ids)
+print("failed:", status.failed_ids)
+```
+
+`StatusResponse` partitions the IDs you sent into three buckets:
+
+- `completed_ids` — extracted, embedded, indexed. Searchable now.
+- `pending_ids` — still in the queue or mid-processing.
+- `failed_ids` — something went wrong during extraction. These won't become memories.
+
+## What causes an event to fail?
+
+- Content rejected by a content filter.
+- An extraction-time LLM call that could not be recovered after retries.
+- An event that referenced a deleted or quarantined resource.
+
+Failures are rare but not zero. Check `failed_ids` in your pollers if correctness matters.
+
+## Design implications
+
+- **Don't re-ingest the same event to "retry".** Memsy de-duplicates ingestion by content hash within a short window; re-sending can create noise.
+- **Do batch aggressively.** `ingest()` accepts many events per call; fifty events in one batch is much cheaper than fifty single-event calls.
+
+## Next
+
+- How to build batches that ingest well → **[Ingesting events](/docs/ingesting-events)**.
+
+---
+
+## Console Memories
+
+**URL:** https://docs.memsy.io/docs/console-memories
+**Description:** Browse and inspect stored memories via client.memories.
+
+`client.memories` exposes read-only access to the memories stored in your org. Use it to audit extraction quality, debug unexpected search results, or build admin dashboards.
+
+```python
+from memsy import MemsyClient
+
+client = MemsyClient(base_url="...", api_key="msy_...")
+```
+
+## List memories
+
+```python
+from memsy import MemoryListResponse
+
+result: MemoryListResponse = client.memories.list(
+    kind="semantic",        # optional: "semantic" | "episodic" | ...
+    type="preference",      # optional: "preference" | "fact" | "event" | ...
+    status="active",        # optional: "active" | "archived" | "decayed"
+    sort="observed_at_desc",# "observed_at_desc" | "strength_desc" | "confidence_desc"
+    search="dark mode",     # optional: full-text search over memory text
+    limit=50,
+    offset=0,
+)
+
+print(f"{result.total} total memories")
+for m in result.items:
+    print(m.memory_id, m.text, m.confidence)
+```
+
+### Pagination
+
+```python
+page_size = 50
+offset = 0
+
+while True:
+    page = client.memories.list(limit=page_size, offset=offset)
+    for m in page.items:
+        process(m)
+    offset += page_size
+    if offset >= page.total:
+        break
+```
+
+## Get a single memory
+
+```python
+from memsy import MemoryItemResource
+
+memory: MemoryItemResource = client.memories.get("mem_01abc...")
+print(memory.text, memory.strength, memory.tags)
+print(memory.scope.level, memory.scope.actor_id)
+```
+
+## Stats
+
+Aggregate statistics for all memories in the org:
+
+```python
+from memsy import MemoryStatsResponse
+
+stats: MemoryStatsResponse = client.memories.stats()
+print(f"Total: {stats.total_memories}, Active: {stats.active_memories}")
+print(f"Avg confidence: {stats.avg_confidence:.2f}")
+print("By type:", stats.by_type)
+print("By kind:", stats.by_kind)
+print("Top entities:", stats.top_entities[:5])
+```
+
+---
+
+## `MemoryItemResource` fields
+
+| Field | Type | Description |
+|---|---|---|
+| `memory_id` | `str` | Unique memory ID. |
+| `org_id` | `str` | Owning org. |
+| `scope` | `MemoryScopeInfo` | Scope (level + actor/team/role IDs). |
+| `type` | `str` | Memory type (e.g. `"preference"`, `"fact"`). |
+| `kind` | `str` | Memory kind (e.g. `"semantic"`, `"episodic"`). |
+| `memory_kind` | `str` | Low-level memory kind classification. |
+| `status` | `str` | `"active"`, `"archived"`, or `"decayed"`. |
+| `text` | `str` | The extracted memory text. |
+| `confidence` | `float` | Extraction confidence (0–1). |
+| `strength` | `float` | Reinforcement strength (0–1). |
+| `recall_count` | `int` | Number of times this memory was recalled in search. |
+| `decay_half_life_days` | `float` | Days until strength halves. |
+| `pinned` | `bool` | Pinned memories never decay. |
+| `tags` | `list[str]` | Tags from extraction. |
+| `entity_refs` | `list[dict]` | Named entity references. |
+| `source_event_ids` | `list[str]` | IDs of contributing events. |
+| `source_urls` | `list[str]` | Source URLs if applicable. |
+| `summary` | `str \| None` | Short auto-generated summary. |
+| `payload` | `dict \| None` | Raw extraction payload from the LLM, if retained. |
+| `last_recalled_at` | `str \| None` | ISO-8601 timestamp of last search recall. |
+| `observed_at` | `str \| None` | ISO-8601 timestamp of first observation. |
+| `effective_from` | `str \| None` | Start of validity window. |
+| `effective_to` | `str \| None` | End of validity window (`None` = indefinite). |
+| `created_at` | `str \| None` | Record creation timestamp. |
+| `updated_at` | `str \| None` | Last update timestamp. |
+
+### `MemoryScopeInfo`
+
+```python
+@dataclass
+class MemoryScopeInfo:
+    level: str               # "org" | "role" | "team" | "actor"
+    actor_id: str | None = None
+    team_id: str | None = None
+    role_id: str | None = None
+```
+
+---
+
+## Async usage
+
+```python
+from memsy import AsyncMemsyClient
+
+async with AsyncMemsyClient(base_url="...", api_key="msy_...") as client:
+    stats = await client.memories.stats()
+    result = await client.memories.list(kind="semantic", limit=20)
+    memory = await client.memories.get("mem_01abc...")
+```
+
+---
+
+## See also
+
+- **[Onboarding](/docs/onboarding)** — set up org/role/team hierarchy to scope memories.
+- **[Searching memory](/docs/searching-memory)** — retrieve memories via semantic search.
+- **[Models](/docs/models)** — full `MemoryItemResource` and `MemoryStatsResponse` definitions.
+
+---
+
+## MemsyControlClient
+
+**URL:** https://docs.memsy.io/docs/control-client
+**Description:** Control-plane client for billing, API keys, usage, and account management.
+
+`MemsyControlClient` and `AsyncMemsyControlClient` wrap the Memsy control-plane API (`api/`). This is a separate service from the hot-path memory engine — it handles account management, billing, API key lifecycle, and usage reporting.
+
+```python
+from memsy import MemsyControlClient, AsyncMemsyControlClient
+```
+
+## When to use this client
+
+Use `MemsyControlClient` when you need to:
+
+- Look up account or org identity (`me()`)
+- Read usage metrics and billing summaries
+- Programmatically create or rotate API keys (admin-only)
+- Browse ingested events in the console
+- Express interest in the Pro plan
+
+For memory operations (ingest, search, clear), use **[`MemsyClient`](/docs/memsy-client)** instead.
+
+## Constructor
+
+```python
+MemsyControlClient(
+    base_url: str,
+    api_key: str,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    retry_backoff: float = 1.0,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `base_url` | `str` | — | Control-plane base URL, e.g. `"https://api.memsy.io/api"`. |
+| `api_key` | `str` | — | API key (`msy_...`). Sent as `Authorization: Bearer <key>`. |
+| `timeout` | `float` | `30.0` | Request timeout in seconds. |
+| `max_retries` | `int` | `3` | Max automatic retries on HTTP 429. |
+| `retry_backoff` | `float` | `1.0` | Base exponential backoff in seconds. |
+
+## Context manager
+
+```python
+with MemsyControlClient(base_url="https://api.memsy.io/api", api_key="msy_...") as control:
+    me = control.me()
+```
+
+## Top-level methods
+
+### `me()`
+
+Return identity information for the authenticated API key.
+
+```python
+me() -> MeResponse
+```
+
+```python
+me = control.me()
+print(me.email, me.tier, me.org_role)
+```
+
+### `health()`
+
+Check if the control-plane is healthy.
+
+```python
+health() -> HealthResponse
+```
+
+---
+
+## Sub-resource accessors
+
+### `control.usage`
+
+Usage metrics for the current org.
+
+```python
+# Summary for the current billing period
+summary: UsageSummaryResponse = control.usage.summary()
+
+# Timeseries (daily by default)
+ts: UsageTimeseriesResponse = control.usage.timeseries(
+    dimension="events_ingested",   # optional filter
+    granularity="daily",           # "daily" | "hourly"
+    period_start="2026-04-01",     # optional ISO-8601 date
+    period_end="2026-04-30",
+)
+```
+
+### `control.billing`
+
+Billing summary and invoice history.
+
+```python
+summary: BillingSummary = control.billing.summary()
+invoices: list[Invoice] = control.billing.invoices()
+```
+
+### `control.keys`
+
+API key management. **Requires `org_role == "org:admin"`** — plain API keys will receive `AuthorizationError`.
+
+```python
+# List all keys (includes quota info)
+key_list: ApiKeyListResponse = control.keys.list()
+
+# Create a new key
+new_key: CreateKeyResponse = control.keys.create(
+    name="ci-deploy",
+    scopes=["read", "write"],
+    expires_at="2027-01-01T00:00:00Z",  # optional
+)
+print(new_key.raw_key)  # shown once — store immediately
+
+# Per-key usage stats (returns list[dict] — raw usage records)
+usage: list[dict] = control.keys.usage(key_id)
+
+# Revoke a key
+control.keys.delete(key_id)
+```
+
+### `control.events`
+
+Browse raw ingested events for your org (console view).
+
+```python
+events: EventListResponse = control.events.list(
+    actor_id="user_42",            # optional filter
+    session_id="session_1",        # optional filter
+    kind="user_message",           # optional filter
+    sort="ts_desc",                # "ts_desc" | "ts_asc"
+    limit=50,
+    offset=0,
+)
+```
+
+### `control.interest`
+
+Express interest in the Pro plan or check waitlist status.
+
+```python
+# Express interest
+resp: ProInterestResponse = control.interest.express(
+    email="you@example.com",
+    name="Your Name",
+    company="Acme Inc",        # optional
+    use_case="AI agent memory", # optional
+)
+
+# Check whether your org has already expressed interest
+already_expressed: bool = control.interest.status()
+```
+
+---
+
+## Async variant
+
+`AsyncMemsyControlClient` is the async counterpart. Every method is identical but returns a coroutine.
+
+```python
+async with AsyncMemsyControlClient(
+    base_url="https://api.memsy.io/api",
+    api_key="msy_...",
+) as control:
+    me = await control.me()
+    summary = await control.usage.summary()
+    events = await control.events.list(limit=20)
+```
+
+Sub-resources (`control.usage`, `control.billing`, `control.keys`, `control.events`, `control.interest`) are all available with `await` equivalents.
+
+---
+
+## See also
+
+- **[`MemsyClient`](/docs/memsy-client)** — hot-path memory client.
+- **[Models](/docs/models)** — all control-plane response dataclasses.
+- **[Exceptions](/docs/exceptions)** — `BillingNotEnabledError`, `KeyLimitReachedError`, `SeatLimitReachedError`, and others raised by this client.
+
+---
+
+## Error Handling
+
+**URL:** https://docs.memsy.io/docs/error-handling
+**Description:** The typed exception hierarchy and how to catch each case.
+
+All SDK calls raise instances of a single exception tree rooted at `MemsyError`. Catching the right one lets you distinguish "need to reconnect" from "upgrade your plan" from "bad credentials".
+
+## The hierarchy
+
+```
+MemsyError
+├── MemsyConnectionError        # network error or timeout
+└── MemsyAPIError               # non-2xx HTTP response
+    ├── AuthenticationError     # 401 — invalid or missing API key
+    ├── AuthorizationError      # 403 — key lacks the required scope
+    ├── FeatureNotAvailable     # 403 — feature not on your tier
+    ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in request
+    ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
+    ├── OrgLimitReachedError    # 403 — org tier limit reached
+    ├── KeyLimitReachedError    # 403 — API key tier limit reached
+    ├── BillingNotEnabledError  # 403 — billing not enabled for this org
+    ├── SeatLimitReachedError   # 409 — purchased seat limit reached
+    ├── RateLimitExceeded       # 429 — rate limit hit (after retries)
+    └── UsageLimitExceeded      # 429 — plan quota exceeded
+```
+
+The SDK exposes all of them from `memsy.exceptions`:
+
+```python
+from memsy.exceptions import (
+    MemsyError,
+    MemsyConnectionError,
+    MemsyAPIError,
+    AuthenticationError,
+    AuthorizationError,
+    FeatureNotAvailable,
+    OrgIdNotAllowedError,
+    SeatRequiredError,
+    OrgLimitReachedError,
+    KeyLimitReachedError,
+    BillingNotEnabledError,
+    SeatLimitReachedError,
+    RateLimitExceeded,
+    UsageLimitExceeded,
+)
+```
+
+## A full example
+
+```python
+from memsy import MemsyClient
+from memsy.exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    FeatureNotAvailable,
+    RateLimitExceeded,
+    UsageLimitExceeded,
+    MemsyConnectionError,
+    MemsyAPIError,
+)
+
+client = MemsyClient(base_url="...", api_key="***")
+
+try:
+    results = client.search("preferences")
+except AuthenticationError:
+    refresh_api_key()
+except AuthorizationError as e:
+    print(f"Missing required scope: {e.required_scope}")
+except FeatureNotAvailable as e:
+    print(f"Feature '{e.feature}' requires an upgrade from {e.current_tier}")
+    print(f"Upgrade at: {e.upgrade_url}")
+except RateLimitExceeded as e:
+    print(f"Rate limited; retry after {e.retry_after}s")
+except UsageLimitExceeded as e:
+    print(f"Hit {e.dimension} limit ({e.current}/{e.limit})")
+    print(f"Upgrade at: {e.upgrade_url}")
+except MemsyConnectionError:
+    ...
+except MemsyAPIError as e:
+    print(f"API error {e.status_code}: {e.detail}")
+```
+
+## Control-plane errors
+
+When using `MemsyControlClient`, you may also encounter:
+
+```python
+from memsy.exceptions import (
+    OrgLimitReachedError,
+    KeyLimitReachedError,
+    BillingNotEnabledError,
+    SeatRequiredError,
+    SeatLimitReachedError,
+)
+
+try:
+    key = control.keys.create("my-key", scopes=["read", "write"])
+except KeyLimitReachedError as e:
+    print(f"Key limit reached: {e.current}/{e.limit}")
+except BillingNotEnabledError as e:
+    print(f"Billing not enabled. Express interest at: {e.interest_path}")
+```
+
+## Exception-specific attributes
+
+### `AuthorizationError`
+
+| Attribute | Description |
+|---|---|
+| `required_scope` | Scope your API key is missing, if known. |
+
+### `FeatureNotAvailable`
+
+| Attribute | Description |
+|---|---|
+| `feature` | The gated feature's identifier. |
+| `current_tier` | The tier of the API key that tried to use it. |
+| `upgrade_url` | Deep-link to the dashboard billing page. |
+
+### `OrgLimitReachedError` / `KeyLimitReachedError`
+
+| Attribute | Description |
+|---|---|
+| `limit` | Tier limit (orgs or keys). |
+| `current` | Current count. |
+
+### `BillingNotEnabledError`
+
+| Attribute | Description |
+|---|---|
+| `interest_path` | API path to express Pro plan interest. |
+
+### `SeatLimitReachedError`
+
+| Attribute | Description |
+|---|---|
+| `purchased_seats` | Total purchased seats. |
+| `assigned_seats` | Currently assigned seats. |
+| `pending_invites` | Pending invite count. |
+
+### `RateLimitExceeded`
+
+| Attribute | Description |
+|---|---|
+| `retry_after` | Seconds to wait before retrying, parsed from `Retry-After`. |
+
+### `UsageLimitExceeded`
+
+| Attribute | Description |
+|---|---|
+| `dimension` | What quota was exhausted (e.g. `"events_ingested"`). |
+| `current` | Current usage count. |
+| `limit` | The limit that was exceeded. |
+| `upgrade_url` | Deep-link to upgrade. |
+
+### `MemsyAPIError` (base class)
+
+Every API-side error carries:
+
+| Attribute | Description |
+|---|---|
+| `status_code` | HTTP status. |
+| `detail` | Server-provided message. |
+| `error_code` | Stable machine-readable code, e.g. `"feature_not_available"`. |
+| `response` | The raw `httpx.Response` for deeper inspection. |
+
+## Catch broadly or narrowly?
+
+- **In request handlers / agent loops** — catch `MemsyError` and surface a friendly error. Log the specific subclass for debugging.
+- **In pipelines with budgets** — handle `UsageLimitExceeded` and `FeatureNotAvailable` distinctly so you can route to an alert channel and link the upgrade page.
+- **In retryable background jobs** — catch `MemsyConnectionError` and `RateLimitExceeded` separately from API-level errors; they're the only ones that "just work" on a later retry.
+- **In control-plane admin code** — handle `BillingNotEnabledError` and `SeatLimitReachedError` and link users to the appropriate dashboard flow.
+
+## Next
+
+- How automatic 429 retry behaves before these exceptions fire → **[Retries](/docs/retries)**.
+
+---
+
+## Events and Memories
+
+**URL:** https://docs.memsy.io/docs/events-and-memories
+**Description:** The mental model — raw events in, extracted memories out.
+
+Memsy splits your data into two distinct things: **events** (raw input) and **memories** (extracted, searchable output).
+
+## Events: the raw input
+
+An **event** is an immutable record of something that happened in your application. You send events to Memsy; you never edit them after the fact.
+
+In the SDK an event is an `EventPayload`:
+
+```python
+from memsy import EventPayload
+
+EventPayload(
+    actor_id="user_42",
+    session_id="session_1",
+    kind="user_message",
+    content="I prefer dark mode in all apps.",
+    ts=None,            # optional ISO-8601 timestamp; defaults to "now" server-side
+    metadata=None,      # optional JSON-serialised string
+)
+```
+
+### Event kinds
+
+| Kind | When to use it |
+|---|---|
+| `user_message` | A message authored by the end user. |
+| `assistant_message` | A reply generated by your AI. |
+| `tool_result` | Output from a tool/function call your assistant made. |
+| `app_event` | Anything else — domain events, lifecycle events, custom signals. |
+
+### When do events show up in search?
+
+Never, directly. Search always returns **memories**, not events. If you want the original source events alongside results, pass `include_source_events=True` to `search()`.
+
+## Memories: the extracted output
+
+A **memory** is something Memsy has distilled from one or more events — a stable fact about an actor or session, written in natural language, embedded into a vector space, and indexed for semantic retrieval. You don't create memories directly; Memsy creates them from your events.
+
+In the SDK a memory surfaces as a `SearchResult`:
+
+```python
+from memsy import SearchResult  # returned from client.search()
+
+SearchResult(
+    id="mem_01JK...",
+    content="User prefers dark mode across apps.",
+    score=0.84,
+    metadata={"actor_id": "user_42"},
+)
+```
+
+## Typical flow
+
+```
+  your app                    Memsy
+  ────────                    ─────
+  build EventPayload
+          │
+          ▼
+    ingest(events) ─────────► queue + extract + embed + index
+                                            │
+                                            ▼
+                                       memory store
+                                            ▲
+                                            │
+    search("...")  ◄───── rank + return ───┘
+```
+
+Events are cheap to produce; memories are created lazily. That's why `ingest()` returns immediately while `search()` reads from the processed index.
+
+## Next
+
+- How actors and sessions scope your data → **[Actors and Sessions](/docs/actors-and-sessions)**.
+- Why ingest is async → **[Async Processing](/docs/async-processing)**.
+
+---
+
+## Exceptions
+
+**URL:** https://docs.memsy.io/docs/exceptions
+**Description:** Every error class the SDK can raise.
+
+All SDK errors are importable from `memsy.exceptions`. The SDK also re-exports them from the top-level `memsy` package.
+
+```python
+from memsy.exceptions import (
+    MemsyError,
+    MemsyConnectionError,
+    MemsyAPIError,
+    AuthenticationError,
+    AuthorizationError,
+    FeatureNotAvailable,
+    OrgIdNotAllowedError,
+    SeatRequiredError,
+    OrgLimitReachedError,
+    KeyLimitReachedError,
+    BillingNotEnabledError,
+    SeatLimitReachedError,
+    RateLimitExceeded,
+    UsageLimitExceeded,
+)
+```
+
+## Hierarchy
+
+```
+MemsyError
+├── MemsyConnectionError        # network error / timeout
+└── MemsyAPIError               # non-2xx HTTP response
+    ├── AuthenticationError     # 401 — invalid or missing API key
+    ├── AuthorizationError      # 403 — key lacks required scope
+    ├── FeatureNotAvailable     # 403 — feature not on your tier
+    ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in body
+    ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
+    ├── OrgLimitReachedError    # 403 — tier limit on orgs reached
+    ├── KeyLimitReachedError    # 403 — tier limit on API keys reached
+    ├── BillingNotEnabledError  # 403 — billing not enabled for this org
+    ├── SeatLimitReachedError   # 409 — purchased seat limit reached
+    ├── RateLimitExceeded       # 429 — rate limit hit (after retries)
+    └── UsageLimitExceeded      # 429 — plan quota exceeded
+```
+
+## `MemsyError`
+
+Base class. Catch this to handle any SDK error.
+
+## `MemsyConnectionError`
+
+Raised when the SDK cannot reach the Memsy endpoint: connection refused, DNS failure, timeout. No additional attributes.
+
+## `MemsyAPIError`
+
+Raised on any non-2xx response not captured by a specific subclass.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `status_code` | `int` | HTTP status. |
+| `detail` | `str` | Server-provided detail message. |
+| `error_code` | `str \| None` | Stable machine-readable error code. |
+| `response` | `httpx.Response` | Raw response. |
+
+## `AuthenticationError` (401)
+
+Invalid or missing API key. Same attributes as `MemsyAPIError`.
+
+## `AuthorizationError` (403)
+
+API key is valid but lacks the required scope.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `required_scope` | `str \| None` | Scope that was missing. |
+
+## `FeatureNotAvailable` (403)
+
+The endpoint is gated behind a higher plan tier.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `feature` | `str \| None` | Feature identifier. |
+| `current_tier` | `str \| None` | Plan tier the key is on. |
+| `upgrade_url` | `str \| None` | Deep link to the upgrade flow. |
+
+## `OrgIdNotAllowedError` (400)
+
+Raised when a free-tier client sends an `org_id` field in the request body. Organization is derived from the API key on free-tier plans; passing one explicitly is rejected.
+
+No extra attributes beyond `MemsyAPIError`.
+
+## `SeatRequiredError` (403)
+
+The console or control-plane endpoint requires the caller to have an assigned seat. Check your org's seat assignments in the dashboard.
+
+No extra attributes beyond `MemsyAPIError`.
+
+## `OrgLimitReachedError` (403)
+
+Your tier's limit on org customization records has been reached. Raised by `client.orgs.create()` when the tier cap is exceeded.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `limit` | `int \| None` | Org limit for your tier. |
+| `current` | `int \| None` | Current org count. |
+
+## `KeyLimitReachedError` (403)
+
+Your tier's limit on API keys has been reached.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `limit` | `int \| None` | Key limit for your tier. |
+| `current` | `int \| None` | Current active key count. |
+
+## `BillingNotEnabledError` (403)
+
+A billing endpoint was called but billing has not been enabled for this org. The response includes a path to express interest in the Pro plan.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `interest_path` | `str \| None` | API path to express interest (`/interest/express`). |
+
+## `SeatLimitReachedError` (409)
+
+A seat-management operation would exceed the number of purchased seats.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `purchased_seats` | `int \| None` | Total purchased seats. |
+| `assigned_seats` | `int \| None` | Currently assigned seats. |
+| `pending_invites` | `int \| None` | Pending invite count. |
+
+## `RateLimitExceeded` (429)
+
+The SDK exhausted its automatic retries.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `retry_after` | `float \| None` | Seconds to wait, parsed from `Retry-After`. |
+
+## `UsageLimitExceeded` (429)
+
+A plan-level quota was exceeded.
+
+| Extra attribute | Type | Description |
+|---|---|---|
+| `dimension` | `str \| None` | Which quota was exhausted (e.g. `"events_ingested"`). |
+| `current` | `int \| None` | Current usage. |
+| `limit` | `int \| None` | Limit that was exceeded. |
+| `upgrade_url` | `str \| None` | Deep link. |
+
+## See also
+
+- **[Error handling guide](/docs/error-handling)** — patterns for each exception.
+
+---
+
+## FAQ
+
+**URL:** https://docs.memsy.io/docs/faq
+**Description:** Answers to questions we hear most often.
+
+
+
+---
+
+## Memsy Docs
+
+**URL:** https://docs.memsy.io/docs
+**Description:** Persistent memory for AI agents and applications. The official Python client.
+
+**Memsy** turns the raw events your AI app produces — user messages, assistant replies, tool results — into structured, searchable long-term memory.
+
+The `memsy` package is the official Python client for the Memsy API: a thin, typed HTTP client with built-in retries, usage tracking, and a sync/async twin.
+
+```bash
+pip install memsy
+```
+
+  
+  
+  
+
+## What the SDK does
+
+- Ships events to Memsy with a single `ingest()` call (batched, async on the server).
+- Retrieves semantically relevant memories with `search()`.
+- Surfaces usage, rate-limit, and plan information on every response.
+- Maps HTTP errors to strongly-typed exceptions (`AuthenticationError`, `RateLimitExceeded`, `UsageLimitExceeded`, …).
+- Retries rate-limited requests automatically with exponential backoff.
+
+## What it does not do
+
+The SDK is a thin HTTP client. It does not run memory extraction, embeddings, or vector search locally — all processing happens on the Memsy platform.
+
+## Links
+
+- Dashboard & sign in — [app.memsy.io](https://app.memsy.io)
+- Package on PyPI — [pypi.org/project/memsy](https://pypi.org/project/memsy/)
+
+Ready? Head to the **[Quickstart](/docs/quickstart)**.
+
+---
+
+## Ingesting Events
+
+**URL:** https://docs.memsy.io/docs/ingesting-events
+**Description:** Batch size, metadata, timestamps, scoping — everything beyond the quickstart.
+
+`ingest()` takes a list of `EventPayload` objects and returns their IDs.
+
+## Role and team scoping
+
+This is what sets Memsy apart: every event can be scoped to a role and team in your [onboarding hierarchy](/docs/onboarding). Extracted memories are stored at the right level of your org — not just a flat blob per user — so searches respect organizational context automatically.
+
+```python
+from memsy import EventPayload
+
+client.ingest([
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="user_message",
+        content="I always prefer dark mode in my dev environment.",
+        role_id="role_frontend_dev",
+        team_id="team_platform",
+    )
+])
+```
+
+The memory extractor uses the role's and team's `promotion_prompt` to bias extraction toward what's relevant for that context. Memories then flow up the hierarchy: actor → role → team → org.
+
+`role_id` and `team_id` are optional. Events without them are stored at the actor scope. Both fields are ignored on free-tier orgs that haven't configured a hierarchy.
+
+---
+
+## The minimum viable event
+
+```python
+from memsy import EventPayload
+
+EventPayload(
+    actor_id="user_42",
+    session_id="session_1",
+    kind="user_message",
+    content="Remember my flight is on Friday.",
+)
+```
+
+Four fields. Everything else is optional.
+
+## Timestamps
+
+If your events are live, omit `ts` and the server stamps them. If you're **backfilling** historical data, always pass an ISO-8601 timestamp:
+
+```python
+EventPayload(
+    actor_id="user_42",
+    session_id="session_1",
+    kind="user_message",
+    content="...",
+    ts="2026-03-15T14:22:10Z",
+)
+```
+
+Backfilled events with explicit timestamps get the same treatment as live events during extraction, but the timestamp is used for recency weighting in search.
+
+## Metadata
+
+`metadata` is a **JSON-serialised string** (not a dict). Use it for application-level fields you want back with search results — tags, source identifiers, custom flags:
+
+```python
+
+EventPayload(
+    actor_id="user_42",
+    session_id="session_1",
+    kind="app_event",
+    content="User upgraded to pro plan.",
+    metadata=json.dumps({"plan": "pro", "source": "billing-webhook"}),
+)
+```
+
+Memsy echoes the raw metadata string back in each `SearchResult` so you can deserialize it client-side.
+
+## Batching
+
+`ingest()` is designed for batches. Send many events in one call whenever you can:
+
+```python
+batch: list[EventPayload] = []
+
+for msg in conversation_turns:
+    batch.append(EventPayload(
+        actor_id=user_id,
+        session_id=session_id,
+        kind="user_message" if msg.role == "user" else "assistant_message",
+        content=msg.text,
+    ))
+
+result = client.ingest(batch)
+```
+
+Recommended batch size: tens to low hundreds. Very large batches (thousands) increase tail latency and risk hitting request-size limits.
+
+## Return value
+
+`IngestResponse.event_ids` gives you the IDs the server assigned, in the **same order** as the input. Pair them up if you need to track processing per event:
+
+```python
+result = client.ingest(batch)
+pairs = dict(zip(result.event_ids, batch))
+```
+
+## Idempotency
+
+- Memsy de-duplicates within a short rolling window by `(actor_id, session_id, kind, content)` hash. Re-sending the same event back-to-back won't double-count.
+- If you genuinely need to re-ingest, change any of the four fields — typically by appending `ts` to the content or sending a fresh `session_id`.
+
+## Failure modes
+
+`ingest()` itself can fail with:
+
+- `AuthenticationError` — bad API key.
+- `UsageLimitExceeded` — you've hit a quota (events, tokens, storage).
+- `RateLimitExceeded` — the SDK retried automatically, but you still exhausted the budget.
+- `MemsyConnectionError` — network or timeout.
+
+Individual events can also **fail during extraction** after a successful ingest. Those show up in `status().failed_ids` later. See **[Async Processing](/docs/async-processing)**.
+
+## Next
+
+- Retrieve what you stored → **[Searching memory](/docs/searching-memory)**.
+
+---
+
+## Installation
+
+**URL:** https://docs.memsy.io/docs/installation
+**Description:** Install the memsy Python package.
+
+## Requirements
+
+- **Python**: 3.10, 3.11, 3.12 or 3.13.
+- **OS**: macOS, Linux, Windows.
+- **One dependency**: [`httpx`](https://www.python-httpx.org/) `>=0.25`, installed automatically.
+
+## Install from PyPI
+
+  
+  
+  
+
+## Verify the install
+
+```python
+
+print(memsy.__name__)          # 'memsy'
+from memsy import MemsyClient  # no ImportError
+```
+
+## Dev extras
+
+If you're contributing to the SDK or want the test tooling locally:
+
+```bash
+pip install "memsy[dev]"
+```
+
+Adds `pytest`, `pytest-asyncio`, `anyio`, `black`, and `ruff`.
+
+## Next
+
+→ **[Run your first call](/docs/quickstart)**
+
+---
+
+## MemsyClient
+
+**URL:** https://docs.memsy.io/docs/memsy-client
+**Description:** Synchronous HTTP client — constructor, methods, parameters, exceptions.
+
+Synchronous HTTP client for the Memsy hot-path API (memsy-core).
+
+```python
+from memsy import MemsyClient
+```
+
+## Constructor
+
+```python
+MemsyClient(
+    base_url: str,
+    api_key: str,
+    timeout: float = 30.0,
+    max_retries: int = 3,
+    retry_backoff: float = 1.0,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `base_url` | `str` | — | Memsy API base URL, e.g. `"https://api.memsy.io"`. Trailing slashes are trimmed. |
+| `api_key` | `str` | — | API key of the form `msy_...`. Sent as `Authorization: Bearer <key>`. |
+| `timeout` | `float` | `30.0` | Request timeout in seconds. Covers connect + read + write. |
+| `max_retries` | `int` | `3` | Max automatic retries on HTTP 429. |
+| `retry_backoff` | `float` | `1.0` | Base exponential backoff in seconds between 429 retries. |
+
+## Context manager
+
+```python
+with MemsyClient(base_url="...", api_key="***") as client:
+    client.health()
+```
+
+## Methods
+
+### `ingest(events)`
+
+Ingest a batch of events.
+
+```python
+ingest(events: list[EventPayload]) -> IngestResponse
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `events` | `list[EventPayload]` | Events to ingest. Same order is preserved in the response. |
+
+**Returns**: `IngestResponse` with `event_ids`, plus optional `usage` / `rate_limit`.
+
+**Raises**: `AuthenticationError`, `AuthorizationError`, `FeatureNotAvailable`, `RateLimitExceeded`, `UsageLimitExceeded`, `MemsyConnectionError`, `MemsyAPIError`.
+
+---
+
+### `search(query, *, actor_id, limit, threshold, include_source_events)`
+
+Retrieve memories via semantic search.
+
+```python
+search(
+    query: str,
+    *,
+    actor_id: str | None = None,
+    limit: int = 10,
+    threshold: float = 0.3,
+    include_source_events: bool = False,
+) -> SearchResponse
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `query` | `str` | — | Natural-language query. |
+| `actor_id` | `str \| None` | `None` | Filter results to a single actor. |
+| `limit` | `int` | `10` | Maximum number of results. |
+| `threshold` | `float` | `0.3` | Minimum similarity score. |
+| `include_source_events` | `bool` | `False` | Include source events in each result. |
+
+**Returns**: `SearchResponse` with `results: list[SearchResult]`, plus optional `usage` / `rate_limit`.
+
+---
+
+### `status(event_ids)`
+
+```python
+status(event_ids: list[str]) -> StatusResponse
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `event_ids` | `list[str]` | Event IDs returned from a prior `ingest()` call. |
+
+**Returns**: `StatusResponse` with `completed_ids`, `failed_ids`, `pending_ids`, `total`.
+
+---
+
+### `health()`
+
+```python
+health() -> HealthResponse
+```
+
+**Returns**: `HealthResponse` with `status`, `version`, and optionally `billing_enabled` and `components`.
+
+---
+
+### `clear(container_tag)`
+
+```python
+clear(container_tag: str) -> ClearResponse
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `container_tag` | `str` | Container/conversation tag to clear. |
+
+**Returns**: `ClearResponse` with `deleted` (count of cleared items).
+
+---
+
+### `close()`
+
+Close the underlying HTTP connection pool. Called automatically by the context manager.
+
+```python
+close() -> None
+```
+
+---
+
+## Sub-resource accessors
+
+`MemsyClient` exposes three onboarding sub-resources and a console-memory sub-resource. Each is a thin accessor that delegates to the same underlying HTTP client.
+
+### `client.orgs`
+
+CRUD for org customization records. See **[Onboarding](/docs/onboarding)**.
+
+```python
+client.orgs.list() -> list[OrgResource]
+client.orgs.create(org_id, name, focus) -> OrgResource
+client.orgs.get(org_id) -> OrgResource
+client.orgs.update(org_id, *, name=None, focus=None, promotion_prompt=None) -> OrgResource
+client.orgs.regenerate_prompt(org_id) -> OrgResource
+client.orgs.delete(org_id) -> None
+```
+
+### `client.roles`
+
+CRUD for role customization records within an org. The server assigns `role_id` — it is returned in the response, not supplied at creation.
+
+```python
+client.roles.list(org_id) -> list[RoleResource]
+client.roles.create(org_id, name, focus) -> RoleResource
+client.roles.get(role_id, org_id) -> RoleResource
+client.roles.update(role_id, org_id, *, name=None, focus=None, promotion_prompt=None) -> RoleResource
+client.roles.regenerate_prompt(role_id, org_id) -> RoleResource
+client.roles.delete(role_id, org_id) -> None
+```
+
+### `client.teams`
+
+CRUD for team customization records within an org. The server assigns `team_id` — it is returned in the response, not supplied at creation.
+
+```python
+client.teams.list(org_id) -> list[TeamResource]
+client.teams.create(org_id, name, focus) -> TeamResource
+client.teams.get(team_id, org_id) -> TeamResource
+client.teams.update(team_id, org_id, *, name=None, focus=None, promotion_prompt=None) -> TeamResource
+client.teams.regenerate_prompt(team_id, org_id) -> TeamResource
+client.teams.delete(team_id, org_id) -> None
+```
+
+### `client.memories`
+
+Browse and inspect stored memories. See **[Console Memories](/docs/console-memories)**.
+
+```python
+client.memories.list(
+    *,
+    kind: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    sort: str = "observed_at_desc",
+    search: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> MemoryListResponse
+
+client.memories.get(memory_id: str) -> MemoryItemResource
+client.memories.stats() -> MemoryStatsResponse
+```
+
+---
+
+## Thread safety
+
+A `MemsyClient` wraps an `httpx.Client`, which is safe to share across threads for HTTP calls. Create one client per process and reuse it.
+
+## See also
+
+- **[`AsyncMemsyClient`](/docs/async-memsy-client)** — same interface, async.
+- **[`MemsyControlClient`](/docs/control-client)** — control-plane client (billing, keys, usage).
+- **[Models](/docs/models)** — every request/response dataclass.
+- **[Exceptions](/docs/exceptions)** — every error class.
+
+---
+
+## Models
+
+**URL:** https://docs.memsy.io/docs/models
+**Description:** Request and response dataclasses exposed by the SDK.
+
+All SDK models are plain Python `@dataclass`es imported from `memsy`.
+
+## Core imports
+
+```python
+from memsy import (
+    # Request
+    EventPayload,
+    # Core responses
+    IngestResponse,
+    SearchResponse,
+    SearchResult,
+    SourceEvent,
+    StatusResponse,
+    HealthResponse,
+    ClearResponse,
+    # Onboarding (memsy-core)
+    OrgResource,
+    RoleResource,
+    TeamResource,
+    # Console memories (memsy-core)
+    MemoryScopeInfo,
+    MemoryItemResource,
+    MemoryListResponse,
+    MemoryStatsResponse,
+    # Control-plane (api/)
+    MeResponse,
+    UsageSummaryResponse,
+    DimensionUsage,
+    UsageTimeseriesResponse,
+    TimeseriesPoint,
+    BillingSummary,
+    PaymentMethod,
+    UpcomingInvoice,
+    Invoice,
+    ApiKeyInfo,
+    ApiKeyListResponse,
+    CreateKeyResponse,
+    EventItemResponse,
+    EventListResponse,
+    ProInterestResponse,
+    # Observability
+    UsageInfo,
+    RateLimitInfo,
+)
+```
+
+---
+
+## Request models
+
+### `EventPayload`
+
+A single event to ingest.
+
+```python
+@dataclass
+class EventPayload:
+    actor_id: str
+    session_id: str
+    kind: str           # "user_message" | "assistant_message" | "tool_result" | "app_event"
+    content: str
+    ts: str | None = None        # optional ISO-8601 timestamp
+    metadata: str | None = None  # optional JSON-serialised string
+    role_id: str | None = None   # role scope for the event
+    team_id: str | None = None   # team scope for the event
+```
+
+`role_id` and `team_id` are optional scope hints that associate the event with a specific role or team in your onboarding hierarchy. They are ignored on free-tier orgs.
+
+---
+
+## Core response models
+
+### `IngestResponse`
+
+```python
+@dataclass
+class IngestResponse:
+    event_ids: list[str]
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `SearchResponse`
+
+```python
+@dataclass
+class SearchResponse:
+    results: list[SearchResult]
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `SearchResult`
+
+A single memory returned by `search()`.
+
+```python
+@dataclass
+class SearchResult:
+    id: str
+    content: str
+    score: float
+    metadata: dict[str, Any] | None = None
+```
+
+**Typed metadata properties** (shortcuts into `metadata`):
+
+| Property | Type | Description |
+|---|---|---|
+| `.title` | `str \| None` | Memory title, if set. |
+| `.summary` | `str \| None` | Short summary of the memory. |
+| `.tags` | `list[str]` | Tags attached to this memory. |
+| `.entities` | `list[dict]` | Named entities extracted during processing. |
+| `.kind` | `str \| None` | Memory kind (e.g. `"semantic"`, `"episodic"`). |
+| `.type` | `str \| None` | Memory type (e.g. `"preference"`, `"fact"`). |
+| `.strength` | `float \| None` | Reinforcement strength (0–1). |
+| `.confidence` | `float \| None` | Extraction confidence (0–1). |
+| `.observed_at` | `str \| None` | ISO-8601 timestamp when memory was observed. |
+| `.source_event_ids` | `list[str]` | IDs of the source events. |
+| `.source_events` | `list[SourceEvent]` | Hydrated source events (requires `include_source_events=True`). |
+
+### `SourceEvent`
+
+A source event hydrated inside `SearchResult.source_events`.
+
+```python
+@dataclass
+class SourceEvent:
+    event_id: str
+    kind: str
+    content: str
+    ts: str | None = None
+```
+
+Only populated when you pass `include_source_events=True` to `search()`.
+
+### `StatusResponse`
+
+```python
+@dataclass
+class StatusResponse:
+    completed_ids: list[str]
+    failed_ids: list[str]
+    pending_ids: list[str]
+    total: int
+    statuses: dict[str, str] | None = None  # event_id → status map
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `HealthResponse`
+
+```python
+@dataclass
+class HealthResponse:
+    status: str
+    version: str = ""
+    billing_enabled: bool | None = None       # present on control-plane /health
+    components: dict[str, str] | None = None  # component → status map
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+### `ClearResponse`
+
+```python
+@dataclass
+class ClearResponse:
+    deleted: int
+    usage: UsageInfo | None = None
+    rate_limit: RateLimitInfo | None = None
+```
+
+---
+
+## Onboarding models (memsy-core)
+
+Returned by `client.orgs.*`, `client.roles.*`, and `client.teams.*`.
+
+### `OrgResource`
+
+```python
+@dataclass
+class OrgResource:
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+```
+
+### `RoleResource`
+
+```python
+@dataclass
+class RoleResource:
+    role_id: str
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+```
+
+### `TeamResource`
+
+```python
+@dataclass
+class TeamResource:
+    team_id: str
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+```
+
+---
+
+## Console memory models (memsy-core)
+
+Returned by `client.memories.*`.
+
+### `MemoryScopeInfo`
+
+```python
+@dataclass
+class MemoryScopeInfo:
+    level: str               # "org" | "role" | "team" | "actor"
+    actor_id: str | None = None
+    team_id: str | None = None
+    role_id: str | None = None
+```
+
+### `MemoryItemResource`
+
+A full memory record as stored in the engine.
+
+```python
+@dataclass
+class MemoryItemResource:
+    memory_id: str
+    org_id: str
+    scope: MemoryScopeInfo
+    type: str
+    kind: str
+    memory_kind: str
+    status: str
+    text: str
+    confidence: float
+    strength: float
+    recall_count: int
+    decay_half_life_days: float
+    pinned: bool
+    tags: list[str]
+    entity_refs: list[dict[str, str]]
+    source_event_ids: list[str]
+    source_urls: list[str]
+    summary: str | None = None
+    payload: dict[str, Any] | None = None
+    last_recalled_at: str | None = None
+    effective_from: str | None = None
+    effective_to: str | None = None
+    observed_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+```
+
+### `MemoryListResponse`
+
+```python
+@dataclass
+class MemoryListResponse:
+    items: list[MemoryItemResource]
+    total: int
+    limit: int
+    offset: int
+```
+
+### `MemoryStatsResponse`
+
+```python
+@dataclass
+class MemoryStatsResponse:
+    total: int
+    total_memories: int
+    active_memories: int
+    by_type: dict[str, int]
+    by_kind: dict[str, int]
+    by_status: dict[str, int]
+    avg_confidence: float
+    avg_strength: float
+    top_entities: list[dict[str, Any]]
+    confidence_buckets: list[dict[str, Any]] | None = None
+    date_range: dict[str, str | None] | None = None
+```
+
+---
+
+## Control-plane models (api/)
+
+Returned by `MemsyControlClient` and its sub-resources.
+
+### `MeResponse`
+
+```python
+@dataclass
+class MeResponse:
+    customer_id: str
+    email: str
+    tier: str
+    is_superadmin: bool
+    org_id: str
+    is_billing_admin: bool
+    user_id: str | None = None
+    org_role: str | None = None
+```
+
+### `UsageSummaryResponse` / `DimensionUsage`
+
+```python
+@dataclass
+class DimensionUsage:
+    dimension: str
+    used: int
+    limit: int | None = None
+    overage_rate: float | None = None
+
+@dataclass
+class UsageSummaryResponse:
+    org_id: str
+    tier: str
+    period_start: str
+    period_end: str
+    dimensions: list[DimensionUsage]
+```
+
+### `UsageTimeseriesResponse` / `TimeseriesPoint`
+
+```python
+@dataclass
+class TimeseriesPoint:
+    date: str
+    dimension: str
+    quantity: int
+
+@dataclass
+class UsageTimeseriesResponse:
+    org_id: str
+    granularity: str
+    data: list[TimeseriesPoint]
+```
+
+### `BillingSummary` / `PaymentMethod` / `UpcomingInvoice`
+
+```python
+@dataclass
+class PaymentMethod:
+    brand: str
+    last4: str
+    exp_month: int
+    exp_year: int
+
+@dataclass
+class UpcomingInvoice:
+    amount_due: int   # amount in smallest currency unit (e.g. cents)
+    currency: str
+    period_end: int   # Unix timestamp from Stripe
+
+@dataclass
+class BillingSummary:
+    tier: str
+    purchased_seats: int
+    assigned_seats: int
+    available_seats: int
+    stripe_customer_id: str | None = None
+    payment_method: PaymentMethod | None = None
+    upcoming_invoice: UpcomingInvoice | None = None
+    subscription_status: str | None = None
+    billing_contact: str | None = None
+    stripe_subscription_id: str | None = None
+```
+
+### `Invoice`
+
+```python
+@dataclass
+class Invoice:
+    id: str
+    amount_due: int
+    amount_paid: int
+    currency: str
+    status: str
+    created: str              # stringified Unix timestamp as returned by the API
+    hosted_invoice_url: str | None = None
+```
+
+### `ApiKeyInfo` / `ApiKeyListResponse` / `CreateKeyResponse`
+
+```python
+@dataclass
+class ApiKeyInfo:
+    key_id: str
+    prefix: str
+    name: str
+    scopes: list[str]
+    is_active: bool
+    created_at: str
+    last_used_at: str | None = None
+    expires_at: str | None = None
+
+@dataclass
+class ApiKeyListResponse:
+    keys: list[ApiKeyInfo]
+    max_keys: int
+    active_count: int
+
+@dataclass
+class CreateKeyResponse:
+    key_id: str
+    raw_key: str      # shown once — store securely
+    prefix: str
+    name: str
+    scopes: list[str]
+```
+
+### `EventItemResponse` / `EventListResponse`
+
+```python
+@dataclass
+class EventItemResponse:
+    event_id: str
+    org_id: str
+    actor_id: str
+    kind: str
+    content: str
+    ts: str
+    session_id: str | None = None
+    metadata: dict[str, Any] | None = None
+    ingested_at: str | None = None
+
+@dataclass
+class EventListResponse:
+    items: list[EventItemResponse]
+    total: int
+    limit: int
+    offset: int
+```
+
+### `ProInterestResponse`
+
+```python
+@dataclass
+class ProInterestResponse:
+    message: str
+```
+
+---
+
+## Observability models
+
+### `UsageInfo`
+
+Parsed from `X-Usage-*` and `X-Plan` response headers. Present on most `MemsyClient` responses.
+
+```python
+@dataclass
+class UsageInfo:
+    api_calls: int | None = None
+    api_calls_limit: int | None = None
+    events_ingested: int | None = None
+    events_ingested_limit: int | None = None
+    memory_stored: int | None = None
+    memory_stored_limit: int | None = None
+    llm_tokens: int | None = None
+    llm_tokens_limit: int | None = None
+    search_queries: int | None = None
+    search_queries_limit: int | None = None
+    plan: str | None = None
+```
+
+### `RateLimitInfo`
+
+Parsed from `X-RateLimit-*` headers.
+
+```python
+@dataclass
+class RateLimitInfo:
+    limit: int | None = None
+    remaining: int | None = None
+    reset: int | None = None  # Unix timestamp
+```
+
+See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for the full header mapping.
+
+---
+
+## Onboarding Hierarchy
+
+**URL:** https://docs.memsy.io/docs/onboarding
+**Description:** Create orgs, roles, and teams to scope memory extraction and retrieval.
+
+Memsy supports a three-level onboarding hierarchy — **org → role → team** — that controls how memories are scoped and how extraction prompts are customised. Setting this up is optional: the SDK works fine without it, but adding hierarchy lets you tune extraction for different parts of your user base.
+
+## Hierarchy overview
+
+```
+org
+├── team   (e.g. "platform team", "enterprise sales")
+└── role   (e.g. "frontend engineer", "sales rep")
+```
+
+Roles and teams are **independent siblings** under an org — a role does not belong to a team in the data model. An actor can be tagged with both a `role_id` and a `team_id` at the same time.
+
+What connects them is the **memory promotion chain**: when memories are promoted up the hierarchy, the path is actor → role → team → org. Each level has its own `promotion_prompt` that biases extraction for what matters at that scope.
+
+Events tagged with `role_id` or `team_id` in `EventPayload` are extracted with the customised prompt for that role/team.
+
+## Accessing the sub-resources
+
+```python
+from memsy import MemsyClient
+
+client = MemsyClient(base_url="...", api_key="msy_...")
+
+# Org sub-resource
+client.orgs
+
+# Role sub-resource
+client.roles
+
+# Team sub-resource
+client.teams
+```
+
+Async equivalents are available on `AsyncMemsyClient` — same methods, all `await`ed.
+
+---
+
+## Orgs
+
+### Create
+
+```python
+org = client.orgs.create(
+    org_id="my-org",
+    name="Acme Inc",
+    focus="B2B SaaS company building developer tools",
+)
+print(org.promotion_prompt)  # auto-generated extraction prompt
+```
+
+### List
+
+```python
+orgs: list[OrgResource] = client.orgs.list()
+```
+
+### Get
+
+```python
+org = client.orgs.get("my-org")
+```
+
+### Update
+
+```python
+org = client.orgs.update("my-org", name="Acme Corp", focus="Updated focus")
+```
+
+### Regenerate prompt
+
+Re-runs the LLM prompt generation using the current `name` and `focus`:
+
+```python
+org = client.orgs.regenerate_prompt("my-org")
+print(org.promotion_prompt)
+```
+
+### Delete
+
+```python
+client.orgs.delete("my-org")
+```
+
+---
+
+## Roles
+
+Roles represent distinct personas or job functions within your org.
+
+```python
+role = client.roles.create(
+    org_id="my-org",
+    name="Backend Engineer",
+    focus="Python, distributed systems, Postgres",
+)
+# role.role_id is assigned by the server
+
+roles = client.roles.list("my-org")
+role = client.roles.get(role.role_id, "my-org")
+role = client.roles.update(role.role_id, "my-org", focus="Updated focus")
+role = client.roles.regenerate_prompt(role.role_id, "my-org")
+client.roles.delete(role.role_id, "my-org")
+```
+
+---
+
+## Teams
+
+Teams represent groups of actors that share a context.
+
+```python
+team = client.teams.create(
+    org_id="my-org",
+    name="Platform Team",
+    focus="Infrastructure, CI/CD, reliability",
+)
+# team.team_id is assigned by the server
+
+teams = client.teams.list("my-org")
+team = client.teams.get(team.team_id, "my-org")
+team = client.teams.update(team.team_id, "my-org", name="Platform & Infra")
+team = client.teams.regenerate_prompt(team.team_id, "my-org")
+client.teams.delete(team.team_id, "my-org")
+```
+
+---
+
+## Tagging events with role/team
+
+Once the hierarchy is set up, tag events at ingest time:
+
+```python
+from memsy import EventPayload
+
+client.ingest([
+    EventPayload(
+        actor_id="user_42",
+        session_id="session_1",
+        kind="user_message",
+        content="I prefer to use Rust for performance-critical paths.",
+        role_id="role_eng",
+        team_id="team_platform",
+    )
+])
+```
+
+The memory extractor uses the role's/team's `promotion_prompt` to bias extraction toward relevant facts for that context.
+
+---
+
+## Response model
+
+All three sub-resources return their respective models:
+
+```python
+@dataclass
+class OrgResource:
+    org_id: str
+    name: str
+    focus: str
+    promotion_prompt: str
+    created_at: str
+    updated_at: str
+    prompt_meta: dict[str, Any] | None = None
+
+# RoleResource adds role_id; TeamResource adds team_id
+# All share the same remaining fields
+```
+
+See **[Models](/docs/models)** for the full `OrgResource`, `RoleResource`, and `TeamResource` definitions.
+
+---
+
+## See also
+
+- **[Ingesting Events](/docs/ingesting-events)** — `role_id` / `team_id` on `EventPayload`.
+- **[Console Memories](/docs/console-memories)** — browse memories scoped to roles/teams.
+- **[`MemsyClient`](/docs/memsy-client)** — full sub-resource method signatures.
+
+---
+
+## Quickstart
+
+**URL:** https://docs.memsy.io/docs/quickstart
+**Description:** Sign up, install memsy, and run your first ingest + search in under five minutes.
+
+Five minutes to your first memory. This page walks you through **dashboard → install → ingest → search** end-to-end.
+
+  
+
+  
+
+  
+  
+
+  
+      
+      
+    
+  
+
+  
+      
+      
+    
+  
+
+## What just happened?
+
+In three calls you:
+
+1. **Ingested** raw events over HTTPS with Bearer-token auth.
+2. **Memsy queued them** and ran extraction → embeddings → indexing on its worker pool.
+3. **Searched** a semantic index and got back ranked `SearchResult` objects.
+
+And as a bonus:
+
+- Every response has `.usage` and `.rate_limit` populated from response headers — you already know how much of your plan you've used.
+- Rate-limited calls (HTTP 429) are retried automatically with exponential backoff. No code to write.
+- HTTP errors come back as typed Python exceptions (`AuthenticationError`, `UsageLimitExceeded`, `FeatureNotAvailable`, …).
+
+## What's next
+
+---
+
+## Retries and Timeouts
+
+**URL:** https://docs.memsy.io/docs/retries
+**Description:** Auto-retry on 429, how to tune it, and when to back off yourself.
+
+The SDK retries rate-limited (HTTP 429) requests automatically. Everything else is up to you.
+
+## What the SDK retries
+
+- **429 responses**, up to `max_retries` times with exponential backoff.
+- If the response includes a `Retry-After` header, the SDK waits exactly that long.
+- Otherwise the SDK waits `retry_backoff * (2 ** attempt)` seconds — `1s, 2s, 4s, …` with the defaults.
+
+## What the SDK does not retry
+
+- 4xx responses other than 429. These raise immediately.
+- 5xx responses. These surface as `MemsyAPIError`; retry them yourself if appropriate.
+- Timeouts and connection errors. These raise `MemsyConnectionError`.
+
+## Tuning retry behaviour
+
+```python
+from memsy import MemsyClient
+
+client = MemsyClient(
+    base_url="https://api.memsy.io",
+    api_key="***",
+    max_retries=5,       # try up to 5 times on 429 (default: 3)
+    retry_backoff=2.0,   # base backoff, doubles per attempt (default: 1.0)
+    timeout=60.0,        # per-request timeout in seconds (default: 30.0)
+)
+```
+
+### When to increase `max_retries`
+
+For background workers and batch jobs where latency doesn't matter but making forward progress does.
+
+### When to decrease `max_retries`
+
+For user-facing request paths where you'd rather fail fast and show an error than hang the request while the SDK sleeps.
+
+### `retry_backoff`
+
+Tune if you're sharing one API key across many workers and want to spread retries out. In most single-client setups the default is fine.
+
+## What happens after retries are exhausted
+
+The SDK raises `RateLimitExceeded` with `retry_after` populated if the server provided one.
+
+```python
+from memsy.exceptions import RateLimitExceeded
+
+try:
+    client.search("preferences")
+except RateLimitExceeded as e:
+    print(f"Still rate limited after retries; try again in {e.retry_after}s")
+```
+
+## Idempotency considerations
+
+- `search()` is read-only and always safe to retry.
+- `ingest()` is idempotent within a short rolling window — the server de-duplicates by content hash. Retrying a batch after a 429 is safe.
+- `status()` is read-only.
+- `clear()` is idempotent by definition.
+
+## Timeouts
+
+`timeout` is passed straight through to `httpx`. It covers the full request lifecycle — connect + read + write. If a single call can take longer, raise it. Timeouts raise `MemsyConnectionError`, not `RateLimitExceeded`.
+
+## Next
+
+- Back to the [API Reference](/docs/memsy-client).
+
+---
+
+## Searching Memory
+
+**URL:** https://docs.memsy.io/docs/searching-memory
+**Description:** Natural-language queries, thresholds, scoping, and score interpretation.
+
+`search()` takes a natural-language query and returns ranked memories.
+
+## Basic usage
+
+```python
+results = client.search("what does the user prefer?")
+
+for r in results.results:
+    print(r.score, r.content)
+```
+
+## Parameters
+
+```python
+client.search(
+    query,                              # required, natural language
+    *,
+    actor_id=None,                      # optional — filter to one actor
+    limit=10,                           # max results (default 10)
+    threshold=0.3,                      # minimum similarity (0.0–1.0)
+    include_source_events=False,        # attach source events to results
+)
+```
+
+### `query`
+
+Plain English. You don't need to phrase it like a keyword search — "things the user mentioned about their dog" works.
+
+### `actor_id`
+
+Pass it to scope the search to one user/agent. Omit it to search across every actor in the organization. In most user-facing flows you want to pass the current actor.
+
+### `limit`
+
+How many results to return. Memsy may return fewer if not enough pass the threshold. Valid range: 1–100.
+
+### `threshold`
+
+A floor on the similarity score. The default `0.3` is a practical starting point — lower to get more results, raise to cut noise. A very high threshold (e.g. `0.8`) returns only near-exact matches.
+
+### `include_source_events`
+
+When `True`, each result additionally includes the source events the memory was extracted from. Useful for showing provenance in a UI.
+
+## The result shape
+
+```python
+results.results  # list[SearchResult]
+
+r.id        # stable memory ID
+r.content   # natural-language memory, e.g. "User prefers dark mode"
+r.score     # float; higher = closer match
+r.metadata  # dict | None — whatever app-level data was attached
+```
+
+## Reading usage and rate-limit info
+
+Every response carries observability metadata:
+
+```python
+results = client.search("preferences", actor_id="user_42")
+
+if results.usage:
+    print(f"Plan: {results.usage.plan}")
+    print(f"Search queries: {results.usage.search_queries}/{results.usage.search_queries_limit}")
+
+if results.rate_limit:
+    print(f"Remaining this window: {results.rate_limit.remaining}")
+```
+
+See **[Usage and Rate Limits](/docs/usage-and-rate-limits)** for every field.
+
+## Common patterns
+
+### Personalisation at prompt time
+
+```python
+memories = client.search(
+    query=user_message,
+    actor_id=user_id,
+    limit=5,
+    threshold=0.4,
+).results
+
+system_preamble = "Relevant context:\n" + "\n".join(f"- {m.content}" for m in memories)
+```
+
+### Cross-actor search (admin tools)
+
+Leave `actor_id` unset and you'll search every actor in the org. Good for analytics dashboards and support tooling; almost never what you want in an end-user-facing agent loop.
+
+### Empty results
+
+`search()` always returns a `SearchResponse`. If nothing passed the threshold, `results.results == []`. Handle that case in your UI.
+
+## Limitations
+
+Search only returns memories that have finished processing. Very recent events may still be in the queue — see **[Async Processing](/docs/async-processing)**.
+
+## Next
+
+- Run the same thing from asyncio → **[Async client](/docs/async-client)**.
+
+---
+
+## Sign Up & Get an API Key
+
+**URL:** https://docs.memsy.io/docs/signup
+**Description:** Create an account, provision an organization, and generate your first API key.
+
+Before you can use the SDK you need a Memsy account, an organization, and an API key. Everything below happens in the dashboard at **[app.memsy.io](https://app.memsy.io)**.
+
+  
+  
+
+  
+
+  
+
+  
+
+## Rotate or revoke a key
+
+Back in **Settings → API Keys** you can rotate any key at any time. A revoked key stops working immediately; rotation issues a new key and leaves the old one working until you delete it.
+
+## Next
+
+→ **[Install the package](/docs/installation)**
+
+---
+
+## Usage and Rate Limits
+
+**URL:** https://docs.memsy.io/docs/usage-and-rate-limits
+**Description:** Track plan consumption from response headers automatically.
+
+Every successful response from the Memsy API carries HTTP headers describing your current usage and rate-limit posture. The SDK parses them into two typed objects on every response:
+
+- `response.usage` — a `UsageInfo`, from `X-Usage-*` and `X-Plan` headers.
+- `response.rate_limit` — a `RateLimitInfo`, from `X-RateLimit-*` headers.
+
+Both may be `None` if the server didn't return the corresponding headers.
+
+## Accessing usage
+
+```python
+result = client.search("query")
+
+if result.usage:
+    print(f"Plan: {result.usage.plan}")
+    print(f"API calls: {result.usage.api_calls}/{result.usage.api_calls_limit}")
+    print(f"Search queries: {result.usage.search_queries}/{result.usage.search_queries_limit}")
+```
+
+Fields on `UsageInfo`:
+
+| Field | Description |
+|---|---|
+| `api_calls` | Total API calls this billing period. |
+| `api_calls_limit` | API call limit for your plan. |
+| `events_ingested` | Events ingested this period. |
+| `events_ingested_limit` | Ingestion limit. |
+| `memory_stored` | Memories currently stored. |
+| `memory_stored_limit` | Storage limit. |
+| `llm_tokens` | LLM tokens consumed during extraction. |
+| `llm_tokens_limit` | Token limit. |
+| `search_queries` | Search queries issued this period. |
+| `search_queries_limit` | Query limit. |
+| `plan` | Your plan name (e.g. `"free"`, `"pro"`). |
+
+## Accessing rate limits
+
+```python
+if result.rate_limit:
+    print(f"Remaining: {result.rate_limit.remaining}")
+    print(f"Resets at:  {result.rate_limit.reset}")  # Unix timestamp
+```
+
+Fields on `RateLimitInfo`:
+
+| Field | Description |
+|---|---|
+| `limit` | Max requests per window. |
+| `remaining` | Requests remaining in the current window. |
+| `reset` | Unix timestamp when the window resets. |
+
+## Underlying headers
+
+| Header | Field |
+|---|---|
+| `X-Usage-ApiCall` | `usage.api_calls` |
+| `X-Usage-ApiCall-Limit` | `usage.api_calls_limit` |
+| `X-Usage-EventsIngested` | `usage.events_ingested` |
+| `X-Usage-EventsIngested-Limit` | `usage.events_ingested_limit` |
+| `X-Usage-MemoryStored` | `usage.memory_stored` |
+| `X-Usage-MemoryStored-Limit` | `usage.memory_stored_limit` |
+| `X-Usage-LlmTokens` | `usage.llm_tokens` |
+| `X-Usage-LlmTokens-Limit` | `usage.llm_tokens_limit` |
+| `X-Usage-SearchQueries` | `usage.search_queries` |
+| `X-Usage-SearchQueries-Limit` | `usage.search_queries_limit` |
+| `X-Plan` | `usage.plan` |
+| `X-RateLimit-Limit` | `rate_limit.limit` |
+| `X-RateLimit-Remaining` | `rate_limit.remaining` |
+| `X-RateLimit-Reset` | `rate_limit.reset` |
+
+## Patterns
+
+### Log usage to your observability stack
+
+```python
+
+log = logging.getLogger("memsy-usage")
+
+def log_usage(usage):
+    if usage is None:
+        return
+    log.info(
+        "plan=%s api=%s/%s tokens=%s/%s",
+        usage.plan, usage.api_calls, usage.api_calls_limit,
+        usage.llm_tokens, usage.llm_tokens_limit,
+    )
+
+result = client.search("query")
+log_usage(result.usage)
+```
+
+### Alert before you hit a cap
+
+```python
+def too_close(current, limit, ratio=0.9):
+    return current is not None and limit is not None and current >= ratio * limit
+
+if too_close(result.usage.api_calls, result.usage.api_calls_limit):
+    emit_alert("Memsy API call usage above 90% of plan limit")
+```
+
+## When usage is missing
+
+## Next
+
+- What happens when you blow a cap → **[Error handling](/docs/error-handling)**.
+- How the SDK auto-handles 429s → **[Retries](/docs/retries)**.
+
+---
+
+## Links
+
+- [GitHub](https://github.com/memsy-io/memsy/sdks/python)
+- [Support](mailto:cloudops@memsy.io)
