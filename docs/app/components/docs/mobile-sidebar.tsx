@@ -14,11 +14,12 @@ import {
   filterTreeByTab,
   type DocsTabId,
 } from '@/lib/docs-tabs'
-import { BookOpen, Code } from 'lucide-react'
+import { BookOpen, ChefHat, Code } from 'lucide-react'
 import type { Root, Node } from 'fumadocs-core/page-tree'
 
 const MOBILE_TAB_ICONS: Record<DocsTabId, typeof BookOpen> = {
   guides: BookOpen,
+  cookbooks: ChefHat,
   api: Code,
 }
 

@@ -1,0 +1,59 @@
+---
+title: Cookbooks
+description: End-to-end recipes that wire Memsy into a real app — Next.js, FastAPI, Slack, and tool-calling agents. Each one runs as written.
+---
+
+The guides elsewhere in these docs explain one API at a time. The cookbooks do the opposite: each one is a **complete, runnable app** built around a single integration point, with the framework's own conventions respected rather than glossed over.
+
+Every recipe uses only what ships in the currently published SDKs — `ingest()`, `search()`, and `status()`. No preview APIs, and nothing that needs a version newer than the one [Installation](/docs/installation) gives you.
+
+<CardGroup cols={2}>
+  <Card title="Next.js chat app" icon="code" href="/docs/cookbooks/nextjs-chat">
+    App Router route handler with per-user memory. Covers mapping your auth's user id onto `actor_id` and streaming a grounded reply.
+  </Card>
+  <Card title="FastAPI support agent" icon="rocket" href="/docs/cookbooks/fastapi-support-agent">
+    `AsyncMemsyClient` inside an async service, with ingest moved off the request path so recall latency is the only latency users feel.
+  </Card>
+  <Card title="Slack bot" icon="plug" href="/docs/cookbooks/slack-bot">
+    Slack Bolt app where a thread becomes a session and a Slack user becomes an actor — the mapping most integrations get wrong.
+  </Card>
+  <Card title="Memory as an agent tool" icon="gear" href="/docs/cookbooks/agent-memory-tool">
+    Hand `search()` to the model as a callable tool instead of prefetching, so the agent decides when recall is worth a round trip.
+  </Card>
+</CardGroup>
+
+## Which recipe fits your app
+
+|  | Recall happens | Best when |
+|---|---|---|
+| [Next.js chat](/docs/cookbooks/nextjs-chat) | Once per turn, before the LLM | Chat UIs where every turn benefits from context |
+| [FastAPI agent](/docs/cookbooks/fastapi-support-agent) | Once per request, before the LLM | Request/response APIs with a latency budget |
+| [Slack bot](/docs/cookbooks/slack-bot) | Once per mention | Event-driven apps with no request/response shape |
+| [Agent tool](/docs/cookbooks/agent-memory-tool) | Only when the model asks | Multi-step agents where most turns need no history |
+
+The first three **prefetch**: they search on every turn and paste the results into the system prompt. That is simpler, and it costs one search per turn whether or not memory was relevant. The fourth makes recall a tool call — cheaper across a long agent run, at the cost of the model sometimes not asking when it should have.
+
+## Before you start
+
+Every recipe assumes two environment variables:
+
+```bash
+export MEMSY_BASE_URL="https://api.memsy.io/v1"
+export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+```
+
+Get a key from [app.memsy.io](https://app.memsy.io) → **API Keys**, or follow the [Quickstart](/docs/quickstart) first.
+
+<Warning>
+`MEMSY_API_KEY` is a server-side secret. None of these recipes call Memsy from the browser, and yours shouldn't either — a key shipped to the client can read every memory in your org.
+</Warning>
+
+## The shape shared by all four
+
+Whatever the framework, the loop is the same three moves:
+
+1. **Recall** — `search(query, actor_id=...)` for memories relevant to what the user just said.
+2. **Ground** — paste those memories into the system prompt.
+3. **Record** — `ingest([...])` the turn so the next session can recall it.
+
+If a recipe below looks like overkill for your app, that loop in fifteen lines is a legitimate integration. The rest is plumbing for a specific framework's idea of a request.

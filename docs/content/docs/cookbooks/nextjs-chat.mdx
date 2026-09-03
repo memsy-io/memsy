@@ -1,0 +1,450 @@
+---
+title: Next.js chat app
+description: A Next.js App Router chat endpoint that recalls a signed-in user's history from Memsy before answering, and records the turn afterwards.
+---
+
+A chat UI that forgets the user between visits feels broken in a way that no amount of prompt engineering fixes. This recipe adds Memsy to a **Next.js App Router** app so the assistant opens every session already knowing what the user told it last week.
+
+The integration point that matters here is **identity**: your auth system's user id becomes Memsy's `actor_id`. Get that mapping right and per-user memory is three lines. Get it wrong — a shared id, a client-supplied id — and every user reads every other user's memories.
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    npm install @memsy-io/memsy openai
+    ```
+
+    Node 18 or later (the SDK uses the global `fetch`). This recipe assumes an existing Next.js 14+ app using the App Router.
+
+    Two of the steps below reach for packages outside that list: `@clerk/nextjs` for the session in Steps 4 and 5 (substitute your own auth — only the user id matters) and `@vercel/functions` for `waitUntil` in Step 6. Install whichever you actually use:
+
+    ```bash
+    npm install @clerk/nextjs @vercel/functions
+    ```
+  </Step>
+
+  <Step title="Set your credentials">
+    ```bash
+    # .env.local — gitignored by default in a create-next-app project
+    MEMSY_BASE_URL="https://api.memsy.io/v1"
+    MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    OPENAI_API_KEY="sk-..."
+    ```
+
+    <Warning>
+    Do **not** prefix these with `NEXT_PUBLIC_`. That prefix inlines the value into the browser bundle, which would publish your Memsy key to every visitor.
+    </Warning>
+  </Step>
+
+  <Step title="Create a shared client module">
+    One client per server process, not one per request — the SDK holds a connection pool, and rebuilding it on every keystroke-driven request wastes handshakes.
+
+    ```ts
+    // lib/memsy.ts
+    import { MemsyClient } from "@memsy-io/memsy";
+
+    function required(name: string): string {
+      const value = process.env[name];
+      if (!value) throw new Error(`Missing required env var: ${name}`);
+      return value;
+    }
+
+    // Module scope: Next reuses the module across requests in a warm server.
+    export const memsy = new MemsyClient({
+      baseUrl: required("MEMSY_BASE_URL"),
+      apiKey: required("MEMSY_API_KEY"),
+    });
+    ```
+
+    <Tip>
+    Throwing on a missing variable at import time turns a silent production misconfiguration into a loud boot failure. A missing `MEMSY_API_KEY` would otherwise surface as a 401 on the first user message.
+    </Tip>
+  </Step>
+
+  <Step title="Wire up Clerk's middleware">
+    `auth()` reads the session from a request context that only `clerkMiddleware()`
+    establishes. Without this file the route does not fail closed — it throws:
+
+    ```
+    Error: Clerk: auth() was called but Clerk can't detect usage of clerkMiddleware().
+    ```
+
+    It goes at the project root — or inside `src/`, if that is where your `app/`
+    directory lives.
+
+    ```ts
+    // middleware.ts
+    import { clerkMiddleware } from "@clerk/nextjs/server";
+
+    export default clerkMiddleware();
+
+    export const config = {
+      matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
+    };
+    ```
+
+    The matcher has to cover `/api/(.*)`, or the route handler runs outside the
+    middleware and `auth()` throws there specifically — the one place it matters.
+
+    Clerk also needs its own keys alongside the ones from Step 2:
+
+    ```bash
+    # .env.local
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
+    CLERK_SECRET_KEY="sk_test_..."
+    ```
+
+    <Note>
+    Using different auth? Skip this step — it exists because `auth()` in the next
+    step is Clerk's. Every other step is auth-agnostic; all the handler needs is a
+    user id it can trust.
+    </Note>
+  </Step>
+
+  <Step title="Write the route handler">
+    Three moves: recall, ground, record. The recall and the LLM call are awaited because the user is waiting on them; the record is not, because they are not.
+
+    ```ts
+    // app/api/chat/route.ts
+    import { auth } from "@clerk/nextjs/server"; // or your auth of choice
+    import OpenAI from "openai";
+    import { memsy } from "@/lib/memsy";
+
+    const openai = new OpenAI();
+
+    export async function POST(req: Request) {
+      // The actor id comes from the server-side session — NEVER from the
+      // request body. A client-supplied actor_id lets any user read any
+      // other user's memories by editing one JSON field.
+      const { userId } = await auth();
+      if (!userId) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const { message, sessionId } = (await req.json()) as {
+        message: string;
+        sessionId: string;
+      };
+
+      // 1. Recall — what has this user told us before that bears on this?
+      const recalled = await memsy.search(message, {
+        actorId: userId,
+        limit: 5,
+      });
+
+      const context = recalled.results.length
+        ? recalled.results.map((r) => `- ${r.content}`).join("\n")
+        : "(nothing on file for this user yet)";
+
+      // 2. Ground.
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant with a long memory. Use the facts " +
+              "below when they are relevant, and refer to them naturally — " +
+              "do not announce that you are consulting your memory.\n\n" +
+              `What you know about this user:\n${context}`,
+          },
+          { role: "user", content: message },
+        ],
+      });
+
+      const reply = completion.choices[0]?.message?.content ?? "";
+
+      // 3. Record — both sides of the turn, in one batch.
+      await memsy.ingest([
+        {
+          actorId: userId,
+          sessionId,
+          kind: "user_message",
+          content: message,
+        },
+        {
+          actorId: userId,
+          sessionId,
+          kind: "assistant_message",
+          content: reply,
+        },
+      ]);
+
+      return Response.json({ reply });
+    }
+    ```
+  </Step>
+
+  <Step title="Keep ingest off the response path">
+    The version above awaits `ingest()` before replying, which adds a round trip the user can feel. Memsy processes events asynchronously anyway — the call returns as soon as the events are queued, so there is nothing to wait for.
+
+    On Vercel, use `waitUntil` so the work survives the response:
+
+    ```ts
+    import { waitUntil } from "@vercel/functions";
+
+    // ... after building `reply`:
+    waitUntil(
+      memsy
+        .ingest([
+          { actorId: userId, sessionId, kind: "user_message", content: message },
+          { actorId: userId, sessionId, kind: "assistant_message", content: reply },
+        ])
+        // A failed write must not take down a reply the user already sees.
+        .catch((err) => console.error("[memsy] ingest failed", err)),
+    );
+
+    return Response.json({ reply });
+    ```
+
+    <Warning>
+    A bare floating promise without `waitUntil` is not safe in a serverless runtime: the function may be frozen the moment the response is returned, dropping the request mid-flight. The events are lost silently, and you find out weeks later when recall is thinner than it should be.
+    </Warning>
+  </Step>
+
+  <Step title="Choose a session id">
+    A session is one continuous conversation. Memsy uses the boundary to decide what belongs together, so the id should change when the conversation does — and not before.
+
+    ```ts
+    // A stable id per chat thread, created when the thread is created.
+    const sessionId = `chat_${threadId}`;
+    ```
+
+    | Choice | Effect |
+    |---|---|
+    | New id per message | Every turn is an island; multi-turn context is lost |
+    | One id forever, per user | Unrelated conversations blur together |
+    | One id per thread | What you want |
+
+    `actor_id` is who; `session_id` is which conversation. See [Actors and sessions](/docs/actors-and-sessions) for the full model.
+  </Step>
+
+  <Step title="Call it from a client component">
+    ```tsx
+    "use client";
+    import { useState } from "react";
+
+    export function Chat({ threadId }: { threadId: string }) {
+      const [reply, setReply] = useState("");
+
+      async function send(message: string) {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // No actor id here — the server reads it from the session.
+          body: JSON.stringify({ message, sessionId: `chat_${threadId}` }),
+        });
+
+        // Check res.ok before parsing. A 401 returns the plain text
+        // "Unauthorized", so res.json() would throw while parsing it and the
+        // button would appear to do nothing — which is exactly what a reader
+        // hits first, before they are signed in.
+        if (!res.ok) {
+          setReply(`Request failed (${res.status}).`);
+          return;
+        }
+
+        const data = await res.json();
+        setReply(data.reply);
+      }
+
+      return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
+    }
+    ```
+  </Step>
+</Steps>
+
+## Verifying it works
+
+Memory extraction is asynchronous, so a fact ingested a second ago is not searchable a second later. Send one message, wait, then search from a script:
+
+```ts
+const hits = await memsy.search("pricing", { actorId: "user_abc", limit: 5 });
+console.log(hits.results.map((r) => `${r.score.toFixed(2)} ${r.content}`));
+```
+
+An empty result immediately after ingest is expected, not a bug — see [Async processing](/docs/async-processing) for the timing, and `status()` if you need to know when a specific event has landed.
+
+## What to watch for
+
+- **Rebuilding the client per request.** `new MemsyClient(...)` inside the handler works, but discards the connection pool every time. Module scope, as above.
+- **Trusting a client-supplied `actorId`.** The single highest-severity mistake in this recipe. It must come from the server-side session.
+- **Awaiting `ingest()` on the hot path.** Costs the user latency for a write they never see the result of.
+- **Searching org-wide by accident.** Omitting `actorId` searches across *every* actor in your org. That is a deliberate feature for admin tooling, and wrong in a user-facing chat.
+
+## Complete code
+
+Four files, ready to paste into an App Router project. The route handler is the
+Step 6 form — ingest deferred with `waitUntil` — since that is the version you
+want in production.
+
+<Warning>
+`middleware.ts` is not optional. Omit it and `auth()` throws on every request
+rather than returning a null session, so the route 500s instead of 401ing.
+</Warning>
+
+<CodeWorkspace title="my-app">
+  <CodeFile name="lib/memsy.ts">
+
+    ```ts
+    // lib/memsy.ts
+    import { MemsyClient } from "@memsy-io/memsy";
+
+    function required(name: string): string {
+      const value = process.env[name];
+      if (!value) throw new Error(`Missing required env var: ${name}`);
+      return value;
+    }
+
+    // Module scope: Next reuses the module across requests in a warm server.
+    export const memsy = new MemsyClient({
+      baseUrl: required("MEMSY_BASE_URL"),
+      apiKey: required("MEMSY_API_KEY"),
+    });
+    ```
+
+  </CodeFile>
+  <CodeFile name="middleware.ts">
+
+    ```ts
+    // middleware.ts
+    import { clerkMiddleware } from "@clerk/nextjs/server";
+
+    export default clerkMiddleware();
+
+    export const config = {
+      matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
+    };
+    ```
+
+  </CodeFile>
+  <CodeFile name="app/api/chat/route.ts">
+
+    ```ts
+    // app/api/chat/route.ts
+    import { auth } from "@clerk/nextjs/server"; // or your auth of choice
+    import { waitUntil } from "@vercel/functions";
+    import OpenAI from "openai";
+    import { memsy } from "@/lib/memsy";
+
+    const openai = new OpenAI();
+
+    export async function POST(req: Request) {
+      // The actor id comes from the server-side session — NEVER from the
+      // request body. A client-supplied actor_id lets any user read any
+      // other user's memories by editing one JSON field.
+      const { userId } = await auth();
+      if (!userId) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const { message, sessionId } = (await req.json()) as {
+        message: string;
+        sessionId: string;
+      };
+
+      // 1. Recall — what has this user told us before that bears on this?
+      const recalled = await memsy.search(message, {
+        actorId: userId,
+        limit: 5,
+      });
+
+      const context = recalled.results.length
+        ? recalled.results.map((r) => `- ${r.content}`).join("\n")
+        : "(nothing on file for this user yet)";
+
+      // 2. Ground.
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant with a long memory. Use the facts " +
+              "below when they are relevant, and refer to them naturally — " +
+              "do not announce that you are consulting your memory.\n\n" +
+              `What you know about this user:\n${context}`,
+          },
+          { role: "user", content: message },
+        ],
+      });
+
+      const reply = completion.choices[0]?.message?.content ?? "";
+
+      // 3. Record — deferred, so the user does not wait on a write.
+      waitUntil(
+        memsy
+          .ingest([
+            { actorId: userId, sessionId, kind: "user_message", content: message },
+            { actorId: userId, sessionId, kind: "assistant_message", content: reply },
+          ])
+          // A failed write must not take down a reply the user already sees.
+          .catch((err) => console.error("[memsy] ingest failed", err)),
+      );
+
+      return Response.json({ reply });
+    }
+    ```
+
+  </CodeFile>
+  <CodeFile name="components/chat.tsx">
+
+    ```tsx
+    "use client";
+    import { useState } from "react";
+
+    export function Chat({ threadId }: { threadId: string }) {
+      const [reply, setReply] = useState("");
+
+      async function send(message: string) {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // No actor id here — the server reads it from the session.
+          body: JSON.stringify({ message, sessionId: `chat_${threadId}` }),
+        });
+
+        // Check res.ok before parsing. A 401 returns the plain text
+        // "Unauthorized", so res.json() would throw while parsing it and the
+        // button would appear to do nothing — which is exactly what a reader
+        // hits first, before they are signed in.
+        if (!res.ok) {
+          setReply(`Request failed (${res.status}).`);
+          return;
+        }
+
+        const data = await res.json();
+        setReply(data.reply);
+      }
+
+      return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
+    }
+    ```
+
+  </CodeFile>
+</CodeWorkspace>
+
+Set up:
+
+```bash
+npm install @memsy-io/memsy openai @clerk/nextjs @vercel/functions
+```
+
+```bash
+# .env.local
+MEMSY_BASE_URL="https://api.memsy.io/v1"
+MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+OPENAI_API_KEY="sk-..."
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
+CLERK_SECRET_KEY="sk_test_..."
+```
+
+<Warning>
+Swap `@clerk/nextjs` for whatever auth you already run. The only requirement is
+that `userId` comes from a **server-side** session — see Step 5.
+</Warning>
+
+## Next steps
+
+- [Memory as an agent tool](/docs/cookbooks/agent-memory-tool) — let the model decide when to recall instead of prefetching every turn.
+- [Searching memory](/docs/searching-memory) — thresholds, limits, and scoring.
+- [Error handling](/docs/error-handling) — the typed errors `ingest()` and `search()` can raise.

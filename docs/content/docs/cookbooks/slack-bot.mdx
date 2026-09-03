@@ -1,0 +1,397 @@
+---
+title: Slack bot
+description: A Slack Bolt bot that remembers across threads — mapping Slack's user and thread ids onto Memsy actors and sessions.
+---
+
+Slack is where most teams already have their institutional memory, and where it is least retrievable. A bot that answers questions from the team's own history turns that scrollback into something you can ask.
+
+The integration point here is **the identity mapping**. Slack has no notion of a "session", and a naive port either gives every message its own session (losing all multi-turn context) or shares one session across the whole workspace (blending unrelated conversations). Slack's own threading model is the right boundary, and this recipe uses it.
+
+<Note>
+If you only want Slack **content** in Memsy — no bot, no code — the [Slack connector](/docs/connectors#slack) ingests public channels from the console. This recipe is for the other case: a bot that answers in Slack and records its own conversations.
+</Note>
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pip install memsy slack-bolt openai
+    ```
+
+    Python 3.10 or later.
+  </Step>
+
+  <Step title="Create the Slack app">
+    At [api.slack.com/apps](https://api.slack.com/apps), create an app, then work through these **in order** — the scopes have to be in place before you install, because installing is what mints the bot token:
+
+    1. **Socket Mode** → enable it. No public URL is needed for local development.
+    2. **OAuth & Permissions** → add the bot token scopes `app_mentions:read`, `chat:write` and `channels:history`.
+    3. **Event Subscriptions** → subscribe to the bot event `app_mention`.
+    4. **Install App** → **Install to Workspace**, then approve the permissions prompt. This is its own click and nothing works without it: the bot token does not exist until the app is installed.
+
+    <Note>
+    A scope added after installing does not take effect until you reinstall. Slack shows a banner on the OAuth page when a reinstall is due — it is easy to read past, and the symptom is a bot that connects fine and then cannot read the channel.
+    </Note>
+
+    Then collect the two tokens, which live on different pages:
+
+    | Token | Where | Looks like |
+    |---|---|---|
+    | Bot token | **OAuth & Permissions**, after installing | `xoxb-…` |
+    | App-level token | **Basic Information** → **App-Level Tokens** → Generate, with the `connections:write` scope | `xapp-…` |
+
+    ```bash
+    export SLACK_BOT_TOKEN="xoxb-..."
+    export SLACK_APP_TOKEN="xapp-..."
+    export MEMSY_BASE_URL="https://api.memsy.io/v1"
+    export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    export OPENAI_API_KEY="sk-..."
+    ```
+
+    <Warning>
+    A bot token grants read access to every channel it is invited to. Keep all four of these in your secret manager, never in the repo.
+    </Warning>
+  </Step>
+
+  <Step title="Map Slack ids onto Memsy ids">
+    This is the whole design decision, so it gets its own module.
+
+    ```python
+    # identity.py
+    from typing import Any
+
+
+    def actor_id(event: dict[str, Any]) -> str:
+        """Who is speaking. Slack user ids are stable for the life of the account."""
+        return f"slack_{event['user']}"
+
+
+    def session_id(event: dict[str, Any]) -> str:
+        """
+        Which conversation. `thread_ts` is present on every message inside a
+        thread; a top-level message has only `ts`, and becomes the root of the
+        thread the bot's reply creates. Falling back to `ts` therefore gives the
+        thread and its root message the same session id — which is correct,
+        because they are the same conversation.
+        """
+        return f"slack_{event['channel']}_{event.get('thread_ts', event['ts'])}"
+    ```
+
+    | Slack concept | Memsy concept | Why |
+    |---|---|---|
+    | User id (`U…`) | `actor_id` | Stable, unique, and never reused |
+    | Thread (`thread_ts`) | `session_id` | One thread is one conversation |
+    | Channel (`C…`) | part of `session_id` | Keeps two threads in different channels distinct |
+    | Display name | *nothing* | Users rename themselves; ids do not change |
+
+    <Warning>
+    Do not use the display name or email as `actor_id`. A rename or an address change silently orphans every memory recorded under the old value — the bot does not error, it just forgets that person.
+    </Warning>
+  </Step>
+
+  <Step title="Handle the mention">
+    Bolt's default (non-async) `App` runs handlers on a thread pool, so the synchronous `MemsyClient` is the right client here — unlike in an async framework such as [FastAPI](/docs/cookbooks/fastapi-support-agent).
+
+    ```python
+    # app.py
+    import logging
+    import os
+    import re
+
+    from memsy import EventPayload, MemsyClient
+    from memsy.exceptions import MemsyError
+    from openai import OpenAI
+    from slack_bolt import App
+    from slack_bolt.adapter.socket_mode import SocketModeHandler
+
+    from identity import actor_id, session_id
+
+    logging.basicConfig(level=logging.INFO)
+    log = logging.getLogger(__name__)
+
+    memsy = MemsyClient(
+        base_url=os.environ["MEMSY_BASE_URL"],
+        api_key=os.environ["MEMSY_API_KEY"],
+    )
+    openai = OpenAI()
+    app = App(token=os.environ["SLACK_BOT_TOKEN"])
+
+    # "<@U123ABC> what did we decide?" -> "what did we decide?"
+    MENTION = re.compile(r"<@[A-Z0-9]+>")
+
+
+    @app.event("app_mention")
+    def handle_mention(event, say):
+        question = MENTION.sub("", event["text"]).strip()
+        if not question:
+            say(text="Ask me something.", thread_ts=event.get("thread_ts", event["ts"]))
+            return
+
+        actor = actor_id(event)
+        session = session_id(event)
+
+        # 1. Recall. Scoped to this person — see the note below on team-wide recall.
+        try:
+            recalled = memsy.search(question, actor_id=actor, limit=5)
+            memories = [r.content for r in recalled.results]
+        except MemsyError:
+            log.exception("memsy recall failed")
+            memories = []
+
+        context = "\n".join(f"- {m}" for m in memories) or "(no prior context)"
+
+        # 2. Ground.
+        completion = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful teammate in Slack. Be brief — two or "
+                        "three sentences. Use the prior context below when it is "
+                        "relevant.\n\n"
+                        f"Prior context:\n{context}"
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+        )
+        answer = completion.choices[0].message.content or ""
+
+        # Reply in-thread so the conversation stays one session.
+        say(text=answer, thread_ts=event.get("thread_ts", event["ts"]))
+
+        # 3. Record.
+        try:
+            memsy.ingest(
+                [
+                    EventPayload(
+                        actor_id=actor,
+                        session_id=session,
+                        kind="user_message",
+                        content=question,
+                    ),
+                    EventPayload(
+                        actor_id=actor,
+                        session_id=session,
+                        kind="assistant_message",
+                        content=answer,
+                    ),
+                ]
+            )
+        except MemsyError:
+            # The reply is already in the channel; a failed write must not
+            # produce a second, confusing error message in the thread.
+            log.exception("memsy ingest failed")
+
+
+    if __name__ == "__main__":
+        SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    ```
+  </Step>
+
+  <Step title="Run it">
+    ```bash
+    python app.py
+    ```
+
+    <Note>
+    `App(token=...)` calls `auth.test` against Slack while it constructs, so start-up needs network access and a valid bot token — an invalid one fails at import, before any of your own code runs. To build offline, pass `token_verification_enabled=False`; leave it on in production, where failing at boot beats failing on the first mention.
+    </Note>
+
+    <Tip>
+    No `threshold` here, so recall uses the default `0.0` and returns the top 5 however weakly they match. Raising it cuts noise, but the useful value depends on your tier — free-tier scores cluster in `0.0`–`0.1`, so a floor of `0.3` copied from a reranked-tier example filters out everything. See [Searching memory](/docs/searching-memory#threshold).
+    </Tip>
+
+    Invite the bot to a channel and mention it. Reply in the same thread and it carries the context; start a new thread and it starts a new session — but still recalls what you told it in the old one, because recall is scoped to the actor, not the session.
+  </Step>
+
+  <Step title="Optional: recall across the whole team">
+    Per-actor recall means the bot remembers *you*. Often what a team actually wants is for it to remember *the team* — so a question about a decision surfaces the answer whoever made it.
+
+    Tag events with a team at ingest time:
+
+    ```python
+    EventPayload(
+        actor_id=actor,
+        session_id=session,
+        kind="user_message",
+        content=question,
+        team_id=f"slack_{event['channel']}",   # the channel is the team
+    )
+    ```
+
+    Then pass the team on recall, which widens results to include team-promoted memories:
+
+    ```python
+    recalled = memsy.search(
+        question,
+        actor_id=actor,
+        team_ids=[f"slack_{event['channel']}"],
+        limit=5,
+    )
+    ```
+
+    <Warning>
+    This makes one person's messages reachable by everyone else in the channel. That is the point in a shared channel, and a privacy incident in a DM. Gate it on `event["channel_type"]` if your bot handles both.
+    </Warning>
+  </Step>
+</Steps>
+
+## What to watch for
+
+- **Replying outside the thread.** Omitting `thread_ts` on `say()` posts to the channel root, which starts a new Slack thread — and the next message arrives with a different `session_id` than the one you just wrote.
+- **Slack's 3-second ack.** Bolt acknowledges the event for you before your handler runs, so a slow LLM call will not cause Slack to retry. If you move to a custom HTTP adapter, ack first and do the work after.
+- **Bot messages echoing back.** `app_mention` only fires on mentions, so the bot does not hear itself. If you widen to `message` events, filter on `event.get("bot_id")` or you will ingest an infinite loop of the bot's own replies.
+- **Display names as ids.** Covered above, and worth repeating: it fails silently.
+
+## Complete code
+
+Two files, verbatim from the steps above. The optional team-wide recall from the
+last step is left out — add it only once you have decided that a shared channel
+should share memories.
+
+<CodeWorkspace title="slack-bot">
+  <CodeFile name="identity.py">
+
+    ```python
+    # identity.py
+    from typing import Any
+
+
+    def actor_id(event: dict[str, Any]) -> str:
+        """Who is speaking. Slack user ids are stable for the life of the account."""
+        return f"slack_{event['user']}"
+
+
+    def session_id(event: dict[str, Any]) -> str:
+        """
+        Which conversation. `thread_ts` is present on every message inside a
+        thread; a top-level message has only `ts`, and becomes the root of the
+        thread the bot's reply creates. Falling back to `ts` therefore gives the
+        thread and its root message the same session id — which is correct,
+        because they are the same conversation.
+        """
+        return f"slack_{event['channel']}_{event.get('thread_ts', event['ts'])}"
+    ```
+
+  </CodeFile>
+  <CodeFile name="app.py">
+
+    ```python
+    # app.py
+    import logging
+    import os
+    import re
+
+    from memsy import EventPayload, MemsyClient
+    from memsy.exceptions import MemsyError
+    from openai import OpenAI
+    from slack_bolt import App
+    from slack_bolt.adapter.socket_mode import SocketModeHandler
+
+    from identity import actor_id, session_id
+
+    logging.basicConfig(level=logging.INFO)
+    log = logging.getLogger(__name__)
+
+    memsy = MemsyClient(
+        base_url=os.environ["MEMSY_BASE_URL"],
+        api_key=os.environ["MEMSY_API_KEY"],
+    )
+    openai = OpenAI()
+    app = App(token=os.environ["SLACK_BOT_TOKEN"])
+
+    # "<@U123ABC> what did we decide?" -> "what did we decide?"
+    MENTION = re.compile(r"<@[A-Z0-9]+>")
+
+
+    @app.event("app_mention")
+    def handle_mention(event, say):
+        question = MENTION.sub("", event["text"]).strip()
+        if not question:
+            say(text="Ask me something.", thread_ts=event.get("thread_ts", event["ts"]))
+            return
+
+        actor = actor_id(event)
+        session = session_id(event)
+
+        # 1. Recall. Scoped to this person — see the note below on team-wide recall.
+        try:
+            recalled = memsy.search(question, actor_id=actor, limit=5)
+            memories = [r.content for r in recalled.results]
+        except MemsyError:
+            log.exception("memsy recall failed")
+            memories = []
+
+        context = "\n".join(f"- {m}" for m in memories) or "(no prior context)"
+
+        # 2. Ground.
+        completion = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful teammate in Slack. Be brief — two or "
+                        "three sentences. Use the prior context below when it is "
+                        "relevant.\n\n"
+                        f"Prior context:\n{context}"
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+        )
+        answer = completion.choices[0].message.content or ""
+
+        # Reply in-thread so the conversation stays one session.
+        say(text=answer, thread_ts=event.get("thread_ts", event["ts"]))
+
+        # 3. Record.
+        try:
+            memsy.ingest(
+                [
+                    EventPayload(
+                        actor_id=actor,
+                        session_id=session,
+                        kind="user_message",
+                        content=question,
+                    ),
+                    EventPayload(
+                        actor_id=actor,
+                        session_id=session,
+                        kind="assistant_message",
+                        content=answer,
+                    ),
+                ]
+            )
+        except MemsyError:
+            # The reply is already in the channel; a failed write must not
+            # produce a second, confusing error message in the thread.
+            log.exception("memsy ingest failed")
+
+
+    if __name__ == "__main__":
+        SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    ```
+
+  </CodeFile>
+</CodeWorkspace>
+
+Run it:
+
+```bash
+pip install memsy slack-bolt openai
+export SLACK_BOT_TOKEN="xoxb-..."
+export SLACK_APP_TOKEN="xapp-..."
+export MEMSY_BASE_URL="https://api.memsy.io/v1"
+export MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export OPENAI_API_KEY="sk-..."
+
+python app.py
+```
+
+## Next steps
+
+- [Actors and sessions](/docs/actors-and-sessions) — the full model behind this mapping.
+- [Slack connector](/docs/connectors#slack) — ingest channel history without writing a bot.
+- [Ingesting events](/docs/ingesting-events) — batching, event kinds, and metadata.

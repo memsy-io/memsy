@@ -1,0 +1,10 @@
+{
+  "title": "Cookbooks",
+  "pages": [
+    "index",
+    "nextjs-chat",
+    "fastapi-support-agent",
+    "slack-bot",
+    "agent-memory-tool"
+  ]
+}
