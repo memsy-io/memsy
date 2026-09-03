@@ -21,11 +21,23 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
   </Step>
 
   <Step title="Create the Slack app">
-    At [api.slack.com/apps](https://api.slack.com/apps), create an app and enable **Socket Mode** (no public URL needed for local development). Then:
+    At [api.slack.com/apps](https://api.slack.com/apps), create an app, then work through these **in order** — the scopes have to be in place before you install, because installing is what mints the bot token:
 
-    - **OAuth & Permissions** → bot token scopes: `app_mentions:read`, `chat:write`, `channels:history`
-    - **Event Subscriptions** → subscribe to the bot event `app_mention`
-    - Install to your workspace, then copy the bot token (`xoxb-…`) and an app-level token with `connections:write` (`xapp-…`)
+    1. **Socket Mode** → enable it. No public URL is needed for local development.
+    2. **OAuth & Permissions** → add the bot token scopes `app_mentions:read`, `chat:write` and `channels:history`.
+    3. **Event Subscriptions** → subscribe to the bot event `app_mention`.
+    4. **Install App** → **Install to Workspace**, then approve the permissions prompt. This is its own click and nothing works without it: the bot token does not exist until the app is installed.
+
+    <Note>
+    A scope added after installing does not take effect until you reinstall. Slack shows a banner on the OAuth page when a reinstall is due — it is easy to read past, and the symptom is a bot that connects fine and then cannot read the channel.
+    </Note>
+
+    Then collect the two tokens, which live on different pages:
+
+    | Token | Where | Looks like |
+    |---|---|---|
+    | Bot token | **OAuth & Permissions**, after installing | `xoxb-…` |
+    | App-level token | **Basic Information** → **App-Level Tokens** → Generate, with the `connections:write` scope | `xapp-…` |
 
     ```bash
     export SLACK_BOT_TOKEN="xoxb-..."
