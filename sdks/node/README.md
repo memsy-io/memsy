@@ -188,6 +188,44 @@ const item  = await client.memories.get(memoryId);
 
 ---
 
+## Actors — `actors`
+
+List the actors that have memories in an org. Read-only: actors are **derived** from the
+org's memories on every read rather than stored, so there is nothing to create, rename or
+delete.
+
+```ts
+const page = await client.actors.list(undefined, {   // org defaults to the caller's
+  sort: "first_memory_desc",   // | "first_memory_asc" | "last_memory_desc" | "actor_id_asc"
+  q: "slack",                  // substring match on actorId, case-insensitive
+  limit: 100,
+});
+console.log(page.total);       // distinct actors in the org
+
+for (const a of page.items) console.log(a.actorId, a.firstMemoryAt, a.memoryCount);
+
+// One actor; rejects with a 404 if it has no memories in this org
+const actor = await client.actors.get("slack:T0B7FKNKKTR:U0B7TN132E9");
+```
+
+**Read the timestamps carefully.** They are named for the memories, not the actor, because
+that is what they measure — there is no actor creation event to read:
+
+- `firstMemoryAt` is `min(created_at)`. It moves *forward* if the oldest memory is reaped or
+  decayed away, which a real creation timestamp never could.
+- `lastMemoryAt` is `max(created_at)`. It is **not** a "last used" signal: it only advances
+  when a new memory is *written*. Reads never touch it.
+
+**Check `page.truncated` on large orgs.** When set, the server hit its row-scan cap before
+reading every memory. The actors listed are real, but the list may be incomplete and every
+`memoryCount` is an **under-count** — treat the counts as unusable while it is set. This is
+also why there is no sort by memory count.
+
+One human can legitimately appear as several actors: a connector-minted `slack:T123:U456`
+and a plugin-derived hash are the same person on two surfaces.
+
+---
+
 ## Control-Plane Client — `MemsyControlClient`
 
 Separate client for billing, API keys, usage timeseries, and console events. Use a dashboard / admin key here, not your hot-path key.

@@ -262,6 +262,86 @@ export function buildOnboardingUpdateBody(update: OnboardingUpdate): Record<stri
   return body;
 }
 
+// ── Actors ───────────────────────────────────────────────────────────────────
+
+/**
+ * An actor that has memories in an org.
+ *
+ * Unlike roles and teams, actors are **not stored records** — the server
+ * derives them by folding the org's memories on `actor_id` at read time. There
+ * is no create/update/delete, and no creation event to read, which is why the
+ * timestamps below are named for the memories rather than the actor.
+ */
+export interface Actor {
+  actorId: string;
+  /**
+   * `min(created_at)` over this actor's memories. Moves *forward* if the
+   * oldest memory is reaped or decayed away, which a true creation timestamp
+   * never could.
+   */
+  firstMemoryAt: string | null;
+  /**
+   * `max(created_at)`. Not a "last used" signal: it only advances when a new
+   * memory is *written* for this actor — reads never touch it.
+   */
+  lastMemoryAt: string | null;
+  /** Under-counted when {@link ActorListResponse.truncated} is set. */
+  memoryCount: number;
+  activeMemoryCount: number;
+  scopeLevels: string[];
+  roleIds: string[];
+  teamIds: string[];
+}
+
+/**
+ * Paginated list of derived actors.
+ *
+ * `limit`/`offset` page the deduped actor list, so `total` is the org's full
+ * distinct-actor count (after any `q` filter), not a scan size.
+ */
+export interface ActorListResponse {
+  items: Actor[];
+  total: number;
+  limit: number;
+  offset: number;
+  /**
+   * `true` when the server hit its row-scan cap before reading every memory in
+   * the org. The actors listed are real, but the list may be **incomplete** and
+   * every `memoryCount` is an **under-count** — the scan walks a
+   * primary-key-ordered prefix, which is effectively a random sample. Treat the
+   * counts as unusable while this is set.
+   */
+  truncated: boolean;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+export function parseActor(d: Record<string, unknown>): Actor {
+  return {
+    actorId: String(d.actor_id),
+    firstMemoryAt: (d.first_memory_at as string | null) ?? null,
+    lastMemoryAt: (d.last_memory_at as string | null) ?? null,
+    memoryCount: Number(d.memory_count ?? 0),
+    activeMemoryCount: Number(d.active_memory_count ?? 0),
+    scopeLevels: readStringArray(d.scope_levels),
+    roleIds: readStringArray(d.role_ids),
+    teamIds: readStringArray(d.team_ids),
+  };
+}
+
+export function parseActorListResponse(d: Record<string, unknown>): ActorListResponse {
+  const rawItems = (d.items as Record<string, unknown>[]) ?? [];
+  return {
+    items: rawItems.map(parseActor),
+    total: Number(d.total ?? 0),
+    limit: Number(d.limit ?? 0),
+    offset: Number(d.offset ?? 0),
+    truncated: Boolean(d.truncated ?? false),
+  };
+}
+
 // ── Console memories ─────────────────────────────────────────────────────────
 
 export interface MemoryScope {

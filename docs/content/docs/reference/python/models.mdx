@@ -300,6 +300,43 @@ class MemoryStatsResponse:
 
 ---
 
+## Actor models
+
+Returned by `client.actors`. Actors are *derived* from the org's memories on read, not stored records.
+
+### `ActorResource`
+
+```python
+@dataclass
+class ActorResource:
+    actor_id: str
+    first_memory_at: str | None      # min(created_at) over this actor's memories
+    last_memory_at: str | None       # max(created_at) — NOT a "last used" signal
+    memory_count: int
+    active_memory_count: int
+    scope_levels: list[str]
+    role_ids: list[str]
+    team_ids: list[str]
+```
+
+Both timestamps are named for the memories because that is what they measure — there is no actor creation event to read. `first_memory_at` moves *forward* if the oldest memory is reaped or decays away. `last_memory_at` only advances when a new memory is *written*; reads never touch it.
+
+### `ActorListResponse`
+
+```python
+@dataclass
+class ActorListResponse:
+    items: list[ActorResource]
+    total: int                       # distinct actors in the org, after any `q`
+    limit: int
+    offset: int
+    truncated: bool = False
+```
+
+When `truncated` is `True` the server hit its row-scan cap: the actors listed are real, but the list may be incomplete and every `memory_count` is an **under-count**. Treat the counts as unusable while it is set.
+
+---
+
 ## Control-plane models (api/)
 
 Returned by `MemsyControlClient` and its sub-resources.

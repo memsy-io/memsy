@@ -4,6 +4,7 @@ import type { ProfileManager } from "../profiles.js";
 import { registerGetMemory } from "./get_memory.js";
 import { registerHealth } from "./health.js";
 import { registerIngest } from "./ingest.js";
+import { registerListActors } from "./list_actors.js";
 import { registerListMemories } from "./list_memories.js";
 import { registerCreateRole } from "./create_role.js";
 import { registerCreateTeam } from "./create_team.js";
@@ -25,6 +26,9 @@ export function registerAllTools(server: McpServer, profiles: ProfileManager): v
   // Manage (delete + update land when memsy-core ships DELETE/PATCH endpoints)
   registerListMemories(server, profiles);
   registerGetMemory(server, profiles);
+
+  // Actors (read-only — derived from memories, nothing to create or delete)
+  registerListActors(server, profiles);
 
   // Multi-org
   registerListOrgs(server, profiles);

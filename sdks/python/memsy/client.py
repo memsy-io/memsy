@@ -16,6 +16,7 @@ from memsy.models import (
     StatusResponse,
     UsageInfo,
 )
+from memsy.resources.actors import ActorsResource
 from memsy.resources.memories import MemoriesResource
 from memsy.resources.orgs import OrgsResource
 from memsy.resources.roles import RolesResource
@@ -49,6 +50,9 @@ class MemsyClient(HttpCoreMixin):
         # Console memory browsing
         client.memories.list(kind="semantic")
         client.memories.stats()
+
+        # Actors that have memories in the org (read-only, derived)
+        client.actors.list()
     """
 
     def __init__(
@@ -72,6 +76,7 @@ class MemsyClient(HttpCoreMixin):
         self.roles = RolesResource(self)
         self.teams = TeamsResource(self)
         self.memories = MemoriesResource(self)
+        self.actors = ActorsResource(self)
 
     def __enter__(self) -> MemsyClient:
         return self
