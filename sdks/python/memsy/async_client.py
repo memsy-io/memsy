@@ -16,6 +16,7 @@ from memsy.models import (
     StatusResponse,
     UsageInfo,
 )
+from memsy.resources.actors import AsyncActorsResource
 from memsy.resources.memories import AsyncMemoriesResource
 from memsy.resources.orgs import AsyncOrgsResource
 from memsy.resources.roles import AsyncRolesResource
@@ -48,6 +49,7 @@ class AsyncMemsyClient(HttpCoreMixin):
         await client.orgs.create(org_id="my-org", name="My Org", focus="...")
         await client.roles.list(org_id="my-org")
         await client.memories.stats()
+        await client.actors.list()
     """
 
     def __init__(
@@ -71,6 +73,7 @@ class AsyncMemsyClient(HttpCoreMixin):
         self.roles = AsyncRolesResource(self)
         self.teams = AsyncTeamsResource(self)
         self.memories = AsyncMemoriesResource(self)
+        self.actors = AsyncActorsResource(self)
 
     async def __aenter__(self) -> AsyncMemsyClient:
         return self

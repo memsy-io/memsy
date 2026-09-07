@@ -9,6 +9,8 @@ export { OrgsResource } from "./resources/orgs.js";
 export type { OrgUpdate } from "./resources/orgs.js";
 export { RolesResource } from "./resources/roles.js";
 export type { RoleListOptions, RoleUpdate } from "./resources/roles.js";
+export { ActorsResource } from "./resources/actors.js";
+export type { ActorListOptions, ActorSort } from "./resources/actors.js";
 export { TeamsResource } from "./resources/teams.js";
 export type { TeamListOptions, TeamUpdate } from "./resources/teams.js";
 export { MemoriesResource } from "./resources/memories.js";
@@ -55,6 +57,9 @@ export type {
   Role,
   Team,
   OnboardingUpdate,
+  // Actors
+  Actor,
+  ActorListResponse,
   // Console memories
   MemoryItem,
   MemoryScope,

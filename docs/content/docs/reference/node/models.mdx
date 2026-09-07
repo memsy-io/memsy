@@ -247,6 +247,41 @@ All three share a common shape and differ only in the ID fields.
 
 `MemoryStatsResponse` carries aggregate counts: `total`, `totalMemories`, `activeMemories`, `byType`, `byKind`, `byStatus`, `avgConfidence`, `avgStrength`, `topEntities`, `confidenceBuckets`, `dateRange`.
 
+## Actor types
+
+Returned by `client.actors`. Actors are *derived* from the org's memories on read, not stored records.
+
+### `Actor`
+
+```ts
+interface Actor {
+  actorId: string;
+  firstMemoryAt: string | null;   // min(created_at) over this actor's memories
+  lastMemoryAt: string | null;    // max(created_at) — NOT a "last used" signal
+  memoryCount: number;
+  activeMemoryCount: number;
+  scopeLevels: string[];
+  roleIds: string[];
+  teamIds: string[];
+}
+```
+
+Both timestamps are named for the memories because that is what they measure — there is no actor creation event to read. `firstMemoryAt` moves *forward* if the oldest memory is reaped or decays away. `lastMemoryAt` only advances when a new memory is *written*; reads never touch it.
+
+### `ActorListResponse`
+
+```ts
+interface ActorListResponse {
+  items: Actor[];
+  total: number;      // distinct actors in the org, after any `q`
+  limit: number;
+  offset: number;
+  truncated: boolean;
+}
+```
+
+When `truncated` is `true` the server hit its row-scan cap: the actors listed are real, but the list may be incomplete and every `memoryCount` is an **under-count**. Treat the counts as unusable while it is set.
+
 ## Control-plane types
 
 ### `MeResponse`

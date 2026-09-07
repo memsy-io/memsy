@@ -226,6 +226,49 @@ print(item.text, item.strength, item.confidence)
 
 ---
 
+## Actors
+
+List the actors that have memories in an org via `client.actors`. Read-only: actors are
+**derived** from the org's memories on every read rather than stored, so there is nothing to
+create, rename or delete.
+
+```python
+page = client.actors.list(
+    sort="first_memory_desc",   # first_memory_desc | first_memory_asc
+                                # last_memory_desc  | actor_id_asc
+    q="slack",                  # substring match on actor_id, case-insensitive
+    limit=100,
+    offset=0,
+)
+print(page.total)               # distinct actors in the org
+
+for actor in page.items:
+    print(actor.actor_id, actor.first_memory_at, actor.memory_count)
+
+# One actor; raises MemsyAPIError (404) if it has no memories in this org
+actor = client.actors.get("slack:T0B7FKNKKTR:U0B7TN132E9")
+```
+
+`org_id` defaults to the authenticated caller's org on both methods.
+
+**Read the timestamps carefully.** They are named for the memories, not the actor, because
+that is what they measure — there is no actor creation event to read:
+
+- `first_memory_at` is `min(created_at)`. It moves *forward* if the oldest memory is reaped
+  or decayed away, which a real creation timestamp never could.
+- `last_memory_at` is `max(created_at)`. It is **not** a "last used" signal: it only advances
+  when a new memory is *written*. Reads never touch it.
+
+**Check `page.truncated` on large orgs.** When set, the server hit its row-scan cap before
+reading every memory. The actors listed are real, but the list may be incomplete and every
+`memory_count` is an **under-count** — treat the counts as unusable while it is set. This is
+also why there is no sort by memory count.
+
+One human can legitimately appear as several actors: a connector-minted
+`slack:T123:U456` and a plugin-derived hash are the same person on two surfaces.
+
+---
+
 ## Control-Plane Client (`MemsyControlClient`)
 
 The control-plane is a separate API service that manages account settings, billing, API keys,

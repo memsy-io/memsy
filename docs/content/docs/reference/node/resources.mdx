@@ -98,6 +98,33 @@ Pagination is stable across pages: the server always sorts with `memory_id` as a
 
 `MemoryListOptions` is `{ kind?, type?, status?, sort?, search?, limit?, offset? }`.
 
+## `client.actors`
+
+Read-only listing of the actors that have memories in the org.
+
+```ts
+await client.actors.list(undefined, {                         // ActorListResponse
+  sort: 'first_memory_desc',                                  // default
+  q: 'slack',                                                 // substring on actorId
+  limit: 100,
+  offset: 0,
+});
+await client.actors.get('user_42');                           // Actor
+```
+
+Actors are *derived* by folding the org's memories on `actor_id` at read time, not stored — so there is no create/rename/delete. `limit`/`offset` page the deduped actor list, so `total` is the org's full distinct-actor count.
+
+| Method | Signature |
+|---|---|
+| `list(orgId?, options?)` | `Promise<ActorListResponse>` — `ActorListOptions` |
+| `get(actorId, orgId?)` | `Promise<Actor>` |
+
+`ActorListOptions` is `{ limit?, offset?, sort?, q? }`; `sort` is `ActorSort` — one of `'first_memory_desc'`, `'first_memory_asc'`, `'last_memory_desc'`, `'actor_id_asc'`. Both `orgId` arguments default to the caller's org.
+
+`firstMemoryAt` and `lastMemoryAt` are the `min`/`max` of the memories' `created_at` — named for the memories because that is what they measure. `lastMemoryAt` is **not** a "last used" signal; it only advances when a new memory is written.
+
+Check `page.truncated`: when set, the server hit its row-scan cap, so the list may be incomplete and every `memoryCount` is an under-count. That is also why there is no sort by memory count.
+
 ## See also
 
 - [Models reference](/docs/reference/node/models) — full shape of `Org`, `Role`, `Team`, `MemoryItem`, etc.

@@ -44,6 +44,7 @@ class TestAsyncMemsyClientInit:
         assert hasattr(client, "roles")
         assert hasattr(client, "teams")
         assert hasattr(client, "memories")
+        assert hasattr(client, "actors")
 
 
 class TestAsyncContextManager:
@@ -199,3 +200,39 @@ class TestAsyncErrors:
         ):
             with pytest.raises(MemsyConnectionError):
                 await client.health()
+
+
+class TestAsyncActorsResource:
+    ACTOR = {
+        "actor_id": "user_1",
+        "first_memory_at": "2026-04-01T00:00:00+00:00",
+        "last_memory_at": "2026-04-05T00:00:00+00:00",
+        "memory_count": 12,
+        "active_memory_count": 10,
+        "scope_levels": ["actor"],
+        "role_ids": [],
+        "team_ids": [],
+    }
+
+    @pytest.mark.asyncio
+    async def test_actors_list(self, client):
+        resp = _make_response(
+            200, {"items": [self.ACTOR], "total": 1, "limit": 100, "offset": 0}
+        )
+        with patch.object(client._client, "request", new=AsyncMock(return_value=resp)) as mock:
+            page = await client.actors.list("org_1", limit=25, q="user")
+        assert page.total == 1
+        assert page.items[0].actor_id == "user_1"
+        assert page.truncated is False
+        params = mock.call_args.kwargs["params"]
+        assert params["org_id"] == "org_1"
+        assert params["limit"] == 25
+        assert params["q"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_actors_get(self, client):
+        resp = _make_response(200, self.ACTOR)
+        with patch.object(client._client, "request", new=AsyncMock(return_value=resp)):
+            actor = await client.actors.get("user_1")
+        assert actor.actor_id == "user_1"
+        assert actor.active_memory_count == 10

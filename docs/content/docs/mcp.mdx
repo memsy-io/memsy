@@ -7,7 +7,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server is drop-in memory infras
 
 ## What you get
 
-13 tools your AI agent can call:
+14 tools your AI agent can call:
 
 | Tool | Purpose |
 |---|---|
@@ -17,6 +17,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server is drop-in memory infras
 | `memsy_health` | Connectivity + version check. |
 | `memsy_list_memories` | Paginated browse over the console memory store. |
 | `memsy_get_memory` | Fetch one memory by ID. |
+| `memsy_list_actors` | List the actors that have memories in the active org, and report this session's own resolved `actor_id`. |
 | `memsy_list_orgs` | List configured Memsy profiles (one profile = one org). |
 | `memsy_use_org` | Switch which Memsy org subsequent calls hit. |
 | `memsy_list_roles` | List roles defined in the active org (for onboarding pickers). |
@@ -200,7 +201,7 @@ Requires Node.js 18+. You don't need to install anything globally — your host 
   <Step title="Verify it's connected">
     <Tabs groupId="mcp-host" persist>
       <Tab title="Claude Code">
-        Type `/mcp` — `memsy` should appear with 13 tools.
+        Type `/mcp` — `memsy` should appear with 14 tools.
       </Tab>
       <Tab title="Cursor">
         Settings → Tools & MCP → `memsy` should show a green status dot.

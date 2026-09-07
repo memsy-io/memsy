@@ -1,4 +1,4 @@
-"""Tests for MemsyClient sub-resources: orgs, roles, teams, memories."""
+"""Tests for MemsyClient sub-resources: orgs, roles, teams, memories, actors."""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -247,3 +247,122 @@ class TestMemoriesResource:
         item = client.memories.get("mem_1")
         assert item.scope.level == "actor"
         assert item.scope.actor_id == "user_1"
+
+
+class TestActorsResource:
+    ACTOR = {
+        "actor_id": "user_1",
+        "first_memory_at": "2026-04-01T00:00:00+00:00",
+        "last_memory_at": "2026-04-05T00:00:00+00:00",
+        "memory_count": 12,
+        "active_memory_count": 10,
+        "scope_levels": ["actor"],
+        "role_ids": ["role_1"],
+        "team_ids": [],
+    }
+
+    def _envelope(self, items, **overrides):
+        body = {"items": items, "total": len(items), "limit": 100, "offset": 0}
+        body.update(overrides)
+        return body
+
+    @patch("httpx.Client.request")
+    def test_actors_list(self, mock_request, client):
+        mock_request.return_value = _make_response(200, self._envelope([self.ACTOR]))
+        page = client.actors.list()
+        assert page.total == 1
+        assert page.items[0].actor_id == "user_1"
+        assert page.items[0].memory_count == 12
+        assert page.items[0].active_memory_count == 10
+        assert page.items[0].role_ids == ["role_1"]
+
+    @patch("httpx.Client.request")
+    def test_actors_list_parses_the_envelope_not_a_bare_list(self, mock_request, client):
+        """/actors returns {items, total, ...} unlike /roles, which returns a bare list."""
+        mock_request.return_value = _make_response(200, self._envelope([self.ACTOR], total=7))
+        page = client.actors.list()
+        # total is the org's distinct-actor count, not len(items) on this page.
+        assert page.total == 7
+        assert len(page.items) == 1
+
+    @patch("httpx.Client.request")
+    def test_actors_list_defaults_truncated_to_false(self, mock_request, client):
+        """An older server that predates the flag must not read as truncated."""
+        mock_request.return_value = _make_response(200, self._envelope([self.ACTOR]))
+        assert client.actors.list().truncated is False
+
+    @patch("httpx.Client.request")
+    def test_actors_list_surfaces_truncated(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200, self._envelope([self.ACTOR], truncated=True)
+        )
+        assert client.actors.list().truncated is True
+
+    @patch("httpx.Client.request")
+    def test_actors_list_omits_org_id_when_not_given(self, mock_request, client):
+        """Server defaults to the caller's org; sending org_id=None would 403 or 422."""
+        mock_request.return_value = _make_response(200, self._envelope([]))
+        client.actors.list()
+        assert "org_id" not in mock_request.call_args.kwargs["params"]
+
+    @patch("httpx.Client.request")
+    def test_actors_list_forwards_query_params(self, mock_request, client):
+        mock_request.return_value = _make_response(200, self._envelope([]))
+        client.actors.list("org_1", limit=25, offset=50, sort="actor_id_asc", q="slack")
+        params = mock_request.call_args.kwargs["params"]
+        assert params == {
+            "limit": 25,
+            "offset": 50,
+            "sort": "actor_id_asc",
+            "org_id": "org_1",
+            "q": "slack",
+        }
+
+    @patch("httpx.Client.request")
+    def test_actors_list_default_sort_is_newest_first(self, mock_request, client):
+        mock_request.return_value = _make_response(200, self._envelope([]))
+        client.actors.list()
+        assert mock_request.call_args.kwargs["params"]["sort"] == "first_memory_desc"
+
+    @patch("httpx.Client.request")
+    def test_actors_get(self, mock_request, client):
+        mock_request.return_value = _make_response(200, self.ACTOR)
+        actor = client.actors.get("user_1")
+        assert actor.actor_id == "user_1"
+        assert actor.first_memory_at == "2026-04-01T00:00:00+00:00"
+        assert actor.last_memory_at == "2026-04-05T00:00:00+00:00"
+
+    @patch("httpx.Client.request")
+    def test_actors_get_encodes_the_id_as_one_path_segment(self, mock_request, client):
+        """Connector actor ids carry structure; a '/' must not escape /actors/."""
+        mock_request.return_value = _make_response(200, self.ACTOR)
+        client.actors.get("slack:T0B7FKNKKTR:U0B7TN132E9")
+        url = str(mock_request.call_args.args[1])
+        assert url.endswith("/actors/slack%3AT0B7FKNKKTR%3AU0B7TN132E9")
+
+    @patch("httpx.Client.request")
+    def test_actors_get_cannot_traverse_out_of_the_collection(self, mock_request, client):
+        mock_request.return_value = _make_response(200, self.ACTOR)
+        client.actors.get("../roles")
+        url = str(mock_request.call_args.args[1])
+        assert "/actors/..%2Froles" in url
+        assert "/roles" not in url.replace("..%2Froles", "")
+
+    @patch("httpx.Client.request")
+    def test_actors_null_timestamps_survive(self, mock_request, client):
+        """A memory whose created_at is the NULL sentinel yields None, not a crash."""
+        mock_request.return_value = _make_response(
+            200, {**self.ACTOR, "first_memory_at": None, "last_memory_at": None}
+        )
+        actor = client.actors.get("user_1")
+        assert actor.first_memory_at is None
+        assert actor.last_memory_at is None
+
+    @patch("httpx.Client.request")
+    def test_actors_missing_list_fields_default_to_empty(self, mock_request, client):
+        mock_request.return_value = _make_response(200, {"actor_id": "user_1"})
+        actor = client.actors.get("user_1")
+        assert actor.scope_levels == []
+        assert actor.role_ids == []
+        assert actor.team_ids == []
+        assert actor.memory_count == 0
