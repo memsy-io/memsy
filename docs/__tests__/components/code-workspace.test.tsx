@@ -380,6 +380,35 @@ describe('CodeWorkspace views', () => {
     expect(selected.getAttribute('tabindex')).toBe('0')
   })
 
+  /**
+   * move() reads `current` from render scope rather than using the functional
+   * setter, so two presses in a row must still advance by two. React flushes
+   * discrete events like keydown synchronously, so `current` is fresh for the
+   * second one -- this pins that rather than trusting it.
+   */
+  it('moves on every press, not just the first', () => {
+    renderWorkspace()
+    const rail = screen
+      .getAllByRole('tablist')
+      .find((l) => l.getAttribute('aria-orientation') === 'vertical')!
+    const selected = () =>
+      within(rail)
+        .getAllByRole('tab')
+        .findIndex((t) => t.getAttribute('aria-selected') === 'true')
+
+    within(rail).getAllByRole('tab')[0].focus()
+    expect(selected()).toBe(0)
+
+    // Two files, so this is 0 -> 1 -> 0. Asserting the intermediate step is the
+    // point: a `move` that read a stale `current` would sit still on the second
+    // press, and landing back on 0 would look identical to never having moved.
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
+    expect(selected()).toBe(1)
+
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
+    expect(selected()).toBe(0)
+  })
+
   it('leaves no anchor behind in the document', () => {
     const { baseElement } = renderWorkspace()
     click(/download .*\.ts/i)
