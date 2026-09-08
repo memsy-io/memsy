@@ -5,11 +5,11 @@ description: End-to-end recipes that wire Memsy into a real app — Next.js, Fas
 
 The guides elsewhere in these docs explain one API at a time. The cookbooks do the opposite: each one is a **complete, runnable app** built around a single integration point, with the framework's own conventions respected rather than glossed over.
 
-Every recipe uses only what ships in the currently published SDKs — `ingest()`, `search()`, and `status()`. No preview APIs, and nothing that needs a version newer than the one [Installation](/docs/installation) gives you.
+Every recipe uses only what ships in the currently published SDKs — `ingest()` and `search()`. No preview APIs, and nothing that needs a version newer than the one [Installation](/docs/installation) gives you.
 
 <CardGroup cols={2}>
   <Card title="Next.js chat app" icon="code" href="/docs/cookbooks/nextjs-chat">
-    App Router route handler with per-user memory. Covers mapping your auth's user id onto `actor_id` and streaming a grounded reply.
+    App Router route handler with per-user memory. Covers mapping your auth's user id onto `actor_id`, and keeping the write off the response path with `waitUntil`.
   </Card>
   <Card title="FastAPI support agent" icon="rocket" href="/docs/cookbooks/fastapi-support-agent">
     `AsyncMemsyClient` inside an async service, with ingest moved off the request path so recall latency is the only latency users feel.

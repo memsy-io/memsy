@@ -52,8 +52,6 @@ const firstLine = (b: Block) => b.code.split('\n')[0]
  */
 const EXCLUDED: Record<string, Record<string, string>> = {
   'nextjs-chat.mdx': {
-    '// app/api/chat/route.ts':
-      'Step 4 awaits the ingest; Step 5 supersedes that tail with waitUntil, and the listing carries the Step 5 form.',
     'import { waitUntil } from "@vercel/functions";':
       'A fragment that replaces the tail of Step 4 rather than standing alone; its body is in the listing without the placeholder comment.',
     '// A stable id per chat thread, created when the thread is created.':
@@ -72,6 +70,31 @@ const EXCLUDED: Record<string, Record<string, string>> = {
       'An import line shown on its own; the listing collects all imports at the top.',
   },
   'fastapi-support-agent.mdx': {},
+}
+
+/**
+ * Individual step lines that legitimately do not appear in the listing, with
+ * the reason. Line-level rather than block-level on purpose: excluding the
+ * whole `// app/api/chat/route.ts` block skipped ~60 lines to spare the 5
+ * below, so the model name, system prompt, actor id and limit in Step 5 were
+ * unchecked -- changing `"gpt-4o-mini"` to anything at all still passed.
+ *
+ * Keyed on the trimmed line. Every entry is asserted to match a real step line,
+ * so an entry cannot go stale silently.
+ */
+const EXCLUDED_LINES: Record<string, Record<string, string>> = {
+  'nextjs-chat.mdx': {
+    '// 3. Record — both sides of the turn, in one batch.':
+      "Step 4's narration of the await form; Step 5 supersedes it with waitUntil.",
+    'await memsy.ingest([':
+      'Step 4 awaits the ingest. The listing carries the Step 5 waitUntil form, which chains .ingest([ off memsy instead.',
+    'content: message,':
+      'The listing inlines each event as a single-line object, so this field ends the line as `content: message },`.',
+    'content: reply,':
+      'Same single-line object literal as above, for the assistant side.',
+    ']);':
+      "Closes Step 4's await form; the waitUntil form closes with `])` and a separate `);`.",
+  },
 }
 
 const isImport = (l: string) =>
@@ -129,18 +152,33 @@ describe('cookbook complete-code listings', () => {
     expect(listingText.length).toBeGreaterThan(0)
 
     const excluded = EXCLUDED[file] ?? {}
+    const excludedLines = EXCLUDED_LINES[file] ?? {}
     const missing: string[] = []
 
     for (const step of steps) {
       if (firstLine(step) in excluded) continue
       for (const line of significant(step.code)) {
-        if (!listingText.includes(line)) {
+        if (line.trim() in excludedLines) continue
+        if (!listingText.includes(line.trim())) {
           missing.push(`[${firstLine(step).slice(0, 40)}] ${line.trim().slice(0, 70)}`)
         }
       }
     }
 
     expect(missing, `step lines absent from the complete listing:\n  ${missing.join('\n  ')}`).toEqual([])
+  })
+
+  /** Same honesty rule for the line-level exclusions: no entry may go stale. */
+  it.each(files)('%s: every excluded line still appears in a step block', (file) => {
+    const stepLines = new Set(
+      blocks(file)
+        .filter((b) => !b.listing && CODE_LANGS.has(b.lang))
+        .flatMap((b) => significant(b.code))
+        .map((l) => l.trim()),
+    )
+    for (const line of Object.keys(EXCLUDED_LINES[file] ?? {})) {
+      expect(stepLines, `stale EXCLUDED_LINES entry in ${file}: ${line}`).toContain(line)
+    }
   })
 
   /** Keeps the exclusion list honest: no stale entries, no silent additions. */

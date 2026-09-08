@@ -24,7 +24,7 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
     At [api.slack.com/apps](https://api.slack.com/apps), create an app, then work through these **in order** — the scopes have to be in place before you install, because installing is what mints the bot token:
 
     1. **Socket Mode** → enable it. No public URL is needed for local development.
-    2. **OAuth & Permissions** → add the bot token scopes `app_mentions:read`, `chat:write` and `channels:history`.
+    2. **OAuth & Permissions** → add the bot token scopes `app_mentions:read` and `chat:write`. That is all this recipe needs — it only answers mentions, so it never calls `conversations.history` and does not ask for the scope that would let it.
     3. **Event Subscriptions** → subscribe to the bot event `app_mention`.
     4. **Install App** → **Install to Workspace**, then approve the permissions prompt. This is its own click and nothing works without it: the bot token does not exist until the app is installed.
 
@@ -48,7 +48,7 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
     ```
 
     <Warning>
-    A bot token grants read access to every channel it is invited to. Keep all four of these in your secret manager, never in the repo.
+    A bot token can act as the bot in every channel it is invited to. With only `app_mentions:read` and `chat:write` that is limited to seeing mentions and posting replies — but keep all four of these in your secret manager, never in the repo.
     </Warning>
   </Step>
 

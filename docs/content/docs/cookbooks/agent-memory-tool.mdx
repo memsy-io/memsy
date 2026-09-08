@@ -240,12 +240,27 @@ The alternative is to make recall a **tool** the model calls when it decides it 
                         )
                         continue
 
-                    args = json.loads(call.function.arguments)
+                    # `required: ["query"]` is not enforced unless the tool is
+                    # declared with `strict: True`, and a truncated stream can
+                    # cut the JSON mid-object. Either way this must answer the
+                    # call, not raise out of run() and take the whole turn.
+                    try:
+                        query = json.loads(call.function.arguments)["query"]
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call.id,
+                                "content": "Could not read the tool arguments.",
+                            }
+                        )
+                        continue
+
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": call.id,
-                            "content": recall(args["query"]),
+                            "content": recall(query),
                         }
                     )
 
@@ -300,7 +315,25 @@ The alternative is to make recall a **tool** the model calls when it decides it 
                 continue;
               }
 
-              const { query } = JSON.parse(call.function.arguments) as { query: string };
+              // `required: ["query"]` is not enforced unless the tool is
+              // declared with `strict: true`, and a truncated stream can cut
+              // the JSON mid-object. Either way this must answer the call, not
+              // throw out of run() and take the whole turn.
+              let query: unknown;
+              try {
+                query = (JSON.parse(call.function.arguments) as { query?: unknown }).query;
+              } catch {
+                query = undefined;
+              }
+              if (typeof query !== "string") {
+                messages.push({
+                  role: "tool",
+                  tool_call_id: call.id,
+                  content: "Could not read the tool arguments.",
+                });
+                continue;
+              }
+
               messages.push({
                 role: "tool",
                 tool_call_id: call.id,
@@ -521,12 +554,27 @@ top; every other line is exactly as it appears in the walkthrough.
                         )
                         continue
 
-                    args = json.loads(call.function.arguments)
+                    # `required: ["query"]` is not enforced unless the tool is
+                    # declared with `strict: True`, and a truncated stream can
+                    # cut the JSON mid-object. Either way this must answer the
+                    # call, not raise out of run() and take the whole turn.
+                    try:
+                        query = json.loads(call.function.arguments)["query"]
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call.id,
+                                "content": "Could not read the tool arguments.",
+                            }
+                        )
+                        continue
+
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": call.id,
-                            "content": recall(args["query"]),
+                            "content": recall(query),
                         }
                     )
 
@@ -671,7 +719,25 @@ python -c 'from agent import chat; print(chat("user_1", "sess_1", "What did we d
                 continue;
               }
 
-              const { query } = JSON.parse(call.function.arguments) as { query: string };
+              // `required: ["query"]` is not enforced unless the tool is
+              // declared with `strict: true`, and a truncated stream can cut
+              // the JSON mid-object. Either way this must answer the call, not
+              // throw out of run() and take the whole turn.
+              let query: unknown;
+              try {
+                query = (JSON.parse(call.function.arguments) as { query?: unknown }).query;
+              } catch {
+                query = undefined;
+              }
+              if (typeof query !== "string") {
+                messages.push({
+                  role: "tool",
+                  tool_call_id: call.id,
+                  content: "Could not read the tool arguments.",
+                });
+                continue;
+              }
+
               messages.push({
                 role: "tool",
                 tool_call_id: call.id,

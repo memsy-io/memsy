@@ -85,6 +85,7 @@ This recipe builds a **FastAPI** endpoint that answers a support question with t
   <Step title="Write the endpoint">
     ```python
     import logging
+    import os
 
     from fastapi import BackgroundTasks, Depends, HTTPException, Request
     from memsy import EventPayload
@@ -95,8 +96,10 @@ This recipe builds a **FastAPI** endpoint that answers a support question with t
     openai = AsyncOpenAI()
 
     # A floor on relevance, so "no history" is an outcome the model can see.
-    # The right value is tier-dependent — see "Choosing a threshold" below —
-    # so it is configuration, not a constant baked into the handler.
+    # Leave at 0.0 on the free tier — unranked scores rarely clear 0.1, and a
+    # higher floor filters out everything. Raise to 0.3-0.5 once you are on a
+    # reranked tier. Configuration rather than a constant for exactly that
+    # reason; see "Choosing a threshold" below.
     RECALL_THRESHOLD = float(os.environ.get("MEMSY_RECALL_THRESHOLD", "0.0"))
 
     # Replace with your real auth dependency. The point is that the customer id
@@ -317,8 +320,10 @@ the top; every other line is exactly as it appears in the walkthrough.
     openai = AsyncOpenAI()
 
     # A floor on relevance, so "no history" is an outcome the model can see.
-    # The right value is tier-dependent — see "Choosing a threshold" below —
-    # so it is configuration, not a constant baked into the handler.
+    # Leave at 0.0 on the free tier — unranked scores rarely clear 0.1, and a
+    # higher floor filters out everything. Raise to 0.3-0.5 once you are on a
+    # reranked tier. Configuration rather than a constant for exactly that
+    # reason; see "Choosing a threshold" below.
     RECALL_THRESHOLD = float(os.environ.get("MEMSY_RECALL_THRESHOLD", "0.0"))
 
     # Replace with your real auth dependency. The point is that the customer id

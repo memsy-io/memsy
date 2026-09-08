@@ -109,8 +109,16 @@ function save(filename: string, body: BlobPart, type: string) {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  // Both of these matter outside Chrome. Chrome starts the fetch synchronously
+  // inside click(), so a detached anchor and an immediate revoke happen to
+  // work; Firefox and Safari read the blob on a later task, by which point a
+  // same-task revoke has already invalidated the URL and the download fails
+  // silently -- no error, nothing in the console.
+  link.style.display = 'none'
+  document.body.appendChild(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 function ActionButton({
@@ -261,8 +269,33 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
 
   if (files.length === 0) return null
 
+  /** Advance the selection and report where it landed.
+   *
+   * Returns the index rather than moving focus itself: two tablists share
+   * `current` (the rail and the flat strip) and only one of them is visible at
+   * a time, so only the switcher that received the keypress should follow the
+   * selection. Focusing from in here would have to guess which. */
   const move = (delta: number) => {
-    setActive((i) => (i + delta + files.length) % files.length)
+    const next = (current + delta + files.length) % files.length
+    setActive(next)
+    return next
+  }
+
+  /** Arrow-key handler for a tablist, parameterised by that list's id prefix.
+   *
+   * Focus has to follow the selection: `tabIndex` is `0` only on the selected
+   * tab, so leaving focus behind strands it on an element that is now `-1` and
+   * the next Tab press jumps out of the widget. */
+  const tabKeyDown = (idPrefix: string) => (e: React.KeyboardEvent) => {
+    const delta =
+      e.key === 'ArrowDown' || e.key === 'ArrowRight'
+        ? 1
+        : e.key === 'ArrowUp' || e.key === 'ArrowLeft'
+          ? -1
+          : 0
+    if (delta === 0) return
+    e.preventDefault()
+    document.getElementById(`${idPrefix}${move(delta)}`)?.focus()
   }
 
   function renderNodes(nodes: TreeNode[], depth: number): React.ReactNode {
@@ -292,15 +325,7 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
             aria-controls={`${workspaceId}-panel-${node.index}`}
             tabIndex={isActive ? 0 : -1}
             onClick={() => setActive(node.index)}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-                e.preventDefault()
-                move(1)
-              } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                e.preventDefault()
-                move(-1)
-              }
-            }}
+            onKeyDown={tabKeyDown(`${workspaceId}-tab-`)}
             style={{ paddingLeft: `${depth * 0.75 + 0.5}rem` }}
             className={cn(
               'w-full flex items-center gap-1.5 py-1 pr-2 text-left rounded-sm transition-colors',
@@ -335,10 +360,16 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
         <button
           key={file.path}
           role="tab"
+          // The strip is the only visible switcher whenever the rail is
+          // collapsed or the viewport is under `sm`, so it needs an id of its
+          // own for the panels to name themselves by, and the same arrow-key
+          // behaviour the rail has.
+          id={`${workspaceId}-striptab-${i}`}
           aria-selected={i === current}
           aria-controls={`${workspaceId}-panel-${i}`}
           tabIndex={i === current ? 0 : -1}
           onClick={() => setActive(i)}
+          onKeyDown={tabKeyDown(`${workspaceId}-striptab-`)}
           className={cn(
             'px-3 py-1.5 whitespace-nowrap border-b-2 -mb-px transition-colors',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
@@ -474,7 +505,12 @@ export function CodeWorkspace({ children, title }: CodeWorkspaceProps) {
                 }}
                 role="tabpanel"
                 id={`${workspaceId}-panel-${i}`}
-                aria-labelledby={`${workspaceId}-tab-${i}`}
+                // Both switchers, space-separated. Which one is rendered is a
+                // CSS decision (the rail is display:none under `sm` and when
+                // collapsed) that this component cannot read, and name
+                // computation simply skips the id that is not in the
+                // accessibility tree.
+                aria-labelledby={`${workspaceId}-tab-${i} ${workspaceId}-striptab-${i}`}
                 hidden={i !== current}
                 tabIndex={0}
                 className={cn(

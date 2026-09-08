@@ -3,8 +3,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 
 import {
   CodeFile,
@@ -37,7 +38,13 @@ function renderWorkspace(single = false) {
 }
 
 let written: string[]
-let downloads: Array<{ name: string; blob: Blob }>
+let downloads: Array<{
+  name: string
+  blob: Blob
+  /** Captured at click time -- see the click mock. */
+  inDocument: boolean
+  revokedBeforeClick: boolean
+}>
 
 beforeEach(() => {
   written = []
@@ -63,7 +70,19 @@ beforeEach(() => {
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
     this: HTMLAnchorElement,
   ) {
-    downloads.push({ name: this.download, blob: urls.get(this.href)! })
+    downloads.push({
+      name: this.download,
+      blob: urls.get(this.href)!,
+      // Both captured at click time, the only moment they mean anything.
+      // Chrome starts the fetch synchronously inside click(), so a detached
+      // anchor and a same-task revoke happen to work there. Firefox and Safari
+      // read the blob on a later task and fail silently -- no error, nothing
+      // in the console -- which a test that only inspects the Blob cannot see.
+      inDocument: this.isConnected,
+      revokedBeforeClick: (URL.revokeObjectURL as unknown as Mock).mock.calls.some(
+        (c: unknown[]) => c[0] === this.href,
+      ),
+    })
   })
 })
 
@@ -287,5 +306,83 @@ describe('CodeWorkspace views', () => {
     expect(dialog.className).toContain('m-auto')
     expect(dialog.className).toContain('w-[96vw]')
     expect(dialog.className).toContain('h-[92vh]')
+  })
+
+  /**
+   * The download only reaches the user if the anchor is in the document and the
+   * blob URL is still alive when the browser gets round to reading it. Both
+   * were previously invisible here, because the assertions only looked at the
+   * Blob the component handed to createObjectURL.
+   */
+  it('clicks an anchor that is in the document, and revokes only afterwards', () => {
+    renderWorkspace()
+    click(/download .*\.ts/i)
+
+    expect(downloads).toHaveLength(1)
+    expect(downloads[0].inDocument, 'anchor was never appended to the document').toBe(true)
+    expect(downloads[0].revokedBeforeClick, 'blob URL was revoked before the click').toBe(false)
+  })
+
+  it('applies the same anchor handling to the zip download', async () => {
+    renderWorkspace()
+    click(/download all/i)
+    await waitFor(() => expect(downloads).toHaveLength(1))
+
+    expect(downloads[0].inDocument).toBe(true)
+    expect(downloads[0].revokedBeforeClick).toBe(false)
+  })
+
+  /**
+   * The strip is the only visible switcher when the rail is collapsed or the
+   * viewport is under `sm`, so it has to carry the same affordances the rail
+   * does -- an id the panel can name itself by, and arrow keys.
+   */
+  it('names each panel by both switchers, so the visible one always labels it', () => {
+    const { baseElement } = renderWorkspace()
+    const panel = baseElement.querySelector('[role="tabpanel"]')!
+    const ids = panel.getAttribute('aria-labelledby')!.split(' ')
+
+    expect(ids).toHaveLength(2)
+    for (const id of ids) {
+      expect(baseElement.querySelector(`#${id}`), `no element with id ${id}`).not.toBeNull()
+    }
+  })
+
+  it('moves the selection with arrow keys from the strip, not just the rail', () => {
+    renderWorkspace()
+    fireEvent.click(railToggle())
+
+    // With the rail collapsed the strip is the only switcher left in the tree.
+    // Both tablists stay in the DOM -- the rail is CSS-hidden, not removed,
+    // which is exactly why the panels name themselves by both ids.
+    const strip = screen
+      .getAllByRole('tablist')
+      .find((l) => l.getAttribute('aria-orientation') === 'horizontal')!
+    const tabs = within(strip).getAllByRole('tab')
+    expect(tabs.length).toBeGreaterThan(1)
+    fireEvent.keyDown(tabs[0], { key: 'ArrowRight' })
+
+    expect(within(strip).getAllByRole('tab')[1].getAttribute('aria-selected')).toBe('true')
+  })
+
+  /** tabIndex is 0 only on the selected tab, so focus has to follow it or the
+   *  next Tab press leaves the widget entirely. */
+  it('keeps focus on the tab it just selected', () => {
+    renderWorkspace()
+    const tabs = screen.getAllByRole('tab')
+    tabs[0].focus()
+    fireEvent.keyDown(tabs[0], { key: 'ArrowDown' })
+
+    const selected = screen
+      .getAllByRole('tab')
+      .find((t) => t.getAttribute('aria-selected') === 'true')!
+    expect(document.activeElement).toBe(selected)
+    expect(selected.getAttribute('tabindex')).toBe('0')
+  })
+
+  it('leaves no anchor behind in the document', () => {
+    const { baseElement } = renderWorkspace()
+    click(/download .*\.ts/i)
+    expect(baseElement.querySelectorAll('a[download]')).toHaveLength(0)
   })
 })

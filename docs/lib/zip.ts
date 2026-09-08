@@ -125,7 +125,10 @@ export function zipStore(entries: ZipEntry[]): Uint8Array<ArrayBuffer> {
     u16(0) // comment
     u16(0) // disk number start
     u16(0) // internal attributes
-    u32(0o100644 << 16) // external attributes: regular file, rw-r--r--
+    // External attributes left empty. Unix mode bits here are only honoured
+    // when the host byte of "version made by" is 3; ours is 0 (MS-DOS/FAT),
+    // so a mode would be written and then discarded by every reader.
+    u32(0)
     u32(p.offset)
     raw(p.nameBytes)
   }
