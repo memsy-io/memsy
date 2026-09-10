@@ -123,6 +123,7 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
 
     ```python
     # app.py
+    import json
     import logging
     import os
     import re
@@ -199,14 +200,14 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
                         session_id=session,
                         kind="user_message",
                         content=question,
-                        metadata={"slack_user_id": event["user"]},
+                        metadata=json.dumps({"slack_user_id": event["user"]}),
                     ),
                     EventPayload(
                         actor_id=actor,
                         session_id=session,
                         kind="assistant_message",
                         content=answer,
-                        metadata={"slack_user_id": event["user"]},
+                        metadata=json.dumps({"slack_user_id": event["user"]}),
                     ),
                 ]
             )
@@ -334,6 +335,7 @@ should share memories.
 
     ```python
     # app.py
+    import json
     import logging
     import os
     import re
@@ -410,14 +412,14 @@ should share memories.
                         session_id=session,
                         kind="user_message",
                         content=question,
-                        metadata={"slack_user_id": event["user"]},
+                        metadata=json.dumps({"slack_user_id": event["user"]}),
                     ),
                     EventPayload(
                         actor_id=actor,
                         session_id=session,
                         kind="assistant_message",
                         content=answer,
-                        metadata={"slack_user_id": event["user"]},
+                        metadata=json.dumps({"slack_user_id": event["user"]}),
                     ),
                 ]
             )
