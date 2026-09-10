@@ -268,6 +268,56 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
     This makes one person's messages reachable by everyone else in the channel. That is the point in a shared channel, and a privacy incident in a DM. Gate it on `event["channel_type"]` if your bot handles both.
     </Warning>
   </Step>
+
+  <Step title="Take it to production">
+    `python app.py` is a foreground process holding a websocket open. That does not change in production — what changes is who keeps it running.
+
+    **Socket Mode is a client, not a server.** It dials out to Slack and holds the connection, so it belongs wherever long-running processes belong: an ECS service, a Kubernetes `Deployment`, Fly, Railway, a `systemd` unit. One container, one command, restarted when it dies.
+
+    <Warning>
+    It cannot run on Lambda, Vercel Functions, or anything that scales to zero. There is no inbound request to wake it, and a function that returns closes the socket. This is the constraint teams tend to find *after* choosing the platform.
+    </Warning>
+
+    Otherwise there is little to deploy. The recipe holds no state but the email cache in `identity.py`, and that is a cache — a second replica simply warms its own. What is left is the four environment variables, which belong in your secret manager rather than the image.
+
+    Slack allows an app several concurrent Socket Mode connections and delivers each event to exactly one of them, so two replicas let a rolling restart overlap without dropping a mention. Check the current connection limit before depending on it.
+
+    ### If it has to be serverless
+
+    Then it stops being a Socket Mode client and becomes a webhook. Bolt ships the adapters — `slack_bolt.adapter.fastapi`, `.flask`, `.aws_lambda`, `.google_cloud_functions`.
+
+    Add `signing_secret=os.environ["SLACK_SIGNING_SECRET"]` to the `App(...)` in `app.py`, since over HTTP the signature is the only thing proving Slack sent the request, and serve the same app:
+
+    ```python
+    # serve.py -- an HTTP endpoint in place of SocketModeHandler
+    from fastapi import FastAPI, Request
+    from slack_bolt.adapter.fastapi import SlackRequestHandler
+
+    from app import app  # the same App, the same @app.event("app_mention")
+
+    api = FastAPI()
+    handler = SlackRequestHandler(app)
+
+
+    @api.post("/slack/events")
+    async def slack_events(request: Request):
+        return await handler.handle(request)
+    ```
+
+    Set that URL as the **Request URL** under Event Subscriptions, and turn Socket Mode off. Three things Socket Mode was doing become yours:
+
+    | | Socket Mode | HTTP |
+    |---|---|---|
+    | Proving the caller is Slack | the socket itself | `signing_secret`, verified on every request |
+    | Reachability | none needed | a public HTTPS endpoint |
+    | Setup handshake | none | Slack's `url_verification` challenge, which the adapters answer for you |
+
+    <Warning>
+    So does the three-second ack. Bolt acks for you in Socket Mode, and on a long-running HTTP server it still does — it replies first and runs your handler on a thread. On a function platform you need `process_before_response=True`, which means the handler must *finish* before the response goes back, and a recall plus a completion plus an ingest will not reliably fit in three seconds. Slack then retries, and you get a duplicate reply and a duplicate pair of memories.
+
+    The serverless shape is therefore not this file on a different host. It is: ack immediately, put the turn on a queue, and answer from a worker — at which point you are running a long-lived process again, just a second one.
+    </Warning>
+  </Step>
 </Steps>
 
 ## What to watch for

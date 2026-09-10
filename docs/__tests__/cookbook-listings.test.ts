@@ -60,6 +60,8 @@ const EXCLUDED: Record<string, Record<string, string>> = {
       'A throwaway verification snippet, deliberately run outside the app.',
   },
   'slack-bot.mdx': {
+    '# serve.py -- an HTTP endpoint in place of SocketModeHandler':
+      'The serverless deployment variant. It replaces app.py\'s SocketModeHandler rather than joining it, so it cannot appear in a listing of the Socket Mode recipe.',
     'EventPayload(':
       'The optional team-wide recall variant, which the listing deliberately omits.',
     'recalled = memsy.search(':
