@@ -24,7 +24,9 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
     At [api.slack.com/apps](https://api.slack.com/apps), create an app, then work through these **in order** — the scopes have to be in place before you install, because installing is what mints the bot token:
 
     1. **Socket Mode** → enable it. No public URL is needed for local development.
-    2. **OAuth & Permissions** → add the bot token scopes `app_mentions:read` and `chat:write`. That is all this recipe needs — it only answers mentions, so it never calls `conversations.history` and does not ask for the scope that would let it.
+    2. **OAuth & Permissions** → add the bot token scopes `app_mentions:read`, `chat:write`, `users:read` and `users:read.email`. The first two are all the bot needs to answer a mention; the other two exist only to turn a Slack user id into an email address, which is what this recipe uses to attribute a memory to a person. It still never calls `conversations.history`, and does not ask for the scope that would let it.
+
+       `users:read.email` is a sensitive scope in Slack's app-review process. If you would rather not request it, keep the Slack user id as the actor — see the note under *Map Slack ids onto Memsy ids*.
     3. **Event Subscriptions** → subscribe to the bot event `app_mention`.
     4. **Install App** → **Install to Workspace**, then approve the permissions prompt. This is its own click and nothing works without it: the bot token does not exist until the app is installed.
 
@@ -59,10 +61,31 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
     # identity.py
     from typing import Any
 
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
 
-    def actor_id(event: dict[str, Any]) -> str:
-        """Who is speaking. Slack user ids are stable for the life of the account."""
-        return f"slack_{event['user']}"
+    # Slack user id -> email. One lookup per person, not per mention.
+    _EMAILS: dict[str, str] = {}
+
+
+    def actor_id(client: WebClient, event: dict[str, Any]) -> str:
+        """
+        Who is speaking, as their email address, so that a memory can be traced
+        back to a person without a second lookup.
+
+        Falls back to the Slack user id, which is NOT belt-and-braces: a bot, a
+        guest account, or a missing `users:read.email` scope all return a
+        profile with no address, and without the fallback every one of those
+        turns would be filed under the same empty actor.
+        """
+        user = event["user"]
+        if user not in _EMAILS:
+            try:
+                profile = client.users_info(user=user)["user"]["profile"]
+                _EMAILS[user] = profile.get("email") or f"slack_{user}"
+            except SlackApiError:
+                _EMAILS[user] = f"slack_{user}"
+        return _EMAILS[user]
 
 
     def session_id(event: dict[str, Any]) -> str:
@@ -78,14 +101,21 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
 
     | Slack concept | Memsy concept | Why |
     |---|---|---|
-    | User id (`U…`) | `actor_id` | Stable, unique, and never reused |
+    | Email address | `actor_id` | The same person across Slack and your other systems, and readable in the console |
+    | User id (`U…`) | `metadata.slack_user_id`, and the `actor_id` fallback | Stable and never reused, so it stays the way to find a person's memories if their address changes |
     | Thread (`thread_ts`) | `session_id` | One thread is one conversation |
     | Channel (`C…`) | part of `session_id` | Keeps two threads in different channels distinct |
-    | Display name | *nothing* | Users rename themselves; ids do not change |
+    | Display name | *nothing* | Users rename themselves at will, and nothing links the old name to the new |
 
     <Warning>
-    Do not use the display name or email as `actor_id`. A rename or an address change silently orphans every memory recorded under the old value — the bot does not error, it just forgets that person.
+    An email address is a *mutable* key, and this is the trade this recipe makes: attribution you can read, in exchange for a key that can change under you. When someone's address changes — a marriage, a rebrand, a domain migration — recall under the new address finds nothing, and nothing errors. The bot simply answers as though it had never met them.
+
+    That is why the Slack user id also rides along in `metadata`. It is immutable, so it remains the way to find the orphaned memories and re-file them. Without it, an address change is unrecoverable.
     </Warning>
+
+    <Note>
+    If you would rather not make that trade, return `f"slack_{event['user']}"` and drop the two `users:*` scopes. The id is opaque in the console, but it never moves. Which way to go is a question about your workspace, not about Memsy: `actor_id` is an arbitrary string that Memsy only ever compares for equality.
+    </Note>
   </Step>
 
   <Step title="Handle the mention">
@@ -120,13 +150,13 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
 
 
     @app.event("app_mention")
-    def handle_mention(event, say):
+    def handle_mention(event, say, client):
         question = MENTION.sub("", event["text"]).strip()
         if not question:
             say(text="Ask me something.", thread_ts=event.get("thread_ts", event["ts"]))
             return
 
-        actor = actor_id(event)
+        actor = actor_id(client, event)
         session = session_id(event)
 
         # 1. Recall. Scoped to this person — see the note below on team-wide recall.
@@ -169,12 +199,14 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
                         session_id=session,
                         kind="user_message",
                         content=question,
+                        metadata={"slack_user_id": event["user"]},
                     ),
                     EventPayload(
                         actor_id=actor,
                         session_id=session,
                         kind="assistant_message",
                         content=answer,
+                        metadata={"slack_user_id": event["user"]},
                     ),
                 ]
             )
@@ -242,6 +274,8 @@ If you only want Slack **content** in Memsy — no bot, no code — the [Slack c
 - **Replying outside the thread.** Omitting `thread_ts` on `say()` posts to the channel root, which starts a new Slack thread — and the next message arrives with a different `session_id` than the one you just wrote.
 - **Slack's 3-second ack.** Bolt acknowledges the event for you before your handler runs, so a slow LLM call will not cause Slack to retry. If you move to a custom HTTP adapter, ack first and do the work after.
 - **Bot messages echoing back.** `app_mention` only fires on mentions, so the bot does not hear itself. If you widen to `message` events, filter on `event.get("bot_id")` or you will ingest an infinite loop of the bot's own replies.
+- **A missing `users:read.email` scope.** The lookup does not raise, it returns a profile with no `email`, so every turn quietly files itself under the Slack id fallback instead. If the console shows `slack_U…` actors where you expected addresses, the scope is missing or the app was never reinstalled after it was added.
+- **An address that changes.** Recall under the new address finds nothing and nothing errors — the bot answers as though it had never met that person. `metadata.slack_user_id` is how you find what was orphaned; see the trade under *Map Slack ids onto Memsy ids*.
 - **Display names as ids.** Covered above, and worth repeating: it fails silently.
 
 ## Complete code
@@ -257,10 +291,31 @@ should share memories.
     # identity.py
     from typing import Any
 
+    from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
 
-    def actor_id(event: dict[str, Any]) -> str:
-        """Who is speaking. Slack user ids are stable for the life of the account."""
-        return f"slack_{event['user']}"
+    # Slack user id -> email. One lookup per person, not per mention.
+    _EMAILS: dict[str, str] = {}
+
+
+    def actor_id(client: WebClient, event: dict[str, Any]) -> str:
+        """
+        Who is speaking, as their email address, so that a memory can be traced
+        back to a person without a second lookup.
+
+        Falls back to the Slack user id, which is NOT belt-and-braces: a bot, a
+        guest account, or a missing `users:read.email` scope all return a
+        profile with no address, and without the fallback every one of those
+        turns would be filed under the same empty actor.
+        """
+        user = event["user"]
+        if user not in _EMAILS:
+            try:
+                profile = client.users_info(user=user)["user"]["profile"]
+                _EMAILS[user] = profile.get("email") or f"slack_{user}"
+            except SlackApiError:
+                _EMAILS[user] = f"slack_{user}"
+        return _EMAILS[user]
 
 
     def session_id(event: dict[str, Any]) -> str:
@@ -306,13 +361,13 @@ should share memories.
 
 
     @app.event("app_mention")
-    def handle_mention(event, say):
+    def handle_mention(event, say, client):
         question = MENTION.sub("", event["text"]).strip()
         if not question:
             say(text="Ask me something.", thread_ts=event.get("thread_ts", event["ts"]))
             return
 
-        actor = actor_id(event)
+        actor = actor_id(client, event)
         session = session_id(event)
 
         # 1. Recall. Scoped to this person — see the note below on team-wide recall.
@@ -355,12 +410,14 @@ should share memories.
                         session_id=session,
                         kind="user_message",
                         content=question,
+                        metadata={"slack_user_id": event["user"]},
                     ),
                     EventPayload(
                         actor_id=actor,
                         session_id=session,
                         kind="assistant_message",
                         content=answer,
+                        metadata={"slack_user_id": event["user"]},
                     ),
                 ]
             )
