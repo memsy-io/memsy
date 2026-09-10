@@ -247,7 +247,15 @@ The integration point that matters here is **identity**: your auth system's user
         setReply(data.reply);
       }
 
-      return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
+      // Render `reply`. A component that stores an answer and returns only the
+      // button is a component whose button appears to do nothing -- on the 401
+      // and on the 200 alike.
+      return (
+        <>
+          <button onClick={() => send("What did we decide about pricing?")}>Ask</button>
+          {reply && <p>{reply}</p>}
+        </>
+      );
     }
     ```
   </Step>
@@ -416,7 +424,15 @@ rather than returning a null session, so the route 500s instead of 401ing.
         setReply(data.reply);
       }
 
-      return <button onClick={() => send("What did we decide about pricing?")}>Ask</button>;
+      // Render `reply`. A component that stores an answer and returns only the
+      // button is a component whose button appears to do nothing -- on the 401
+      // and on the 200 alike.
+      return (
+        <>
+          <button onClick={() => send("What did we decide about pricing?")}>Ask</button>
+          {reply && <p>{reply}</p>}
+        </>
+      );
     }
     ```
 
