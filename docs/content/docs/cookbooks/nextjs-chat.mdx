@@ -15,11 +15,13 @@ The integration point that matters here is **identity**: your auth system's user
 
     Node 18 or later (the SDK uses the global `fetch`). This recipe assumes an existing Next.js 14+ app using the App Router.
 
-    Two of the steps below reach for packages outside that list: `@clerk/nextjs` for the session in Steps 4 and 5 (substitute your own auth — only the user id matters) and `@vercel/functions` for `waitUntil` in Step 6. Install whichever you actually use:
+    One step below reaches outside that list: `@vercel/functions`, for `waitUntil` in Step 6.
 
     ```bash
-    npm install @clerk/nextjs @vercel/functions
+    npm install @vercel/functions
     ```
+
+    Nothing here depends on a particular auth library. The route needs a user id it can trust, and Step 3 is where you supply one.
   </Step>
 
   <Step title="Set your credentials">
@@ -60,43 +62,54 @@ The integration point that matters here is **identity**: your auth system's user
     </Tip>
   </Step>
 
-  <Step title="Wire up Clerk's middleware">
-    `auth()` reads the session from a request context that only `clerkMiddleware()`
-    establishes. Without this file the route does not fail closed — it throws:
-
-    ```
-    Error: Clerk: auth() was called but Clerk can't detect usage of clerkMiddleware().
-    ```
-
-    It goes at the project root — or inside `src/`, if that is where your `app/`
-    directory lives.
+  <Step title="Say who the user is">
+    This is the only part of the recipe that depends on your stack, so it gets
+    its own file and the handler never mentions your auth library.
 
     ```ts
-    // middleware.ts
-    import { clerkMiddleware } from "@clerk/nextjs/server";
-
-    export default clerkMiddleware();
-
-    export const config = {
-      matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
-    };
+    // auth.ts
+    /**
+     * The current user's id, or null if nobody is signed in.
+     *
+     * This is the one function to replace. Two requirements, and they are the
+     * whole security model of the recipe:
+     *
+     *   1. It runs on the SERVER. A client-supplied id is a field the client
+     *      can edit, and editing it reads someone else's memories.
+     *   2. The id is STABLE. It becomes `actor_id`, so a value that changes
+     *      orphans everything recorded under the old one.
+     */
+    export async function currentUserId(_req: Request): Promise<string | null> {
+      throw new Error(
+        "currentUserId() is not wired up yet — return your session's user id.",
+      );
+    }
     ```
 
-    The matcher has to cover `/api/(.*)`, or the route handler runs outside the
-    middleware and `auth()` throws there specifically — the one place it matters.
+    <Warning>
+    It throws on purpose. The obvious placeholder — returning `"user_123"` so
+    the thing runs — is the version that reaches production, and when it does
+    every user shares one actor and reads everyone else's memories. There is no
+    error to notice, only memories that seem oddly well informed. Failing loudly
+    on the first request costs a minute; the placeholder costs a migration.
+    </Warning>
 
-    Clerk also needs its own keys alongside the ones from Step 2:
+    Replace the body with whatever you already run:
 
-    ```bash
-    # .env.local
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
-    CLERK_SECRET_KEY="sk_test_..."
-    ```
+    | Auth | Body of `currentUserId` |
+    |---|---|
+    | Clerk | `const { userId } = await auth(); return userId;` — also needs [`clerkMiddleware()`](https://clerk.com/docs/references/nextjs/clerk-middleware), or `auth()` throws instead of returning null |
+    | Auth.js / NextAuth | `const session = await auth(); return session?.user?.id ?? null;` |
+    | Supabase | `const { data } = await supabase.auth.getUser(); return data.user?.id ?? null;` |
+    | Auth0 | `const session = await getSession(); return session?.user?.sub ?? null;` |
+    | Your own cookie | whatever your session lookup returns |
 
     <Note>
-    Using different auth? Skip this step — it exists because `auth()` in the next
-    step is Clerk's. Every other step is auth-agnostic; all the handler needs is a
-    user id it can trust.
+    Clerk is the fiddliest of these because `auth()` reads a context that only
+    `clerkMiddleware()` establishes — without that middleware it throws rather
+    than returning null, so the route answers 500 where you expect 401. If that
+    is your stack, add the middleware at the project root and make sure its
+    matcher covers `/api/(.*)`.
     </Note>
   </Step>
 
@@ -105,7 +118,7 @@ The integration point that matters here is **identity**: your auth system's user
 
     ```ts
     // app/api/chat/route.ts
-    import { auth } from "@clerk/nextjs/server"; // or your auth of choice
+    import { currentUserId } from "@/auth";
     import OpenAI from "openai";
     import { memsy } from "@/lib/memsy";
 
@@ -115,7 +128,7 @@ The integration point that matters here is **identity**: your auth system's user
       // The actor id comes from the server-side session — NEVER from the
       // request body. A client-supplied actor_id lets any user read any
       // other user's memories by editing one JSON field.
-      const { userId } = await auth();
+      const userId = await currentUserId(req);
       if (!userId) {
         return new Response("Unauthorized", { status: 401 });
       }
@@ -286,8 +299,9 @@ Step 6 form — ingest deferred with `waitUntil` — since that is the version y
 want in production.
 
 <Warning>
-`middleware.ts` is not optional. Omit it and `auth()` throws on every request
-rather than returning a null session, so the route 500s instead of 401ing.
+`auth.ts` ships throwing, and it is the one file you must edit. Give it your
+session lookup before anything works — see the swap table in *Say who the
+user is*.
 </Warning>
 
 <CodeWorkspace title="my-app">
@@ -311,17 +325,26 @@ rather than returning a null session, so the route 500s instead of 401ing.
     ```
 
   </CodeFile>
-  <CodeFile name="middleware.ts">
+  <CodeFile name="auth.ts">
 
     ```ts
-    // middleware.ts
-    import { clerkMiddleware } from "@clerk/nextjs/server";
-
-    export default clerkMiddleware();
-
-    export const config = {
-      matcher: ["/((?!_next|.*\\..*).*)", "/api/(.*)"],
-    };
+    // auth.ts
+    /**
+     * The current user's id, or null if nobody is signed in.
+     *
+     * This is the one function to replace. Two requirements, and they are the
+     * whole security model of the recipe:
+     *
+     *   1. It runs on the SERVER. A client-supplied id is a field the client
+     *      can edit, and editing it reads someone else's memories.
+     *   2. The id is STABLE. It becomes `actor_id`, so a value that changes
+     *      orphans everything recorded under the old one.
+     */
+    export async function currentUserId(_req: Request): Promise<string | null> {
+      throw new Error(
+        "currentUserId() is not wired up yet — return your session's user id.",
+      );
+    }
     ```
 
   </CodeFile>
@@ -329,7 +352,7 @@ rather than returning a null session, so the route 500s instead of 401ing.
 
     ```ts
     // app/api/chat/route.ts
-    import { auth } from "@clerk/nextjs/server"; // or your auth of choice
+    import { currentUserId } from "@/auth";
     import { waitUntil } from "@vercel/functions";
     import OpenAI from "openai";
     import { memsy } from "@/lib/memsy";
@@ -340,7 +363,7 @@ rather than returning a null session, so the route 500s instead of 401ing.
       // The actor id comes from the server-side session — NEVER from the
       // request body. A client-supplied actor_id lets any user read any
       // other user's memories by editing one JSON field.
-      const { userId } = await auth();
+      const userId = await currentUserId(req);
       if (!userId) {
         return new Response("Unauthorized", { status: 401 });
       }
@@ -442,7 +465,7 @@ rather than returning a null session, so the route 500s instead of 401ing.
 Set up:
 
 ```bash
-npm install @memsy-io/memsy openai @clerk/nextjs @vercel/functions
+npm install @memsy-io/memsy openai @vercel/functions
 ```
 
 ```bash
@@ -450,13 +473,16 @@ npm install @memsy-io/memsy openai @clerk/nextjs @vercel/functions
 MEMSY_BASE_URL="https://api.memsy.io/v1"
 MEMSY_API_KEY="msy_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 OPENAI_API_KEY="sk-..."
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
-CLERK_SECRET_KEY="sk_test_..."
 ```
 
+Plus whatever your auth needs — Clerk wants `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+and `CLERK_SECRET_KEY`, Supabase wants its URL and key, and so on. None of it is
+Memsy's business.
+
 <Warning>
-Swap `@clerk/nextjs` for whatever auth you already run. The only requirement is
-that `userId` comes from a **server-side** session — see Step 5.
+The only hard requirement is that `currentUserId()` resolves on the **server**.
+Everything else about your auth is interchangeable; that one property is what
+stops a user reading another user's memories.
 </Warning>
 
 ## Next steps
