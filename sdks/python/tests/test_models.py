@@ -113,6 +113,7 @@ class TestSearchResultProperties:
         assert r.strength is None
         assert r.confidence is None
         assert r.observed_at is None
+        assert r.session_id is None
 
     def test_with_metadata(self):
         r = self._make_result(
@@ -127,6 +128,7 @@ class TestSearchResultProperties:
                 "strength": 0.8,
                 "confidence": 0.9,
                 "observed_at": "2026-04-01T00:00:00Z",
+                "session_id": "conv-42",
             }
         )
         assert r.title == "Dark mode preference"
@@ -139,6 +141,14 @@ class TestSearchResultProperties:
         assert r.strength == 0.8
         assert r.confidence == 0.9
         assert r.observed_at == "2026-04-01T00:00:00Z"
+        assert r.session_id == "conv-42"
+
+    def test_session_id_absent_from_populated_metadata(self):
+        """A session-less memory is indistinguishable from one whose server
+        predates the field: both yield None, and neither is an error. Pinned
+        separately from the no-metadata case, which None-checks everything."""
+        r = self._make_result({"title": "Promoted knowledge"})
+        assert r.session_id is None
 
     def test_source_events_typed(self):
         r = self._make_result(

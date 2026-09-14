@@ -118,6 +118,16 @@ export interface SearchResult {
    * was extracted from. Capped at 5 entries.
    */
   sourceMetadata: SourceMetadata[] | null;
+  /**
+   * Conversation this memory came from, or `null` when it belongs to no
+   * conversation.
+   *
+   * `null` is an answer, not a gap: promoted role/team/org knowledge is
+   * deliberately stored without a conversation because it is general rather
+   * than from one chat. Use this to tell results of the current conversation
+   * apart from earlier ones when searching across both.
+   */
+  sessionId: string | null;
 }
 
 export function parseSourceEvents(
@@ -154,6 +164,20 @@ export function parseSourceMetadata(
     }
     return out;
   });
+}
+
+/**
+ * Pull the originating conversation id out of a search result's metadata.
+ *
+ * Returns `null` both when the memory belongs to no conversation and when the
+ * server predates the field — the two are indistinguishable on the wire, and
+ * neither is an error.
+ */
+export function parseSessionId(
+  metadata: Record<string, unknown> | null | undefined
+): string | null {
+  if (!metadata) return null;
+  return asStringOrNull(metadata.session_id);
 }
 
 export interface SearchResponse {
