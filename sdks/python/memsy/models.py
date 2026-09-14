@@ -177,6 +177,18 @@ class SearchResult:
         return self._meta("entities") or []
 
     @property
+    def session_id(self) -> str | None:
+        """Conversation this memory came from, or ``None`` when it belongs to no
+        conversation.
+
+        ``None`` is an answer, not a gap: promoted role/team/org knowledge is
+        deliberately stored without a conversation because it is general rather
+        than from one chat. Use this to tell results of the current conversation
+        apart from earlier ones when searching across both.
+        """
+        return self._meta("session_id")
+
+    @property
     def source_event_ids(self) -> list[str]:
         return self._meta("source_event_ids") or []
 

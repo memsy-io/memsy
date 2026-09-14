@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-09-09
+
+### Added
+
+- **`session_id` and `exclude_session_id` params on `search()`**: scope a search to a
+  single conversation, to everything except one conversation, or — by sending neither —
+  to all of them, which is the unchanged default. Omitting both produces a request body
+  identical to previous releases.
+
+  Memories belonging to no conversation are eligible under *both* filters. Promoted
+  role/team/org knowledge is deliberately stored without a conversation because it is
+  general rather than from one chat, so scoping a search never hides it.
+
+  The two are mutually exclusive: sending both raises a 422. To search the current
+  conversation *and* previous ones, send neither.
+
+- **`SearchResult.session_id`**: the conversation a memory came from, or `None` when it
+  belongs to none. This is what makes a cross-conversation search readable — without it,
+  results from the current conversation and earlier ones arrive as one undifferentiated
+  list.
+
+### Requires
+
+- A Memsy server with conversation-scoped search deployed. Against an older server the
+  new parameters are **silently ignored** — unknown fields are dropped, so the search
+  runs unfiltered and returns 200 with no indication the scope was not applied.
+
 ## [0.3.2] - 2026-05-18
 
 ### Added

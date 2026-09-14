@@ -44,6 +44,8 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
         query,                              # required, natural language
         *,
         actor_id=None,                      # optional — filter to one actor
+        session_id=None,                    # optional — only this conversation
+        exclude_session_id=None,            # optional — every conversation but this one
         limit=10,                           # max results (default 10)
         threshold=0.0,                      # minimum similarity (default 0.0)
         include_source_events=False,        # attach source events to results
@@ -54,6 +56,8 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
     ```ts
     client.search(query, {
       actorId,                  // optional — filter to one actor
+      sessionId,                // optional — only this conversation
+      excludeSessionId,         // optional — every conversation but this one
       limit: 10,                // max results (default 10)
       threshold: 0.0,           // minimum similarity (default 0.0)
       includeSourceEvents: false,
@@ -65,6 +69,7 @@ description: Natural-language queries, thresholds, scoping, and score interpreta
     {
       "query": "natural language",
       "actor_id": "user_42",
+      "session_id": "conv_7",
       "limit": 10,
       "threshold": 0.0,
       "include_source_events": false
@@ -80,6 +85,28 @@ Plain English. You don't need to phrase it like a keyword search — "things the
 ### `actor_id` / `actorId`
 
 Pass it to scope the search to one user/agent. Omit it to search across every actor in the organization. In most user-facing flows you want to pass the current actor.
+
+### `session_id` / `sessionId`
+
+Scope the search to a single conversation. Pass the same conversation id you used when ingesting those events — `session_id` is required at ingest, so you already have it.
+
+### `exclude_session_id` / `excludeSessionId`
+
+The mirror image: return everything **except** one conversation. Useful for "what have we discussed before?" when you want previous conversations and not the one you're already in.
+
+Three ways to ask, then:
+
+| You want | Send |
+|---|---|
+| only this conversation | `session_id` |
+| every conversation but this one | `exclude_session_id` |
+| this one **and** the previous ones | neither — the unchanged default |
+
+Two things to know:
+
+**Memories that belong to no conversation always come through.** Promoted role, team and org knowledge is stored without a conversation on purpose — it's general, not from one chat. Both filters let it through, so scoping a search never hides what Memsy knows about the actor generally.
+
+**The two are mutually exclusive.** Sending both returns a `422`. They don't cancel out into "search everything" — for that, send neither.
 
 ### `limit`
 
@@ -112,6 +139,7 @@ When `true`, each result additionally includes the source events the memory was 
     r.score             # float; higher = closer match
     r.metadata          # dict | None — server-attached fields (type, kind, …)
     r.strength          # float — reinforcement strength, bounded 0.0–5.0
+    r.session_id        # str | None — conversation it came from; None if it belongs to none
     r.source_metadata   # list[dict] — user metadata from the originating event(s)
     ```
   </Tab>
@@ -123,6 +151,7 @@ When `true`, each result additionally includes the source events the memory was 
     r.content;         // natural-language memory
     r.score;           // number; higher = closer match
     r.metadata;        // Record<string, unknown> | null
+    r.sessionId;       // string | null — conversation it came from; null if it belongs to none
     r.sourceMetadata;  // SourceMetadata[] | null — user metadata from source events
     ```
   </Tab>
@@ -137,6 +166,7 @@ When `true`, each result additionally includes the source events the memory was 
           "metadata": {
             "type": "preference",
             "strength": 1.5,
+            "session_id": "conv_7",
             "source_metadata": [
               { "event_id": "01JK...", "metadata": { "plan": "pro" } }
             ]
@@ -149,6 +179,8 @@ When `true`, each result additionally includes the source events the memory was 
 </Tabs>
 
 `strength` is a reinforcement signal bounded `0.0`–`5.0` by the platform's policy ceiling; it rises by a small amount each time a memory is returned by `search()` and decays slowly when unused. **Not** a probability — don't normalise it into the `[0, 1]` range.
+
+`session_id` is the conversation the memory came from. It is **absent** when the memory belongs to no conversation — which is itself the signal that it's general knowledge rather than something said in one chat. That's what makes searching across conversations readable: send neither filter and you get everything, with each result saying where it came from, so you can tell "you mentioned this earlier today" from "you said this last week".
 
 `source_metadata` carries the JSON metadata you passed at ingest, attached to the originating event(s) the memory was derived from. Up to 5 entries; each entry is `{event_id, metadata: {...}}` for valid JSON-object payloads or `{event_id, raw: "..."}` otherwise. Use it for tagging, filtering, or correlating back to your application's own records.
 
@@ -249,6 +281,8 @@ Leave `actor_id`/`actorId` unset and you'll search every actor in the org. Good 
 ## Limitations
 
 Search only returns memories that have finished processing. Very recent events may still be in the queue — see **[Async Processing](/docs/async-processing)**.
+
+`session_id` and `exclude_session_id` need a Memsy server that supports conversation-scoped search. Against an older server they are **silently ignored** — unknown fields are dropped, so you get a `200` and an unfiltered result set with no indication the scope wasn't applied.
 
 ## Next
 
