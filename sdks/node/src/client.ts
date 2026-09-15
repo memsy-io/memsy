@@ -25,17 +25,18 @@ export interface SearchOptions {
    */
   actorId?: string;
   /**
-   * Restrict results to a single conversation — plus every memory belonging to
-   * no conversation at all. Promoted role/team/org knowledge is deliberately
-   * stored without a conversation because it is general rather than from one
-   * chat, so scoping to a conversation never hides it.
+   * Restrict results to a single conversation — a single id, not a list —
+   * plus every memory belonging to no conversation at all. Promoted
+   * role/team/org knowledge is deliberately stored without a conversation
+   * because it is general rather than from one chat, so scoping to a
+   * conversation never hides it.
    */
   sessionId?: string;
   /**
-   * Return everything EXCEPT one conversation. Session-less memories stay
-   * eligible for the same reason as `sessionId`. Mutually exclusive with
-   * `sessionId` — sending both raises a 422. To search this conversation *and*
-   * previous ones, send neither.
+   * Return everything except one conversation — a single id, not a list.
+   * Session-less memories stay eligible for the same reason as `sessionId`.
+   * Mutually exclusive with `sessionId` — sending both raises a 422. To search
+   * this conversation *and* previous ones, send neither.
    */
   excludeSessionId?: string;
   limit?: number;
