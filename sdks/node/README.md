@@ -111,6 +111,7 @@ Retrieve relevant memories using natural language.
 ```ts
 const { results } = await client.search("what does the user prefer?", {
   actorId: "user_1",            // optional — restrict to one actor; omit for org-wide search
+  sessionId: "sess_abc",        // optional — scope to one conversation
   limit: 10,                    // default: 10
   threshold: 0.0,               // default: 0.0 — minimum relevance score (no filter)
   includeSourceEvents: true,    // attach source events to each result
@@ -119,11 +120,17 @@ const { results } = await client.search("what does the user prefer?", {
 for (const r of results) {
   console.log(r.score, r.content);
   console.log(r.metadata);       // typed metadata bag
+  console.log(r.sessionId);      // conversation it came from; null if it belongs to none
   for (const evt of r.sourceEvents ?? []) {
     console.log(evt.eventId, evt.kind, evt.content);
   }
 }
 ```
+
+Scope a search to one conversation with `sessionId`, or to everything except one with
+`excludeSessionId`. Send neither — the default — to search across all of them. The two
+are mutually exclusive; sending both returns a `422`. Memories belonging to no
+conversation (promoted role/team/org knowledge) are returned either way.
 
 ### `status(eventIds)`
 
