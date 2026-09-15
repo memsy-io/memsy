@@ -102,7 +102,9 @@ Three ways to ask, then:
 | every conversation but this one | `exclude_session_id` |
 | this one **and** the previous ones | neither — the unchanged default |
 
-Two things to know:
+Three things to know:
+
+**One conversation at a time.** Both fields take a single id, not a list — unlike `role_ids` / `team_ids` alongside them. Passing a list returns a `422`. There is no way to ask for several named conversations in one search; run one search per conversation, or use `exclude_session_id` if what you want is "all but one".
 
 **Memories that belong to no conversation always come through.** Promoted role, team and org knowledge is stored without a conversation on purpose — it's general, not from one chat. Both filters let it through, so scoping a search never hides what Memsy knows about the actor generally.
 
