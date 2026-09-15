@@ -137,6 +137,8 @@ class MemsyClient(HttpCoreMixin):
         query: str,
         *,
         actor_id: str | None = None,
+        session_id: str | None = None,
+        exclude_session_id: str | None = None,
         limit: int = 10,
         threshold: float = 0.0,
         include_source_events: bool = False,
@@ -151,6 +153,17 @@ class MemsyClient(HttpCoreMixin):
             actor's memories. When omitted (``None``), the search runs org-wide
             across every actor — useful for admin tools and analytics, rarely
             what you want in an end-user-facing agent loop.
+        :param session_id: Conversation ID — a single id, not a list. When set,
+            results are restricted to that conversation — plus every memory
+            belonging to no conversation at all. Promoted role/team/org
+            knowledge is deliberately stored without a conversation because it
+            is general rather than from one chat, so scoping to a conversation
+            never hides it.
+        :param exclude_session_id: Conversation ID to exclude — a single id, not
+            a list. Returns everything except that conversation, and
+            session-less memories stay eligible for the same reason as above.
+            Mutually exclusive with ``session_id`` — sending both raises a 422.
+            To search this conversation *and* previous ones, send neither.
         :param role_ids: Role IDs the actor belongs to — enables role-promoted memories.
         :param team_ids: Team IDs the actor belongs to — enables team-promoted memories.
         :param limit: Maximum number of results to return (default 10).
@@ -168,6 +181,10 @@ class MemsyClient(HttpCoreMixin):
         }
         if actor_id is not None:
             body["actor_id"] = actor_id
+        if session_id is not None:
+            body["session_id"] = session_id
+        if exclude_session_id is not None:
+            body["exclude_session_id"] = exclude_session_id
         if role_ids:
             body["role_ids"] = role_ids
         if team_ids:

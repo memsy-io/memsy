@@ -104,7 +104,7 @@ print(result.event_ids)  # ['01J...', '01J...']
 | `role_id` | `str` | No | Scope this event to a specific role in the hierarchy |
 | `team_id` | `str` | No | Scope this event to a specific team in the hierarchy |
 
-### `search(query, *, actor_id, limit, threshold, include_source_events)`
+### `search(query, *, actor_id, session_id, exclude_session_id, limit, threshold, include_source_events)`
 
 Retrieve relevant memories using natural language.
 
@@ -112,6 +112,7 @@ Retrieve relevant memories using natural language.
 results = client.search(
     query="what does the user prefer?",
     actor_id="user_1",            # optional — restrict to one actor; omit for org-wide search
+    session_id="sess_abc",        # optional — scope to one conversation
     limit=10,                     # default: 10
     threshold=0.0,                # minimum relevance score, default: 0.0 (no filter)
     include_source_events=True,   # attach source events to each result
@@ -123,11 +124,17 @@ for r in results.results:
     # Typed metadata properties (always safe — return None/[] if absent)
     print(r.title, r.summary, r.tags)
     print(r.strength, r.confidence)
+    print(r.session_id)           # conversation it came from; None if it belongs to none
 
     # Typed source events when include_source_events=True
     for evt in r.source_events:
         print(evt.event_id, evt.kind, evt.content)
 ```
+
+Scope a search to one conversation with `session_id`, or to everything except one with
+`exclude_session_id`. Send neither — the default — to search across all of them. The two
+are mutually exclusive; sending both returns a `422`. Memories belonging to no
+conversation (promoted role/team/org knowledge) are returned either way.
 
 ### `status(event_ids)`
 
