@@ -501,12 +501,20 @@ def _actors_q_filter() -> str:
 
 
 def _actors_bad_sort() -> str:
-    """memory_count sorts were removed on purpose — the server must reject them."""
+    """memory_count sorts were removed on purpose — the server must reject them.
+
+    Only a 422 passes. A 403, 500 or 503 is not the server enforcing the sort
+    allow-list, so it must fail the step rather than read as a rejection.
+    """
     try:
         client.actors.list(sort="memory_count_desc")  # type: ignore[arg-type]
-        return "FAIL-ish: server accepted a count sort (should be 422)"
     except MemsyAPIError as err:
-        return f"rejected with {err.status_code} (expected 422)"
+        if err.status_code != 422:
+            raise AssertionError(
+                f"expected 422 for a count sort, got {err.status_code}"
+            ) from err
+        return "rejected with 422 as expected"
+    raise AssertionError("server accepted a count sort (expected 422)")
 
 
 step("8.01 control — health", _control_health)

@@ -454,12 +454,17 @@ await step('9.08 client.actors.list({ q }) substring filter', async () => {
 await step('9.09 client.actors.list({ sort: memory_count_desc }) rejected', async () => {
   // Count sorts were removed on purpose — the counts are unreliable past the
   // server's scan cap, so the server must reject rather than silently mis-rank.
+  // Only a 422 passes: a 403, 500 or 503 is not the sort allow-list firing, so
+  // it is rethrown and recorded as a failure.
   try {
     await client.actors.list(undefined, { sort: 'memory_count_desc' });
-    return 'FAIL-ish: server accepted a count sort (should be 422)';
   } catch (err) {
-    return `rejected with ${err?.statusCode ?? err?.name} (expected 422)`;
+    if (err instanceof MemsyAPIError && err.statusCode === 422) {
+      return 'rejected with 422 as expected';
+    }
+    throw err;
   }
+  throw new Error('server accepted a count sort (expected 422)');
 });
 
 // -----------------------------------------------------------------------------
