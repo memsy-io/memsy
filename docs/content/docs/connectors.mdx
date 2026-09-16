@@ -3,7 +3,7 @@ title: Connectors
 description: Connect Slack, Google Drive, Notion, GitHub, OneDrive, and S3 to Memsy from the console — no code required.
 ---
 
-Connectors bring content from the tools you already use into Memsy automatically. Connect one from the [Memsy console](https://app.memsy.io) → **Connectors**, and its content becomes searchable memory alongside everything else — no SDK, no code.
+Connectors bring content from the tools you already use into Memsy automatically. Connect one from the [Memsy console](https://app.memsy.io) → **Connectors**, and its content becomes searchable memory alongside everything else — no code required. If you'd rather automate it, you can also [connect programmatically](#connecting-programmatically).
 
 ## Available connectors
 
@@ -75,3 +75,46 @@ From any connector's page in the console you can:
 - **Disconnect** — revoke access; Memsy stops syncing and cleans up anything it installed on the provider's side (e.g. GitHub webhooks)
 
 Shared connectors (Slack, Notion, GitHub, S3) can only be connected, reconfigured, or disconnected by an org admin — other members can see that it's connected but can't change it. Personal connectors (Google Drive, OneDrive) can only be managed by the person who connected them.
+
+## Connecting programmatically
+
+The console is the easiest way to set a connector up, and most people never need anything else. If you're onboarding orgs in bulk or wiring connectors into your own admin UI, the same operations are available on the SDK through `MemsyControlClient` — connectors live on the control plane, so they hang off the control client rather than `MemsyClient`.
+
+The permission rules are identical to the console: shared providers need an org admin or an API key, personal ones can only be managed by their owner.
+
+```python
+from memsy import MemsyControlClient, ResourceSelection
+
+control = MemsyControlClient(base_url=MEMSY_CONTROL_URL, api_key=MEMSY_API_KEY)
+
+# 1. Start the connection and send your user to the consent screen
+connection = control.connectors.create("slack")
+print(connection.authorize_url)
+
+# 2. The provider redirects back to Memsy, which attaches the token.
+#    Wait for that, then read what's available to sync.
+resources = control.connectors.wait_until_authorized(connection.connector_id)
+
+# 3. Choose what to sync. This activates the connector and starts the backfill.
+#    The selection replaces the previous one, so send the full set each time.
+control.connectors.configure_resources(
+    connection.connector_id,
+    [ResourceSelection.from_item(r) for r in resources],
+)
+```
+
+```typescript
+const connection = await control.connectors.create("slack");
+console.log(connection.authorizeUrl);
+
+const resources = await control.connectors.waitUntilAuthorized(connection.connectorId);
+await control.connectors.configureResources(connection.connectorId, resources);
+```
+
+The picking step applies to the connectors that have something to pick — Slack channels, Drive and OneDrive files, GitHub repos. Notion has no picker (you choose what to share on Notion's own permission screen), and S3 syncs the whole bucket.
+
+S3 also has no OAuth step — call `configure_s3()` / `configureS3()` with your credentials instead of `create()`.
+
+Once connected, `sync()`, `list()`, `get()` and `delete()` cover the same operations as the **Managing a connection** section above.
+
+Full method lists and signatures: [Python control client](/docs/reference/python/control-client) · [Node control client](/docs/reference/node/control-client).
