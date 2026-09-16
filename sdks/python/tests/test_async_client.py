@@ -10,6 +10,7 @@ from memsy import AsyncMemsyClient, EventPayload
 from memsy.exceptions import (
     AuthenticationError,
     FeatureNotAvailable,
+    MemsyAPIError,
     MemsyConnectionError,
 )
 
@@ -140,6 +141,93 @@ class TestAsyncSearch:
 
             sig = inspect.signature(client.search)
             sig.bind("query", org_id="my-org")  # type: ignore[call-arg]
+
+    @staticmethod
+    async def _search_body(client, **kwargs) -> dict:
+        """Run a search against a stubbed transport and hand back the sent body."""
+        resp = _make_response(200, {"results": []})
+        mock = AsyncMock(return_value=resp)
+        with patch.object(client._client, "request", new=mock):
+            await client.search("preferences", **kwargs)
+        return mock.call_args[1]["json"]
+
+    @pytest.mark.asyncio
+    async def test_search_omits_session_filters_by_default(self, client):
+        """Omitting both filters must produce the request body callers got before
+        these parameters existed — the keys ABSENT, not present-and-null."""
+        body = await self._search_body(client)
+        assert "session_id" not in body
+        assert "exclude_session_id" not in body
+
+    @pytest.mark.asyncio
+    async def test_search_with_session_id(self, client):
+        body = await self._search_body(client, session_id="conv-42")
+        assert body["session_id"] == "conv-42"
+        assert "exclude_session_id" not in body
+
+    @pytest.mark.asyncio
+    async def test_search_with_exclude_session_id(self, client):
+        body = await self._search_body(client, exclude_session_id="conv-42")
+        assert body["exclude_session_id"] == "conv-42"
+        assert "session_id" not in body
+
+    @pytest.mark.asyncio
+    async def test_search_sends_both_session_filters_unvalidated(self, client):
+        """The SDK does not reject the contradictory pair — the server owns that
+        rule and answers 422."""
+        body = await self._search_body(client, session_id="conv-1", exclude_session_id="conv-2")
+        assert body["session_id"] == "conv-1"
+        assert body["exclude_session_id"] == "conv-2"
+
+    @pytest.mark.asyncio
+    async def test_search_sends_empty_session_id_verbatim(self, client):
+        """An empty string is sent as-is; the server collapses it to "no filter"."""
+        body = await self._search_body(client, session_id="")
+        assert body["session_id"] == ""
+
+    @pytest.mark.asyncio
+    async def test_search_sends_empty_session_id_beside_exclude(self, client):
+        """Empty + exclude is not the contradictory pair — the server treats an
+        empty id as unset before the mutual-exclusion check, so this is a plain
+        exclude search, not a 422."""
+        body = await self._search_body(client, session_id="", exclude_session_id="conv-2")
+        assert body["session_id"] == ""
+        assert body["exclude_session_id"] == "conv-2"
+
+    @pytest.mark.asyncio
+    async def test_search_surfaces_422_for_an_unsearchable_session_id(self, client):
+        """Ingest validates length only, search also validates the charset — so an
+        id that stored fine can 422 here. The SDK forwards it and surfaces the
+        server's error rather than pre-validating."""
+        resp = _make_response(422, {"detail": [{"msg": "session ids may contain only ..."}]})
+        with patch.object(client._client, "request", new=AsyncMock(return_value=resp)):
+            with pytest.raises(MemsyAPIError) as exc:
+                await client.search("preferences", session_id="chat about ünicode")
+
+        assert exc.value.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_search_result_exposes_session_id(self, client):
+        """The conversation each result came from survives the round trip."""
+        resp = _make_response(
+            200,
+            {
+                "results": [
+                    {
+                        "id": "m1",
+                        "content": "scoped",
+                        "score": 0.9,
+                        "metadata": {"session_id": "conv-42"},
+                    },
+                    {"id": "m2", "content": "promoted", "score": 0.8, "metadata": {}},
+                ]
+            },
+        )
+        with patch.object(client._client, "request", new=AsyncMock(return_value=resp)):
+            result = await client.search("preferences")
+
+        assert result.results[0].session_id == "conv-42"
+        assert result.results[1].session_id is None
 
 
 class TestAsyncErrors:

@@ -41,7 +41,7 @@ The session is the immediate context window the event belongs to — a conversat
 - Start a new `session_id` when the context logically resets (new chat, new task).
 - Keep the same `session_id` for every event that belongs to one conversational flow, including assistant replies and tool results.
 
-Sessions aren't used to filter `search()` today, but Memsy uses them during extraction to understand what's in scope.
+Sessions scope retrieval too: pass `session_id` to search inside one conversation, or `exclude_session_id` to search every conversation but that one — see [Conversation scoping](/docs/searching-memory#session_id--sessionid). Memsy also uses sessions during extraction to understand what's in scope.
 
 ## A complete example
 
