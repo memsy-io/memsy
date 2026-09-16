@@ -18,8 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   role/team/org knowledge is deliberately stored without a conversation because it is
   general rather than from one chat, so scoping a search never hides it.
 
-  The two are mutually exclusive: sending both raises a 422. To search the current
-  conversation *and* previous ones, send neither.
+  The two are mutually exclusive: sending both *non-empty* raises a 422. An empty
+  string is treated as unset — and that check runs first — so `session_id=""`
+  alongside `exclude_session_id` is a plain exclude search rather than an error. Pass
+  `None`, never `""`. To search the current conversation *and* previous ones, send
+  neither.
 
 - **`SearchResult.session_id`**: the conversation a memory came from, or `None` when it
   belongs to none. This is what makes a cross-conversation search readable — without it,

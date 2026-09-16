@@ -12,6 +12,7 @@ from memsy.exceptions import (
     AuthenticationError,
     AuthorizationError,
     FeatureNotAvailable,
+    MemsyAPIError,
     MemsyConnectionError,
     UsageLimitExceeded,
 )
@@ -239,6 +240,51 @@ class TestMemsyClientMethods:
 
         body = mock_request.call_args[1]["json"]
         assert body["session_id"] == ""
+
+    @patch("httpx.Client.request")
+    def test_search_sends_empty_session_id_beside_exclude(self, mock_request, client):
+        """The contradictory pair is NOT contradictory when one side is empty.
+
+        The server trims each id and treats an empty result as unset, and it does
+        that before the mutual-exclusion check — so this combination does not 422,
+        it runs as a plain exclude search. A caller writing
+        ``session_id=current or ""`` gets a silently different scope with a 200.
+        Pinned because the docs previously claimed a flat "sending both is a 422".
+        """
+        self._ok(mock_request)
+
+        client.search("test query", session_id="", exclude_session_id="conv-2")
+
+        body = mock_request.call_args[1]["json"]
+        assert body["session_id"] == ""
+        assert body["exclude_session_id"] == "conv-2"
+
+    @patch("httpx.Client.request")
+    def test_search_surfaces_422_for_an_unsearchable_session_id(self, mock_request, client):
+        """An id that ingest accepted can still be rejected by search.
+
+        Ingest validates length only; search also validates the charset
+        (``[A-Za-z0-9_-:.@/]``, max 256). So a session id containing a space or
+        any non-ASCII character round-trips into storage and then 422s here.
+        The SDK does not pre-validate — it forwards the id and surfaces the
+        server's error — and this pins the shape callers have to catch.
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.is_success = False
+        mock_response.json.return_value = {
+            "detail": [{"msg": "session ids may contain only letters, digits, and _ - : . @ /"}]
+        }
+        mock_response.headers = {}
+        mock_request.return_value = mock_response
+
+        with pytest.raises(MemsyAPIError) as exc:
+            client.search("test query", session_id="chat about ünicode")
+
+        assert exc.value.status_code == 422
+        # Forwarded verbatim — no client-side charset check that could drift
+        # from the server's.
+        assert mock_request.call_args[1]["json"]["session_id"] == "chat about ünicode"
 
     @patch("httpx.Client.request")
     def test_search_result_exposes_session_id(self, mock_request, client):

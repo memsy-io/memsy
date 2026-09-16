@@ -90,6 +90,8 @@ Pass it to scope the search to one user/agent. Omit it to search across every ac
 
 Scope the search to a single conversation. Pass the same conversation id you used when ingesting those events — `session_id` is required at ingest, so you already have it.
 
+> **Search accepts a narrower set of ids than ingest does.** Searchable ids may contain only letters, digits and `_ - : . @ /`, up to 256 characters. Ingest checks the length but **not** the character set — so an id containing a space, `#`, `+`, `~`, an emoji or any non-ASCII character stores fine and returns a `422` the first time you search it. This bites whenever a conversation id comes from something a human wrote: a chat title, a thread name, a channel description. If you don't control the id's shape, slugify it before ingest rather than finding out at search time.
+
 ### `exclude_session_id` / `excludeSessionId`
 
 The mirror image: return everything **except** one conversation. Useful for "what have we discussed before?" when you want previous conversations and not the one you're already in.
@@ -108,7 +110,9 @@ Three things to know:
 
 **Memories that belong to no conversation always come through.** Promoted role, team and org knowledge is stored without a conversation on purpose — it's general, not from one chat. Both filters let it through, so scoping a search never hides what Memsy knows about the actor generally.
 
-**The two are mutually exclusive.** Sending both returns a `422`. They don't cancel out into "search everything" — for that, send neither.
+**The two are mutually exclusive.** Sending both *non-empty* returns a `422`. They don't cancel out into "search everything" — for that, send neither.
+
+**An empty string is not the same as sending both.** The server trims each id and treats an empty result as unset, and it does that *before* the mutual-exclusion check. So `session_id: ""` together with `exclude_session_id` does not error — it runs as a plain exclude search. Something like `session_id=current or ""` therefore scopes differently from what you meant, with a `200` and no warning. Pass `None` / `undefined` when you have no conversation, never `""`.
 
 ### `limit`
 

@@ -27,7 +27,11 @@ export interface SearchOptions {
   actorId?: string;
   /**
    * Restrict results to a single conversation — a single id, not a list —
-   * plus every memory belonging to no conversation at all. Promoted
+   * plus every memory belonging to no conversation at all.
+   *
+   * Searchable ids allow only `[A-Za-z0-9_-:.@/]` and at most 256 characters.
+   * Ingest validates the length but not the charset, so an id holding a space
+   * or any non-ASCII character stores fine and 422s here. Promoted
    * role/team/org knowledge is deliberately stored without a conversation
    * because it is general rather than from one chat, so scoping to a
    * conversation never hides it.
@@ -36,8 +40,11 @@ export interface SearchOptions {
   /**
    * Return everything except one conversation — a single id, not a list.
    * Session-less memories stay eligible for the same reason as `sessionId`.
-   * Mutually exclusive with `sessionId` — sending both raises a 422. To search
-   * this conversation *and* previous ones, send neither.
+   * Mutually exclusive with `sessionId` — sending both *non-empty* raises a
+   * 422. An empty string is treated as unset, so `sessionId: ""` alongside
+   * `excludeSessionId` is a plain exclude search rather than an error; pass
+   * `undefined`, not `""`, when you have no conversation. To search this
+   * conversation *and* previous ones, send neither.
    */
   excludeSessionId?: string;
   limit?: number;

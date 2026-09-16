@@ -185,8 +185,13 @@ class SearchResult:
         deliberately stored without a conversation because it is general rather
         than from one chat. Use this to tell results of the current conversation
         apart from earlier ones when searching across both.
+
+        A non-string value yields ``None`` rather than being handed back as-is,
+        so the annotation holds whatever the server sends. The Node SDK's
+        ``parseSessionId`` does the same, and the two must agree.
         """
-        return self._meta("session_id")
+        value = self._meta("session_id")
+        return value if isinstance(value, str) else None
 
     @property
     def source_event_ids(self) -> list[str]:

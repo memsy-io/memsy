@@ -150,6 +150,15 @@ class TestSearchResultProperties:
         r = self._make_result({"title": "Promoted knowledge"})
         assert r.session_id is None
 
+    def test_session_id_does_not_coerce_a_non_string(self):
+        """Mirrors the Node SDK's parseSessionId test. The property is annotated
+        ``str | None``, so a numeric id on the wire must come back as None rather
+        than as an int — otherwise callers doing string operations on it break at
+        runtime with the annotation still claiming they're safe."""
+        assert self._make_result({"session_id": 42}).session_id is None
+        assert self._make_result({"session_id": None}).session_id is None
+        assert self._make_result({"session_id": ["conv-1"]}).session_id is None
+
     def test_source_events_typed(self):
         r = self._make_result(
             {

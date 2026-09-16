@@ -10,6 +10,7 @@ from memsy import AsyncMemsyClient, EventPayload
 from memsy.exceptions import (
     AuthenticationError,
     FeatureNotAvailable,
+    MemsyAPIError,
     MemsyConnectionError,
 )
 
@@ -174,9 +175,7 @@ class TestAsyncSearch:
     async def test_search_sends_both_session_filters_unvalidated(self, client):
         """The SDK does not reject the contradictory pair — the server owns that
         rule and answers 422."""
-        body = await self._search_body(
-            client, session_id="conv-1", exclude_session_id="conv-2"
-        )
+        body = await self._search_body(client, session_id="conv-1", exclude_session_id="conv-2")
         assert body["session_id"] == "conv-1"
         assert body["exclude_session_id"] == "conv-2"
 
@@ -185,6 +184,27 @@ class TestAsyncSearch:
         """An empty string is sent as-is; the server collapses it to "no filter"."""
         body = await self._search_body(client, session_id="")
         assert body["session_id"] == ""
+
+    @pytest.mark.asyncio
+    async def test_search_sends_empty_session_id_beside_exclude(self, client):
+        """Empty + exclude is not the contradictory pair — the server treats an
+        empty id as unset before the mutual-exclusion check, so this is a plain
+        exclude search, not a 422."""
+        body = await self._search_body(client, session_id="", exclude_session_id="conv-2")
+        assert body["session_id"] == ""
+        assert body["exclude_session_id"] == "conv-2"
+
+    @pytest.mark.asyncio
+    async def test_search_surfaces_422_for_an_unsearchable_session_id(self, client):
+        """Ingest validates length only, search also validates the charset — so an
+        id that stored fine can 422 here. The SDK forwards it and surfaces the
+        server's error rather than pre-validating."""
+        resp = _make_response(422, {"detail": [{"msg": "session ids may contain only ..."}]})
+        with patch.object(client._client, "request", new=AsyncMock(return_value=resp)):
+            with pytest.raises(MemsyAPIError) as exc:
+                await client.search("preferences", session_id="chat about ünicode")
+
+        assert exc.value.status_code == 422
 
     @pytest.mark.asyncio
     async def test_search_result_exposes_session_id(self, client):

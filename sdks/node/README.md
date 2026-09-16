@@ -129,8 +129,15 @@ for (const r of results) {
 
 Scope a search to one conversation with `sessionId`, or to everything except one with
 `excludeSessionId`. Send neither — the default — to search across all of them. The two
-are mutually exclusive; sending both returns a `422`. Memories belonging to no
+are mutually exclusive; sending both *non-empty* returns a `422`. An empty string is
+treated as unset, so `sessionId: ""` alongside `excludeSessionId` is a plain exclude
+search rather than an error — pass `undefined`, never `""`. Memories belonging to no
 conversation (promoted role/team/org knowledge) are returned either way.
+
+Searchable ids may contain only letters, digits and `_ - : . @ /`, up to 256 characters.
+Ingest checks the length but not the character set, so an id with a space, `#`, `+` or
+any non-ASCII character stores fine and returns a `422` when you search it. Slugify ids
+you don't control — anything derived from a chat title will hit this.
 
 ### `status(eventIds)`
 

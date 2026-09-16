@@ -98,6 +98,23 @@ describe("search — session scoping", () => {
     expect(body.exclude_session_id).toBe("conv-2");
   });
 
+  it("sends an empty sessionId alongside excludeSessionId", async () => {
+    // Not the contradictory pair: the server trims each id and treats an empty
+    // result as unset, and it does that BEFORE the mutual-exclusion check. So
+    // this is a plain exclude search, not a 422 — `sessionId: current ?? ""`
+    // silently scopes differently from what the caller meant.
+    const mock = stubFetch();
+
+    await client().search("preferences", {
+      sessionId: "",
+      excludeSessionId: "conv-2",
+    });
+
+    const body = sentBody(mock);
+    expect(body.session_id).toBe("");
+    expect(body.exclude_session_id).toBe("conv-2");
+  });
+
   it("sends an empty sessionId verbatim", async () => {
     // Matches actorId. The server collapses "" to "no filter", so a caller
     // passing it gets an UNSCOPED search rather than an error — a decision,
@@ -107,6 +124,30 @@ describe("search — session scoping", () => {
     await client().search("preferences", { sessionId: "" });
 
     expect(sentBody(mock).session_id).toBe("");
+  });
+});
+
+describe("search — unsearchable session ids", () => {
+  it("surfaces the server's 422 rather than pre-validating", async () => {
+    // Ingest validates length only; search also validates the charset
+    // ([A-Za-z0-9_-:.@/], max 256). So an id that stored fine can be rejected
+    // here. The SDK forwards it verbatim — no client-side charset check that
+    // could drift from the server's.
+    const mock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ detail: [{ msg: "session ids may contain only ..." }] }), {
+          status: 422,
+          headers: { "Content-Type": "application/json" },
+        })
+    );
+    vi.stubGlobal("fetch", mock);
+
+    await expect(
+      client().search("preferences", { sessionId: "chat about ünicode" })
+    ).rejects.toMatchObject({ statusCode: 422 });
+
+    const init = mock.mock.calls[0]![1]!;
+    expect(JSON.parse(init.body as string).session_id).toBe("chat about ünicode");
   });
 });
 
