@@ -426,6 +426,47 @@ await step('9.05 client.memories.list({ limit: 5 })', async () => {
   return `items=${r.items.length} total=${r.total}`;
 });
 
+await step('9.06 client.actors.list({ limit: 10 })', async () => {
+  const page = await client.actors.list(undefined, { limit: 10 });
+  const flag = page.truncated ? ' TRUNCATED (counts under-reported)' : '';
+  return `items=${page.items.length} distinctActors=${page.total}${flag}`;
+});
+
+await step("9.07 client.actors.get() for this run's actor", async () => {
+  try {
+    const actor = await client.actors.get(ACTOR);
+    return `firstMemoryAt=${actor.firstMemoryAt} memoryCount=${actor.memoryCount}`;
+  } catch (err) {
+    if (err?.statusCode === 404) {
+      return '404 — no memories extracted for this run\'s actor yet (extraction lag)';
+    }
+    throw err;
+  }
+});
+
+await step('9.08 client.actors.list({ q }) substring filter', async () => {
+  const page = await client.actors.list(undefined, { q: RUN_ID, limit: 10 });
+  const ids = page.items.map((a) => a.actorId);
+  const both = ids.includes(ACTOR) && ids.includes(ALT_ACTOR);
+  return `q=${RUN_ID} matched=${ids.length} bothRunActorsPresent=${both}`;
+});
+
+await step('9.09 client.actors.list({ sort: memory_count_desc }) rejected', async () => {
+  // Count sorts were removed on purpose — the counts are unreliable past the
+  // server's scan cap, so the server must reject rather than silently mis-rank.
+  // Only a 422 passes: a 403, 500 or 503 is not the sort allow-list firing, so
+  // it is rethrown and recorded as a failure.
+  try {
+    await client.actors.list(undefined, { sort: 'memory_count_desc' });
+  } catch (err) {
+    if (err instanceof MemsyAPIError && err.statusCode === 422) {
+      return 'rejected with 422 as expected';
+    }
+    throw err;
+  }
+  throw new Error('server accepted a count sort (expected 422)');
+});
+
 // -----------------------------------------------------------------------------
 // Summary
 // -----------------------------------------------------------------------------

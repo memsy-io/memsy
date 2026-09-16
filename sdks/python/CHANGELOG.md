@@ -5,6 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-09-16
+
+### Added
+
+- **`client.actors` / `async_client.actors`**: read-only access to the actors that have
+  memories in an org, over memsy-core's `GET /actors`. `ActorsResource` and
+  `AsyncActorsResource`, plus the `ActorResource` and `ActorListResponse` models and the
+  `ActorSort` literal, are exported from `memsy`.
+
+  ```python
+  page = client.actors.list(limit=50, sort="last_memory_desc", q="slack")
+  for actor in page.items:
+      print(actor.actor_id, actor.memory_count)
+
+  actor = client.actors.get("slack:T0B7FKNKKTR:U0B7TN132E9")
+  ```
+
+  List-only by design. Actors are **derived** — the server folds the org's memories on
+  `actor_id` at read time rather than storing a record — so there is nothing to create,
+  rename or delete. Renaming would mean rewriting every event and memory scope carrying
+  the old id.
+
+  Three things to know about the shape:
+
+  - **`list()` returns an envelope** (`items`, `total`, `limit`, `offset`, `truncated`),
+    not a bare list like `roles.list()`. `total` is the org's distinct-actor count after
+    any `q` filter, not the length of the page.
+  - **`first_memory_at` / `last_memory_at` are named for the memories, not the actor** —
+    they are `min`/`max` of the memories' `created_at`. `last_memory_at` is *not* a
+    "last active" signal: only writes advance it, reads never touch it. And
+    `first_memory_at` moves *forward* if the oldest memory is reaped or decayed away.
+  - **Check `truncated` before trusting any count.** When set, the server hit its
+    row-scan cap: the list may be incomplete and every `memory_count` is an under-count.
+    This is also why there is no sort by memory count — it would rank on numbers known
+    to be wrong, so the server rejects one with a 422.
+
+## [0.3.3] - 2026-09-01
+
+### Added
+
+- **`control.connectors` / `async_control.connectors`**: connector management for Slack,
+  Google Drive, S3, Notion, GitHub and OneDrive. Connectors live on the control plane, so
+  `ConnectorsResource` hangs off `MemsyControlClient` — *not* `MemsyClient`.
+
+  ```python
+  from memsy import MemsyControlClient
+
+  control = MemsyControlClient(base_url="https://api.memsy.io/api", api_key="msy_...")
+  connection = control.connectors.create("slack")
+  print(connection.authorize_url)   # send the end user here
+  control.connectors.wait_until_authorized(connection.connector_id)
+  control.connectors.sync(connection.connector_id)
+  ```
+
+  Surface: `list_providers()`, `status()`, `create()`, `configure_s3()`, `list()`,
+  `get()`, `list_resources()`, `list_branches()`, `picker_config()`,
+  `wait_until_authorized()`, `configure_resources()`, `sync()`, `delete()` — each with an
+  async twin on `AsyncConnectorsResource`.
+
+  **Two scoping models, and the difference decides who may connect what:**
+
+  - **Org-scoped** — `slack`, `s3`, `notion`, `github`. One shared connection per org.
+    Only an org admin, or an API key (which the server treats as a service caller acting
+    org-wide), may connect, configure, sync or disconnect one. A seated non-admin member
+    gets `AuthorizationError` (403) and may only read.
+  - **User-scoped** — `google_drive`, `onedrive`. Each member connects their own account.
+    An org admin can see it for auditing but may never mutate it or spend its token.
+
+  `USER_SCOPED_PROVIDERS`, `ORG_SCOPED_PROVIDERS` and `requires_org_admin()` are exported
+  as a pre-flight convenience so callers can fail fast or hide UI. **They are not the
+  security boundary** — the server is, and it knows about providers newer than any given
+  SDK release.
+
+  S3 is not OAuth — `create("s3")` raises `MemsyAPIError` (400); use `configure_s3()`.
+  `create()` also raises 403 when a non-admin connects an org-scoped provider, and 409
+  when a workspace is already connected.
+
+  Provider, connector and resource ids are percent-encoded as single path segments, so
+  one carrying a `/` or `..` cannot resolve outside its collection.
+
+- **New models**: `Connector`, `ConnectorConnection`, `ConnectorResourceItem`,
+  `ConnectorStatus`, `ResourceSelection`, `PickerConfig`.
+
 ## [0.3.2] - 2026-05-18
 
 ### Added

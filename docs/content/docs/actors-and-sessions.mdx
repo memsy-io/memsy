@@ -145,6 +145,76 @@ Sessions aren't used to filter `search()` today, but Memsy uses them during extr
   </Tab>
 </Tabs>
 
+## Listing the actors in an org
+
+You never register an actor — an `actor_id` exists because events arrived carrying it. To
+find out which actors your org actually has, list them:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    page = client.actors.list(sort="first_memory_desc", q="slack")
+
+    print(page.total)                  # distinct actors in the org
+    for actor in page.items:
+        print(actor.actor_id, actor.first_memory_at, actor.memory_count)
+
+    # One actor; raises MemsyAPIError (404) if it has no memories in this org
+    actor = client.actors.get("user_42")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    const page = await client.actors.list(undefined, {
+      sort: "first_memory_desc",
+      q: "slack",
+    });
+
+    console.log(page.total);           // distinct actors in the org
+    for (const a of page.items) console.log(a.actorId, a.firstMemoryAt, a.memoryCount);
+
+    const actor = await client.actors.get("user_42");
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    curl "$MEMSY_BASE_URL/actors?sort=first_memory_desc&limit=100" \
+      -H "Authorization: Bearer $MEMSY_API_KEY"
+    ```
+  </Tab>
+</Tabs>
+
+With no arguments you get the first 100 actors, ordered by most recent first memory. Refine
+with:
+
+| Parameter | Values | Notes |
+|---|---|---|
+| `sort` | `first_memory_desc` (default), `first_memory_asc`, `last_memory_desc`, `actor_id_asc` | Sorting by memory count is deliberately unavailable — see **Counts can be short** below |
+| `q` | any string | Case-insensitive substring match on `actor_id` |
+| `limit`, `offset` | 1–500, default 100 | Pages the deduped actor list, so `total` is the org's distinct-actor count |
+| `org_id` | omit it | Defaults to the org behind your API key. Supplying a different one returns 403 |
+
+**Nothing is stored.** The server folds your org's memories on `actor_id` on every request,
+so there is no actor record to write to — no create, no rename, no delete. Renaming would
+mean rewriting every event and memory scope that carries the old id.
+
+**The timestamps measure the memories, not the actor.** There is no actor creation event to
+read, so both are drawn from the memories' `created_at`:
+
+| Field | What it is | What it is *not* |
+|---|---|---|
+| `first_memory_at` | `min(created_at)` — when the actor's oldest surviving memory was written | The actor's creation time. It moves *forward* when the oldest memory is reaped or decays away. |
+| `last_memory_at` | `max(created_at)` — when the actor's newest memory was written | A "last used" signal. Only a *write* advances it — reads never do, so an actor searched daily can still show a months-old value. |
+
+**Counts can be short.** When `truncated` is `true`, the server hit its row-scan cap before
+reading every memory in the org. The actors listed are real, but the list may be incomplete
+and every `memory_count` is an **under-count** — treat the counts as unusable while it is
+set. That is also why there is no sort by count: it would rank on a number known to be wrong.
+
+**New actors take a moment to appear.** An actor whose events have not been extracted into
+memories yet is not listed, and `get` returns 404 for it. After your first `ingest`, wait for
+extraction to finish — see **[Async Processing](/docs/async-processing)**.
+
 ## Shared actor IDs vs. isolation
 
 Memories are always isolated per organization (each API key belongs to one org). Within an org, memories are keyed by `actor_id`. If two users share an `actor_id`, they share memories — so don't reuse IDs across people.

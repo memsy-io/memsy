@@ -12,7 +12,7 @@ Works with every host that speaks MCP — Claude Code, Cursor, VS Code, Cline, C
 
 ## What you get
 
-13 tools exposed to your AI agent:
+14 tools exposed to your AI agent:
 
 | Tool | Purpose |
 |---|---|
@@ -22,6 +22,7 @@ Works with every host that speaks MCP — Claude Code, Cursor, VS Code, Cline, C
 | `memsy_health` | Connectivity + version check. |
 | `memsy_list_memories` | Paginated browse over the console memory store. |
 | `memsy_get_memory` | Fetch one memory by ID. |
+| `memsy_list_actors` | List the actors that have memories in the active org, and report this session's own resolved `actor_id`. |
 | `memsy_list_orgs` | List local profiles (one profile = one Memsy org). |
 | `memsy_use_org` | Switch which Memsy org subsequent calls hit. |
 | `memsy_list_roles` | List roles defined in the active org (for onboarding pickers). |
@@ -156,7 +157,7 @@ The host re-reads MCP config on launch.
 
 ### 4. Verify
 
-- **Claude Code**: type `/mcp` — `memsy` should appear with 13 tools.
+- **Claude Code**: type `/mcp` — `memsy` should appear with 14 tools.
 - **Cursor**: Settings → Tools & MCP → "memsy" should show a green status dot.
 - **Cline**: bottom panel → MCP icon → "memsy" listed.
 - **Continue.dev**: type `@` in chat → MCP tools should be discoverable.

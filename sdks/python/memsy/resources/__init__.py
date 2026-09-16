@@ -1,3 +1,4 @@
+from memsy.resources.actors import ActorsResource, AsyncActorsResource
 from memsy.resources.memories import AsyncMemoriesResource, MemoriesResource
 from memsy.resources.orgs import AsyncOrgsResource, OrgsResource
 from memsy.resources.roles import AsyncRolesResource, RolesResource
@@ -12,4 +13,6 @@ __all__ = [
     "AsyncTeamsResource",
     "MemoriesResource",
     "AsyncMemoriesResource",
+    "ActorsResource",
+    "AsyncActorsResource",
 ]

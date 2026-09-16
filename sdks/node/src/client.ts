@@ -13,6 +13,7 @@ import { OrgsResource } from "./resources/orgs.js";
 import { RolesResource } from "./resources/roles.js";
 import { TeamsResource } from "./resources/teams.js";
 import { MemoriesResource } from "./resources/memories.js";
+import { ActorsResource } from "./resources/actors.js";
 
 export type MemsyClientOptions = BaseClientOptions;
 
@@ -41,6 +42,7 @@ export interface SearchOptions {
  *   client.orgs       — onboarding org CRUD
  *   client.roles      — onboarding role CRUD
  *   client.teams      — onboarding team CRUD
+ *   client.actors     — actors with memories in the org (read-only, derived)
  *   client.memories   — console memory browsing
  */
 export class MemsyClient extends BaseHttpClient {
@@ -48,6 +50,7 @@ export class MemsyClient extends BaseHttpClient {
   readonly roles: RolesResource;
   readonly teams: TeamsResource;
   readonly memories: MemoriesResource;
+  readonly actors: ActorsResource;
 
   constructor(options: MemsyClientOptions) {
     super(options);
@@ -55,6 +58,7 @@ export class MemsyClient extends BaseHttpClient {
     this.roles = new RolesResource(this);
     this.teams = new TeamsResource(this);
     this.memories = new MemoriesResource(this);
+    this.actors = new ActorsResource(this);
   }
 
   async ingest(events: EventPayload[]): Promise<IngestResponse> {
