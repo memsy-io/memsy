@@ -30,6 +30,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
+import time
 
 MARKER = os.path.expanduser("~/.memsy/.onboard-nudged")
 
@@ -145,14 +147,97 @@ def _truthy(v: str | None) -> bool:
     return (v or "").strip().lower() in ("on", "true", "1", "yes", "enabled")
 
 
-def _read_source() -> str:
+def _read_payload() -> dict:
+    """Read the SessionStart hook payload. stdin can only be consumed once, so
+    everything that needs a field off it reads from this one dict."""
     try:
         payload = json.load(sys.stdin)
-        if isinstance(payload, dict):
-            return str(payload.get("source") or "startup")
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _source(payload: dict) -> str:
+    return str(payload.get("source") or "startup")
+
+
+def _session_note_path() -> str | None:
+    """Where this Claude Code process records the conversation it is currently in.
+
+    Keyed by CLAUDE_PID — the `claude` process — because that is the one id both
+    sides can derive independently. The hook gets it from the environment; the
+    MCP reads the same pid out of CLAUDE_CODE_MESSAGING_SOCKET
+    (/tmp/cc-socks/<pid>.sock). Keying on the project directory instead would
+    collide whenever two conversations are open on the same project.
+
+    Returns None when there is no pid to key on — better no note than an
+    ambiguous one, since the MCP falls back to sending no session filter.
+    """
+    pid = (os.environ.get("CLAUDE_PID") or "").strip()
+    if not pid.isdigit():
+        return None
+    # expanduser + abspath on the env value too, not just the fallback: a
+    # CLAUDE_PLUGIN_DATA of "~/foo" would otherwise create a directory literally
+    # named "~" under the cwd, and a relative value would resolve against
+    # whichever cwd each process happens to have — the hook's and the MCP's are
+    # not guaranteed to match, and a note written where the reader never looks
+    # degrades scoping silently. identity.ts does the same.
+    base = os.path.abspath(os.path.expanduser(os.environ.get("CLAUDE_PLUGIN_DATA") or "~/.memsy"))
+    return os.path.join(base, "sessions", f"{pid}.json")
+
+
+def _write_session_note(payload: dict) -> None:
+    """Record the conversation id so the MCP can scope searches to it.
+
+    The MCP receives CLAUDE_CODE_SESSION_ID in its environment, but that is
+    fixed when the process launches and the process survives `/clear` — so from
+    the first clear onward it names the conversation the user just left. This
+    hook fires on startup, resume, clear *and* compact, which is exactly the set
+    of events that changes the answer, so the note is what keeps it true.
+
+    Deliberately not gated behind MEMSY_TURN_SYNC: that flag controls turn
+    capture, and conversation scoping should not silently stop working because
+    an unrelated feature is off.
+
+    Never raises. A SessionStart hook that throws would disrupt the session, and
+    a missing note only costs an unscoped search.
+    """
+    session_id = str(payload.get("session_id") or "").strip()
+    path = _session_note_path()
+    if not path:
+        return
+    if not session_id:
+        # No id to record — remove any note rather than leave the previous one
+        # standing. Notes are keyed by pid and pids get recycled, so a note we
+        # can't refresh is a note that could later be read as current by an
+        # unrelated window.
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        note = {
+            "session_id": session_id,
+            "source": _source(payload),
+            "updated_at": int(time.time()),
+        }
+        # Write-then-rename: the MCP reads this file on every search, and a
+        # partially written one would parse as garbage.
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(note, f)
+            os.replace(tmp, path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+            raise
     except Exception:
         pass
-    return "startup"
 
 
 def _load_config() -> dict:
@@ -246,7 +331,11 @@ def generate_context(source: str) -> str:
 
 
 def main() -> int:
-    source = _read_source()
+    payload = _read_payload()
+    # Before anything else, and regardless of source: a compacted session is
+    # still the session the MCP needs to name.
+    _write_session_note(payload)
+    source = _source(payload)
     # Claude Code injects stdout directly as plain-text context (no JSON
     # envelope), so we print the concatenated blocks verbatim — matching the
     # previous all-bash version, which wrote each block straight to stdout.

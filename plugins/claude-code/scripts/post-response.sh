@@ -83,6 +83,7 @@ import json, sys, os, hashlib, subprocess
 try:
     hook_data = json.load(sys.stdin)
     transcript_path = hook_data.get('transcript_path', '') or ''
+    hook_session_id = str(hook_data.get('session_id') or '').strip()
 except Exception:
     sys.exit(0)
 
@@ -250,10 +251,16 @@ def _single_default(snake, camel, env_name):
 role_id = _single_default('default_role_ids', 'defaultRoleIds', 'MEMSY_DEFAULT_ROLE_IDS')
 team_id = _single_default('default_team_ids', 'defaultTeamIds', 'MEMSY_DEFAULT_TEAM_IDS')
 
-# session_id only needs to be non-empty and stable across the Stop hook's
-# repeated fires within one Claude session — the transcript path is exactly
-# that. Recall is actor-based, so it need not match the MCP's per-process id.
-session_id = 'cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16]
+# Use the host's own conversation id, which Claude Code hands every hook in its
+# payload. This MUST match what the MCP sends, because search can now be scoped
+# to a conversation: if turn sync files a memory under one name and memsy_search
+# asks for another, a scoped search silently misses everything captured here.
+#
+# The fallback hashes the transcript path — the pre-scoping behaviour, kept only
+# for hosts that don't supply session_id. It is stable per conversation but
+# unknown to the MCP, so memories stored under it are findable by actor and by
+# semantic match, just not by conversation scope.
+session_id = hook_session_id or ('cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16])
 
 def _event(kind, content):
     e = {'kind': kind, 'content': content,
