@@ -12,6 +12,13 @@ export interface ResolvedSearchScope {
   filter: { sessionId?: string; excludeSessionId?: string };
   /** What actually happened, echoed to the caller — may differ from what was asked. */
   applied: string;
+  /**
+   * When set, do NOT search — return this to the caller instead.
+   *
+   * Its presence is the signal; there is no companion boolean, so the two
+   * cannot contradict each other.
+   */
+  refusal?: string;
 }
 
 /**
@@ -23,10 +30,21 @@ export interface ResolvedSearchScope {
  *   2. A narrower scope needs a real conversation id. Pass `null` when the
  *      current conversation could not be identified (the MCP's fallback id is
  *      generated and names nothing on the server).
- *   3. With no id, degrade to an unscoped search and say so in `applied`.
- *      Scoping by a fabricated id would match nothing and return an empty list
- *      that reads as "no memories about this" rather than "I don't know which
- *      conversation you're in".
+ *   3. With no id the two narrow scopes part company, because degrading means
+ *      opposite things for them:
+ *
+ *      - `this_conversation` asked for a SUBSET. An unscoped search is a
+ *        superset, so the answer is still in the results, just with noise.
+ *        Degrade, and say so in `applied`.
+ *      - `everything_except_this_conversation` asked for exactly one thing to
+ *        be REMOVED. An unscoped search returns precisely that thing, which
+ *        inverts the only instruction given. Its whole purpose is "have we
+ *        discussed this before?", so the caller would be shown what was said
+ *        moments ago and conclude yes. Refuse instead.
+ *
+ *      There is no partial answer available: without an id we cannot exclude,
+ *      and falling back to the launch-time id could exclude the conversation
+ *      the user just left — removing the wrong one.
  *
  * Never returns both fields — the server rejects that pair with a 422.
  */
@@ -36,6 +54,17 @@ export function resolveSearchScope(
 ): ResolvedSearchScope {
   if (scope === "all") return { filter: {}, applied: "all" };
   if (!conversationId) {
+    if (scope === "everything_except_this_conversation") {
+      return {
+        filter: {},
+        applied: "none (search not run)",
+        refusal:
+          "Cannot identify the current conversation, so it cannot be excluded. " +
+          "No search was run, because returning every conversation would include " +
+          'the one you asked to leave out. Re-run with scope "all" for unfiltered ' +
+          "results.",
+      };
+    }
     return {
       filter: {},
       applied: "all (requested scope unavailable: this conversation could not be identified)",
@@ -120,10 +149,30 @@ export function registerSearch(server: McpServer, profiles: ProfileManager): voi
         // is the safety gate for the whole feature, so it lives in one tested
         // place rather than as a ternary in a handler nothing covers.
         const conversationId = scopableConversationId();
-        const { filter: sessionFilter, applied: scopeApplied } = resolveSearchScope(
-          args.scope,
-          conversationId,
-        );
+        const {
+          filter: sessionFilter,
+          applied: scopeApplied,
+          refusal,
+        } = resolveSearchScope(args.scope, conversationId);
+
+        if (refusal) {
+          // Deliberately a normal result, not a thrown error: nothing failed,
+          // we declined. `refused` is an explicit boolean because the reader is
+          // a model deciding what to do next, and inferring it from prose is
+          // the kind of thing that works most of the time. `count`/`results`
+          // stay present so anything reading them doesn't break on a missing
+          // key.
+          return jsonResult({
+            profile: ctx.profileName,
+            query: args.query,
+            scope: scopeApplied,
+            requested_scope: args.scope,
+            refused: true,
+            message: refusal,
+            count: 0,
+            results: [],
+          });
+        }
 
         const res = await ctx.client.search(args.query, {
           actorId,

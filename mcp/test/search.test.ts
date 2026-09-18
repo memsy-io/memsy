@@ -36,12 +36,14 @@ describe("resolveSearchScope", () => {
   });
 
   describe("when the conversation cannot be identified", () => {
-    it("degrades to an unscoped search rather than guessing", () => {
-      // Scoping by a fabricated id would match nothing and return an empty
+    it("degrades `this_conversation` to an unscoped search rather than guessing", () => {
+      // Asked for a subset, got a superset: the answer is still in there. And
+      // scoping by a fabricated id would match nothing and return an empty
       // list, which reads as "no memories about this" instead of "I don't know
       // which conversation you're in".
-      expect(resolveSearchScope("this_conversation", null).filter).toEqual({});
-      expect(resolveSearchScope("everything_except_this_conversation", null).filter).toEqual({});
+      const out = resolveSearchScope("this_conversation", null);
+      expect(out.filter).toEqual({});
+      expect(out.refusal).toBeUndefined();
     });
 
     it("reports that the requested scope was not applied", () => {
@@ -52,10 +54,38 @@ describe("resolveSearchScope", () => {
       expect(applied).toContain("unavailable");
     });
 
-    it("is indistinguishable from 'all' on the wire", () => {
+    it("degraded `this_conversation` is indistinguishable from 'all' on the wire", () => {
       expect(resolveSearchScope("this_conversation", null).filter).toEqual(
         resolveSearchScope("all", CONV).filter,
       );
+    });
+
+    it("REFUSES `everything_except_this_conversation` instead of degrading", () => {
+      // Degrading here would return precisely the conversation the caller asked
+      // to leave out, inverting the only instruction given. Since the scope
+      // exists for "have we discussed this before?", the caller would be shown
+      // what was said moments ago and conclude yes.
+      const out = resolveSearchScope("everything_except_this_conversation", null);
+      expect(out.refusal).toBeTruthy();
+      expect(out.refusal).toContain("cannot be excluded");
+      expect(out.applied).not.toContain("all");
+    });
+
+    it("refusing is distinguishable from an unscoped search", () => {
+      // Both carry an empty filter, so `filter` alone cannot tell them apart —
+      // the caller must branch on `refusal`, and this pins that.
+      const refused = resolveSearchScope("everything_except_this_conversation", null);
+      const degraded = resolveSearchScope("this_conversation", null);
+      expect(refused.filter).toEqual(degraded.filter);
+      expect(Boolean(refused.refusal)).not.toBe(Boolean(degraded.refusal));
+    });
+
+    it("still scopes normally once an id is available", () => {
+      // The refusal is about the missing id, not the scope itself.
+      expect(resolveSearchScope("everything_except_this_conversation", CONV)).toEqual({
+        filter: { excludeSessionId: CONV },
+        applied: "everything_except_this_conversation",
+      });
     });
   });
 });
