@@ -239,6 +239,63 @@ def _write_session_note(payload: dict) -> None:
     except Exception:
         pass
 
+    _reap_dead_session_notes(path)
+
+
+def _pid_is_running(pid: int) -> bool:
+    """Whether a process with this pid currently exists.
+
+    Signal 0 performs the permission and existence checks without delivering
+    anything. PermissionError means the process is there but owned by someone
+    else — still alive, so still keep its note.
+    """
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        # Can't tell — keep the note. Deleting a live session's note would
+        # silently switch off its conversation scoping.
+        return True
+    return True
+
+
+def _reap_dead_session_notes(current_path: str) -> None:
+    """Delete notes belonging to `claude` processes that no longer exist.
+
+    One file accumulates per Claude Code process and nothing else removes them.
+    Liveness rather than age is the test on purpose: a session can legitimately
+    run for a very long time — one was measured still serving after six days —
+    so any age cutoff loose enough to spare it reaps almost nothing, and one
+    tight enough to reap would delete a live window's note and silently switch
+    off its scoping. The pid is right there in the filename, so ask the OS.
+
+    A dead pid later reused by some unrelated program keeps its note, since the
+    pid is alive again. Harmless: the MCP refuses notes predating its own
+    process, so a recycled-pid note can't be read as current.
+
+    Never raises — this runs inside a SessionStart hook.
+    """
+    try:
+        directory = os.path.dirname(current_path)
+        keep = os.path.basename(current_path)
+        for name in os.listdir(directory):
+            if name == keep or not name.endswith(".json"):
+                continue
+            stem = name[: -len(".json")]
+            if not (stem.isascii() and stem.isdigit()):
+                continue
+            if _pid_is_running(int(stem)):
+                continue
+            try:
+                os.unlink(os.path.join(directory, name))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def _load_config() -> dict:
     # Whole-file precedence (mirrors the MCP's findConfigFile): a per-project
