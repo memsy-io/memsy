@@ -77,7 +77,7 @@ MEMSY_BASE_URL="${MEMSY_BASE_URL:-https://api.memsy.io/v1}"
 # backwards (reading from the tail in blocks and stopping as soon as the last
 # user+assistant turn is found) so a long transcript is not loaded in full.
 TURN_JSON="$(cat | python3 -c "
-import json, sys, os, hashlib, subprocess
+import json, sys, os, hashlib, re, subprocess
 
 # Parse Stop hook stdin
 try:
@@ -260,6 +260,20 @@ team_id = _single_default('default_team_ids', 'defaultTeamIds', 'MEMSY_DEFAULT_T
 # for hosts that don't supply session_id. It is stable per conversation but
 # unknown to the MCP, so memories stored under it are findable by actor and by
 # semantic match, just not by conversation scope.
+#
+# Validate the host's id before trusting it, using the rule the MCP applies
+# (identity.ts SEARCHABLE_SESSION_ID, mirroring memsy-core's
+# _SEARCHABLE_ID_PATTERN / _MAX_ID_LENGTH). Ingest enforces the 256-char cap and
+# rejects the WHOLE batch, so a single bad id from the host stops turn sync
+# outright — silently, since this runs in the background and only logs. Charset
+# violations do ingest, but can never be searched, and the MCP refuses the same
+# id, so the two halves would disagree again. The hash fallback always matches.
+# Written with fullmatch and with the dash last in the character class so the
+# pattern needs no anchors and no backslash: this whole block is still inside a
+# double-quoted shell string, which would eat them.
+if not re.fullmatch(r'[A-Za-z0-9_:.@/-]{1,256}', hook_session_id):
+    hook_session_id = ''
+
 session_id = hook_session_id or ('cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16])
 
 def _event(kind, content):
