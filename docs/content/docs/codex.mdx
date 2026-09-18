@@ -119,8 +119,27 @@ If you work across multiple Memsy orgs, configure profiles in `~/.memsy/config.j
 | Proactive store mode | ✓ (`MEMSY_PROACTIVE=on`) |
 | Confirm-before-store mode | ✓ (`MEMSY_CONFIRM_STORE=on`) |
 | First-run onboarding nudge | ✓ |
+| Conversation-scoped search (`scope` on `memsy_search`) | ✗ — see below |
 
 These modes are toggled by env vars read in the hooks (set them with e.g. `export MEMSY_SESSION_AUTOCONTEXT=on` before launching Codex). Verified on Codex v0.137: Codex forwards your shell environment to hook commands, and SessionStart emits its context using the JSON envelope Codex requires (`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}`). Unlike these modes, the **API key** must be in `~/.memsy/config.json` / `config.toml`, never a shell `export` — the MCP server gets a curated env (see Set your API key above).
+
+### Conversation-scoped search is Claude Code only, for now
+
+`memsy_search` accepts a `scope` of `this_conversation` or
+`everything_except_this_conversation` ([MCP docs](/docs/mcp)). Under Codex those
+scopes are accepted but **not applied** — the search runs across everything and
+the response says so in its `scope` field.
+
+The reason is that Codex hands MCP servers a curated environment containing
+nothing that identifies the current session. The hooks know the conversation id —
+Codex passes it in the hook payload, and turn-sync already tags every stored
+event with it — but the MCP server has no way to work out *which* session it
+belongs to, so it cannot look the id up. Rather than guess, and risk scoping your
+search to somebody else's Codex window, it searches everything and tells you.
+
+Nothing is stored wrongly in the meantime: Codex-sourced memories already carry
+the correct conversation id, so they become scope-searchable the moment a session
+identifier reaches the MCP server.
 
 ### Trusting the hooks
 

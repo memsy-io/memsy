@@ -77,12 +77,13 @@ MEMSY_BASE_URL="${MEMSY_BASE_URL:-https://api.memsy.io/v1}"
 # backwards (reading from the tail in blocks and stopping as soon as the last
 # user+assistant turn is found) so a long transcript is not loaded in full.
 TURN_JSON="$(cat | python3 -c "
-import json, sys, os, hashlib, subprocess
+import json, sys, os, hashlib, re, subprocess
 
 # Parse Stop hook stdin
 try:
     hook_data = json.load(sys.stdin)
     transcript_path = hook_data.get('transcript_path', '') or ''
+    hook_session_id = str(hook_data.get('session_id') or '').strip()
 except Exception:
     sys.exit(0)
 
@@ -250,10 +251,30 @@ def _single_default(snake, camel, env_name):
 role_id = _single_default('default_role_ids', 'defaultRoleIds', 'MEMSY_DEFAULT_ROLE_IDS')
 team_id = _single_default('default_team_ids', 'defaultTeamIds', 'MEMSY_DEFAULT_TEAM_IDS')
 
-# session_id only needs to be non-empty and stable across the Stop hook's
-# repeated fires within one Claude session — the transcript path is exactly
-# that. Recall is actor-based, so it need not match the MCP's per-process id.
-session_id = 'cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16]
+# Use the host's own conversation id, which Claude Code hands every hook in its
+# payload. This MUST match what the MCP sends, because search can now be scoped
+# to a conversation: if turn sync files a memory under one name and memsy_search
+# asks for another, a scoped search silently misses everything captured here.
+#
+# The fallback hashes the transcript path — the pre-scoping behaviour, kept only
+# for hosts that don't supply session_id. It is stable per conversation but
+# unknown to the MCP, so memories stored under it are findable by actor and by
+# semantic match, just not by conversation scope.
+#
+# Validate the host's id before trusting it, using the rule the MCP applies
+# (identity.ts SEARCHABLE_SESSION_ID, mirroring memsy-core's
+# _SEARCHABLE_ID_PATTERN / _MAX_ID_LENGTH). Ingest enforces the 256-char cap and
+# rejects the WHOLE batch, so a single bad id from the host stops turn sync
+# outright — silently, since this runs in the background and only logs. Charset
+# violations do ingest, but can never be searched, and the MCP refuses the same
+# id, so the two halves would disagree again. The hash fallback always matches.
+# Written with fullmatch and with the dash last in the character class so the
+# pattern needs no anchors and no backslash: this whole block is still inside a
+# double-quoted shell string, which would eat them.
+if not re.fullmatch(r'[A-Za-z0-9_:.@/-]{1,256}', hook_session_id):
+    hook_session_id = ''
+
+session_id = hook_session_id or ('cc-' + hashlib.sha256(transcript_path.encode()).hexdigest()[:16])
 
 def _event(kind, content):
     e = {'kind': kind, 'content': content,
