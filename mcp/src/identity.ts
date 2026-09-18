@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 
 import type { Profile } from "./config.js";
 
@@ -116,16 +116,34 @@ export function resolveActorId(opts: ResolveOptions): {
  * session note is filed under it.
  */
 /**
- * Expand a leading `~` the way Python's `os.path.expanduser` does, so both
- * halves resolve CLAUDE_PLUGIN_DATA to the same directory. Node has no
- * built-in equivalent; `~` is shell syntax and is otherwise a literal
- * directory name.
+ * Where the session notes live, as an absolute path.
+ *
+ * The hook writes here and the MCP reads here, so the two must land on the
+ * same directory or the note is written somewhere the reader never looks and
+ * scoping silently stops working. That means the rule has to be implementable
+ * identically in Python and TypeScript, which constrains it:
+ *
+ *   - a leading `~` or `~/` is expanded
+ *   - `~user` is NOT, deliberately. Python's `expanduser` resolves it through
+ *     the passwd database and Node has no equivalent, so supporting it would
+ *     mean hand-rolling a lookup and matching every edge case of a function we
+ *     don't control.
+ *   - anything not absolute after that is ignored, falling back to `~/.memsy`.
+ *     Relative paths resolve against the process's own cwd, and the hook's cwd
+ *     is not the MCP's.
+ *
+ * Ignoring an odd value costs an unexpected-but-shared directory. Honouring it
+ * differently on each side costs the feature, silently. `session_start.py`
+ * implements the same rule — keep them in step.
  */
-function expandHome(p: string | undefined): string | undefined {
-  if (!p) return undefined;
-  if (p === "~") return homedir();
-  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
-  return p;
+function sessionNotesBase(): string {
+  const raw = process.env.CLAUDE_PLUGIN_DATA;
+  const fallback = join(homedir(), ".memsy");
+  if (!raw) return fallback;
+  let expanded = raw;
+  if (raw === "~") expanded = homedir();
+  else if (raw.startsWith("~/")) expanded = join(homedir(), raw.slice(2));
+  return isAbsolute(expanded) ? expanded : fallback;
 }
 
 function claudePid(): string | null {
@@ -204,13 +222,7 @@ function claudeStartedAt(): number | null {
 function readSessionNote(): string | null {
   const pid = claudePid();
   if (!pid) return null;
-  // Must resolve to the same absolute path the hook writes to. `~` is shell
-  // syntax, not a path component, so an unexpanded CLAUDE_PLUGIN_DATA of
-  // "~/foo" points at a directory literally named "~"; a relative value
-  // resolves against this process's cwd, which need not match the hook's.
-  // Either way the note is written somewhere the reader never looks and
-  // scoping degrades with no signal. session_start.py does the same.
-  const base = resolve(expandHome(process.env.CLAUDE_PLUGIN_DATA) || join(homedir(), ".memsy"));
+  const base = sessionNotesBase();
   try {
     const raw = readFileSync(join(base, "sessions", `${pid}.json`), "utf8");
     const parsed: unknown = JSON.parse(raw);

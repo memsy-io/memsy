@@ -176,14 +176,41 @@ def _session_note_path() -> str | None:
     pid = (os.environ.get("CLAUDE_PID") or "").strip()
     if not pid.isdigit():
         return None
-    # expanduser + abspath on the env value too, not just the fallback: a
-    # CLAUDE_PLUGIN_DATA of "~/foo" would otherwise create a directory literally
-    # named "~" under the cwd, and a relative value would resolve against
-    # whichever cwd each process happens to have — the hook's and the MCP's are
-    # not guaranteed to match, and a note written where the reader never looks
-    # degrades scoping silently. identity.ts does the same.
-    base = os.path.abspath(os.path.expanduser(os.environ.get("CLAUDE_PLUGIN_DATA") or "~/.memsy"))
-    return os.path.join(base, "sessions", f"{pid}.json")
+    return os.path.join(_session_notes_base(), "sessions", f"{pid}.json")
+
+
+def _session_notes_base() -> str:
+    """Where the session notes live, as an absolute path.
+
+    This hook writes here and the MCP reads here, so the two must land on the
+    same directory or the note goes somewhere the reader never looks and
+    scoping silently stops working. The rule therefore has to be implementable
+    identically in Python and TypeScript, which constrains it:
+
+      - a leading "~" or "~/" is expanded
+      - "~user" is NOT. `os.path.expanduser` resolves it through the passwd
+        database; Node has no equivalent, so honouring it here would mean the
+        hook writing to /var/root/data while the MCP looks in ./~root/data.
+      - anything not absolute after that is ignored, falling back to ~/.memsy.
+        Relative paths resolve against the process's own cwd, and this hook's
+        cwd is not the MCP's. (`expanduser` leaves them relative, so this is
+        reachable without a "~" at all.)
+
+    Ignoring an odd value costs an unexpected-but-shared directory. Honouring
+    it differently on each side costs the feature, silently. identity.ts
+    implements the same rule — keep them in step.
+    """
+    fallback = os.path.join(os.path.expanduser("~"), ".memsy")
+    raw = os.environ.get("CLAUDE_PLUGIN_DATA") or ""
+    if not raw:
+        return fallback
+    if raw == "~":
+        expanded = os.path.expanduser("~")
+    elif raw.startswith("~/"):
+        expanded = os.path.join(os.path.expanduser("~"), raw[2:])
+    else:
+        expanded = raw
+    return expanded if os.path.isabs(expanded) else fallback
 
 
 def _write_session_note(payload: dict) -> None:

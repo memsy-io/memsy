@@ -14,6 +14,22 @@ import {
 
 const ORIGINAL_ENV = { ...process.env };
 
+/**
+ * Restore the environment by MUTATING `process.env`, never by reassigning it.
+ *
+ * `process.env = {...}` swaps Node's special env object for a plain one. After
+ * that, assignments still work from JavaScript's point of view but no longer
+ * reach the real process environment — so native readers like `os.homedir()`
+ * keep seeing the old values, and any test that depends on one silently fails
+ * for a reason that looks nothing like the cause.
+ */
+function restoreEnv(): void {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in ORIGINAL_ENV)) delete process.env[key];
+  }
+  Object.assign(process.env, ORIGINAL_ENV);
+}
+
 describe("resolveActorId", () => {
   beforeEach(() => {
     for (const k of Object.keys(process.env)) {
@@ -22,7 +38,7 @@ describe("resolveActorId", () => {
   });
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreEnv();
   });
 
   it("prefers MEMSY_ACTOR_ID env over everything", () => {
@@ -94,7 +110,7 @@ describe("resolveSession", () => {
   });
 
   afterEach(() => {
-    process.env = { ...ORIGINAL_ENV };
+    restoreEnv();
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -153,6 +169,81 @@ describe("resolveSession", () => {
   it("getSessionId returns the resolved id", () => {
     writeValidNote(PID, "from-note");
     expect(getSessionId()).toBe("from-note");
+  });
+
+  describe("CLAUDE_PLUGIN_DATA resolution", () => {
+    // The hook writes where this resolves and the MCP reads there, so the rule
+    // must be implementable identically in Python and TypeScript. Anything the
+    // two could resolve differently is ignored in favour of the shared
+    // ~/.memsy fallback — an unexpected-but-shared directory beats a split one,
+    // which loses the note silently. session_start.py mirrors these cases.
+    const unresolvable = {
+      "~user (needs a passwd lookup Node has no equivalent for)": "~root/data",
+      "an unknown ~user": "~nosuchuser/data",
+      "a relative path (each process has its own cwd)": "relative/data",
+      "a bare relative name": "data",
+    };
+
+    /**
+     * Point `homedir()` at a temp directory and plant a note in the ~/.memsy
+     * fallback, so a test can assert the fallback was actually USED.
+     *
+     * Asserting only "we dropped to the env rung" would be vacuous: that also
+     * happens when the bad value IS honoured and simply contains no note.
+     * Finding this note proves which directory was consulted.
+     */
+    function plantNoteUnderHome(relativeDir: string, sessionId: string): void {
+      const home = process.env.HOME?.includes("memsy-home-")
+        ? process.env.HOME
+        : mkdtempSync(join(tmpdir(), "memsy-home-"));
+      process.env.HOME = home;
+      mkdirSync(join(home, relativeDir, "sessions"), { recursive: true });
+      writeFileSync(
+        join(home, relativeDir, "sessions", `${PID}.json`),
+        JSON.stringify({ session_id: sessionId, updated_at: now() }),
+      );
+    }
+
+    const plantFallbackNote = (sessionId: string): void =>
+      plantNoteUnderHome(".memsy", sessionId);
+
+    for (const [label, value] of Object.entries(unresolvable)) {
+      it(`ignores ${label} and uses the shared fallback`, () => {
+        writeValidNote(PID, "in-the-rejected-dir");
+        plantFallbackNote("in-the-fallback-dir");
+        process.env.CLAUDE_PLUGIN_DATA = value;
+        expect(resolveSession()).toEqual({
+          sessionId: "in-the-fallback-dir",
+          sessionSource: "note",
+        });
+      });
+    }
+
+    it("honours an absolute path in preference to the fallback", () => {
+      writeValidNote(PID, "in-the-absolute-dir");
+      plantFallbackNote("in-the-fallback-dir");
+      process.env.CLAUDE_PLUGIN_DATA = dir;
+      expect(resolveSession().sessionId).toBe("in-the-absolute-dir");
+    });
+
+    it("expands a leading ~/ rather than treating it as a directory name", () => {
+      // Deliberately NOT "~/.memsy": that is also the fallback, so expansion
+      // and fallback would coincide and the test would pass even if `~/` were
+      // never expanded at all.
+      plantNoteUnderHome("custom-notes", "in-the-expanded-dir");
+      plantFallbackNote("in-the-fallback-dir");
+      process.env.CLAUDE_PLUGIN_DATA = "~/custom-notes";
+      expect(resolveSession().sessionId).toBe("in-the-expanded-dir");
+    });
+
+    it("uses ~/.memsy when CLAUDE_PLUGIN_DATA is unset", () => {
+      plantFallbackNote("in-the-fallback-dir");
+      delete process.env.CLAUDE_PLUGIN_DATA;
+      expect(resolveSession()).toEqual({
+        sessionId: "in-the-fallback-dir",
+        sessionSource: "note",
+      });
+    });
   });
 
   describe("scopableConversationId — the safety gate for the whole feature", () => {
