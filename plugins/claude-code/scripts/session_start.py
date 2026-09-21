@@ -30,6 +30,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
+import time
 
 MARKER = os.path.expanduser("~/.memsy/.onboard-nudged")
 
@@ -145,14 +147,181 @@ def _truthy(v: str | None) -> bool:
     return (v or "").strip().lower() in ("on", "true", "1", "yes", "enabled")
 
 
-def _read_source() -> str:
+def _read_payload() -> dict:
+    """Read the SessionStart hook payload. stdin can only be consumed once, so
+    everything that needs a field off it reads from this one dict."""
     try:
         payload = json.load(sys.stdin)
-        if isinstance(payload, dict):
-            return str(payload.get("source") or "startup")
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _source(payload: dict) -> str:
+    return str(payload.get("source") or "startup")
+
+
+def _session_note_path() -> str | None:
+    """Where this Claude Code process records the conversation it is currently in.
+
+    Keyed by CLAUDE_PID — the `claude` process — because that is the one id both
+    sides can derive independently. The hook gets it from the environment; the
+    MCP reads the same pid out of CLAUDE_CODE_MESSAGING_SOCKET
+    (/tmp/cc-socks/<pid>.sock). Keying on the project directory instead would
+    collide whenever two conversations are open on the same project.
+
+    Returns None when there is no pid to key on — better no note than an
+    ambiguous one, since the MCP falls back to sending no session filter.
+    """
+    pid = (os.environ.get("CLAUDE_PID") or "").strip()
+    if not pid.isdigit():
+        return None
+    return os.path.join(_session_notes_base(), "sessions", f"{pid}.json")
+
+
+def _session_notes_base() -> str:
+    """Where the session notes live, as an absolute path.
+
+    This hook writes here and the MCP reads here, so the two must land on the
+    same directory or the note goes somewhere the reader never looks and
+    scoping silently stops working. The rule therefore has to be implementable
+    identically in Python and TypeScript, which constrains it:
+
+      - a leading "~" or "~/" is expanded
+      - "~user" is NOT. `os.path.expanduser` resolves it through the passwd
+        database; Node has no equivalent, so honouring it here would mean the
+        hook writing to /var/root/data while the MCP looks in ./~root/data.
+      - anything not absolute after that is ignored, falling back to ~/.memsy.
+        Relative paths resolve against the process's own cwd, and this hook's
+        cwd is not the MCP's. (`expanduser` leaves them relative, so this is
+        reachable without a "~" at all.)
+
+    Ignoring an odd value costs an unexpected-but-shared directory. Honouring
+    it differently on each side costs the feature, silently. identity.ts
+    implements the same rule — keep them in step.
+    """
+    fallback = os.path.join(os.path.expanduser("~"), ".memsy")
+    raw = os.environ.get("CLAUDE_PLUGIN_DATA") or ""
+    if not raw:
+        return fallback
+    if raw == "~":
+        expanded = os.path.expanduser("~")
+    elif raw.startswith("~/"):
+        expanded = os.path.join(os.path.expanduser("~"), raw[2:])
+    else:
+        expanded = raw
+    return expanded if os.path.isabs(expanded) else fallback
+
+
+def _write_session_note(payload: dict) -> None:
+    """Record the conversation id so the MCP can scope searches to it.
+
+    The MCP receives CLAUDE_CODE_SESSION_ID in its environment, but that is
+    fixed when the process launches and the process survives `/clear` — so from
+    the first clear onward it names the conversation the user just left. This
+    hook fires on startup, resume, clear *and* compact, which is exactly the set
+    of events that changes the answer, so the note is what keeps it true.
+
+    Deliberately not gated behind MEMSY_TURN_SYNC: that flag controls turn
+    capture, and conversation scoping should not silently stop working because
+    an unrelated feature is off.
+
+    Never raises. A SessionStart hook that throws would disrupt the session, and
+    a missing note only costs an unscoped search.
+    """
+    session_id = str(payload.get("session_id") or "").strip()
+    path = _session_note_path()
+    if not path:
+        return
+    if not session_id:
+        # No id to record — remove any note rather than leave the previous one
+        # standing. Notes are keyed by pid and pids get recycled, so a note we
+        # can't refresh is a note that could later be read as current by an
+        # unrelated window.
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        note = {
+            "session_id": session_id,
+            "source": _source(payload),
+            "updated_at": int(time.time()),
+        }
+        # Write-then-rename: the MCP reads this file on every search, and a
+        # partially written one would parse as garbage.
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(note, f)
+            os.replace(tmp, path)
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+            raise
     except Exception:
         pass
-    return "startup"
+
+    _reap_dead_session_notes(path)
+
+
+def _pid_is_running(pid: int) -> bool:
+    """Whether a process with this pid currently exists.
+
+    Signal 0 performs the permission and existence checks without delivering
+    anything. PermissionError means the process is there but owned by someone
+    else — still alive, so still keep its note.
+    """
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        # Can't tell — keep the note. Deleting a live session's note would
+        # silently switch off its conversation scoping.
+        return True
+    return True
+
+
+def _reap_dead_session_notes(current_path: str) -> None:
+    """Delete notes belonging to `claude` processes that no longer exist.
+
+    One file accumulates per Claude Code process and nothing else removes them.
+    Liveness rather than age is the test on purpose: a session can legitimately
+    run for a very long time — one was measured still serving after six days —
+    so any age cutoff loose enough to spare it reaps almost nothing, and one
+    tight enough to reap would delete a live window's note and silently switch
+    off its scoping. The pid is right there in the filename, so ask the OS.
+
+    A dead pid later reused by some unrelated program keeps its note, since the
+    pid is alive again. Harmless: the MCP refuses notes predating its own
+    process, so a recycled-pid note can't be read as current.
+
+    Never raises — this runs inside a SessionStart hook.
+    """
+    try:
+        directory = os.path.dirname(current_path)
+        keep = os.path.basename(current_path)
+        for name in os.listdir(directory):
+            if name == keep or not name.endswith(".json"):
+                continue
+            stem = name[: -len(".json")]
+            if not (stem.isascii() and stem.isdigit()):
+                continue
+            if _pid_is_running(int(stem)):
+                continue
+            try:
+                os.unlink(os.path.join(directory, name))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _load_config() -> dict:
@@ -246,7 +415,11 @@ def generate_context(source: str) -> str:
 
 
 def main() -> int:
-    source = _read_source()
+    payload = _read_payload()
+    # Before anything else, and regardless of source: a compacted session is
+    # still the session the MCP needs to name.
+    _write_session_note(payload)
+    source = _source(payload)
     # Claude Code injects stdout directly as plain-text context (no JSON
     # envelope), so we print the concatenated blocks verbatim — matching the
     # previous all-bash version, which wrote each block straight to stdout.

@@ -1,8 +1,80 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { scopableConversationId } from "../identity.js";
 import type { ProfileManager } from "../profiles.js";
 import { formatError, jsonResult } from "./_shared.js";
+
+export type SearchScope = "all" | "this_conversation" | "everything_except_this_conversation";
+
+export interface ResolvedSearchScope {
+  /** Session filter to spread into the SDK's search options. Empty for "all". */
+  filter: { sessionId?: string; excludeSessionId?: string };
+  /** What actually happened, echoed to the caller — may differ from what was asked. */
+  applied: string;
+  /**
+   * When set, do NOT search — return this to the caller instead.
+   *
+   * Its presence is the signal; there is no companion boolean, so the two
+   * cannot contradict each other.
+   */
+  refusal?: string;
+}
+
+/**
+ * Resolve a requested scope into the session filter to send.
+ *
+ * Precedence:
+ *   1. `all` sends no session field at all — byte-identical to a pre-scoping
+ *      request, and the default.
+ *   2. A narrower scope needs a real conversation id. Pass `null` when the
+ *      current conversation could not be identified (the MCP's fallback id is
+ *      generated and names nothing on the server).
+ *   3. With no id the two narrow scopes part company, because degrading means
+ *      opposite things for them:
+ *
+ *      - `this_conversation` asked for a SUBSET. An unscoped search is a
+ *        superset, so the answer is still in the results, just with noise.
+ *        Degrade, and say so in `applied`.
+ *      - `everything_except_this_conversation` asked for exactly one thing to
+ *        be REMOVED. An unscoped search returns precisely that thing, which
+ *        inverts the only instruction given. Its whole purpose is "have we
+ *        discussed this before?", so the caller would be shown what was said
+ *        moments ago and conclude yes. Refuse instead.
+ *
+ *      There is no partial answer available: without an id we cannot exclude,
+ *      and falling back to the launch-time id could exclude the conversation
+ *      the user just left — removing the wrong one.
+ *
+ * Never returns both fields — the server rejects that pair with a 422.
+ */
+export function resolveSearchScope(
+  scope: SearchScope,
+  conversationId: string | null,
+): ResolvedSearchScope {
+  if (scope === "all") return { filter: {}, applied: "all" };
+  if (!conversationId) {
+    if (scope === "everything_except_this_conversation") {
+      return {
+        filter: {},
+        applied: "none (search not run)",
+        refusal:
+          "Cannot identify the current conversation, so it cannot be excluded. " +
+          "No search was run, because returning every conversation would include " +
+          'the one you asked to leave out. Re-run with scope "all" for unfiltered ' +
+          "results.",
+      };
+    }
+    return {
+      filter: {},
+      applied: "all (requested scope unavailable: this conversation could not be identified)",
+    };
+  }
+  if (scope === "this_conversation") {
+    return { filter: { sessionId: conversationId }, applied: scope };
+  }
+  return { filter: { excludeSessionId: conversationId }, applied: scope };
+}
 
 export function registerSearch(server: McpServer, profiles: ProfileManager): void {
   server.tool(
@@ -51,6 +123,14 @@ export function registerSearch(server: McpServer, profiles: ProfileManager): voi
         .boolean()
         .default(false)
         .describe("Include the raw source events that produced each memory. Useful for provenance; increases response size."),
+      scope: z
+        .enum(["all", "this_conversation", "everything_except_this_conversation"])
+        .default("all")
+        .describe(
+          "Which conversations to search. 'all' (default) searches everything — every past chat AND all connector-sourced memory (Google Drive, Slack, GitHub, Notion, S3, OneDrive); use it unless you have a specific reason not to. " +
+            "'this_conversation' returns only what was said in the current chat, plus general knowledge that belongs to no conversation — it EXCLUDES all connector memory and every earlier chat, so it is narrow. " +
+            "'everything_except_this_conversation' is for 'have we discussed this before?' — it returns earlier chats and connector memory while leaving out what is already in front of you.",
+        ),
     },
     async (args) => {
       try {
@@ -64,6 +144,36 @@ export function registerSearch(server: McpServer, profiles: ProfileManager): voi
         const roleIds = args.role_ids ?? ctx.profile.defaultRoleIds;
         const teamIds = args.team_ids ?? ctx.profile.defaultTeamIds;
 
+        // null when this conversation cannot be named with confidence — see
+        // scopableConversationId(). Deliberately not derived here: the decision
+        // is the safety gate for the whole feature, so it lives in one tested
+        // place rather than as a ternary in a handler nothing covers.
+        const conversationId = scopableConversationId();
+        const {
+          filter: sessionFilter,
+          applied: scopeApplied,
+          refusal,
+        } = resolveSearchScope(args.scope, conversationId);
+
+        if (refusal) {
+          // Deliberately a normal result, not a thrown error: nothing failed,
+          // we declined. `refused` is an explicit boolean because the reader is
+          // a model deciding what to do next, and inferring it from prose is
+          // the kind of thing that works most of the time. `count`/`results`
+          // stay present so anything reading them doesn't break on a missing
+          // key.
+          return jsonResult({
+            profile: ctx.profileName,
+            query: args.query,
+            scope: scopeApplied,
+            requested_scope: args.scope,
+            refused: true,
+            message: refusal,
+            count: 0,
+            results: [],
+          });
+        }
+
         const res = await ctx.client.search(args.query, {
           actorId,
           limit: args.limit,
@@ -71,11 +181,13 @@ export function registerSearch(server: McpServer, profiles: ProfileManager): voi
           includeSourceEvents: args.include_source_events,
           roleIds,
           teamIds,
+          ...sessionFilter,
         });
 
         return jsonResult({
           profile: ctx.profileName,
           actor_id_filter: actorId ?? "(org-wide)",
+          scope: scopeApplied,
           query: args.query,
           count: res.results.length,
           results: res.results.map((r) => ({
@@ -83,6 +195,11 @@ export function registerSearch(server: McpServer, profiles: ProfileManager): voi
             score: r.score,
             content: r.content,
             metadata: r.metadata,
+            // Which conversation this came from — null for general knowledge
+            // that belongs to none. Without it an unscoped search returns one
+            // undifferentiated list and there is no way to tell "you said this
+            // a minute ago" from "you said this last week".
+            session_id: r.sessionId,
             source_events: r.sourceEvents,
             // User-supplied metadata propagated from the originating events
             // (URLs, doc_ids, tags, etc.). Capped at 5 entries by the API.
