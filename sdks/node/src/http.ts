@@ -18,6 +18,15 @@ export interface BaseClientOptions {
   apiKey: string;
   timeoutMs?: number;
   maxRetries?: number;
+  /**
+   * What sits ON TOP of this SDK, when the wrapper is itself the product the
+   * user chose — the MCP server passes "mcp".
+   *
+   * Leave unset in an application. The SDK always identifies itself separately
+   * (X-Memsy-Client below), and memsy-core falls back to that, so a plain
+   * integration is recorded as the SDK without having to say so.
+   */
+  surface?: string;
 }
 
 export interface RequestOptions {
@@ -66,12 +75,14 @@ export class BaseHttpClient {
   protected readonly apiKey: string;
   protected readonly timeoutMs: number;
   protected readonly maxRetries: number;
+  protected readonly surface: string | undefined;
 
   constructor(options: BaseClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.surface = options.surface;
   }
 
   /** @internal */
@@ -81,9 +92,19 @@ export class BaseHttpClient {
     options: RequestOptions = {}
   ): Promise<RequestResult<T>> {
     const url = `${this.baseUrl}${path}${buildQueryString(options.query)}`;
+    // Provenance, two levels. X-Memsy-Client is the LIBRARY and is always true
+    // of this request; X-Memsy-Surface is what sits on top and only a wrapper
+    // sets it. memsy-core resolves surface-then-client, so a plain application
+    // is recorded as sdk/node-sdk while the very same SDK under the MCP server
+    // is recorded as mcp/mcp — without this layer knowing which it is in.
+    //
+    // Sent on every request, not just /ingest. Core reads them only where
+    // provenance is recorded, and one header block beats a per-route rule.
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
+      "X-Memsy-Client": "node-sdk",
     };
+    if (this.surface !== undefined) headers["X-Memsy-Surface"] = this.surface;
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
