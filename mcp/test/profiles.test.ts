@@ -189,3 +189,56 @@ describe("ProfileManager — reload on miss (review follow-up #5)", () => {
     expect(mgr.current().profile.apiKey).toBe("msy_p_OLD");
   });
 });
+
+describe("provenance surface", () => {
+  /**
+   * Asserted on the wire, not on the constructor argument: the point is what
+   * memsy-core receives. It resolves surface-then-client, so this server being
+   * recorded as mcp rather than sdk/node-sdk depends on BOTH headers going out
+   * — and a test on the option alone would still pass if the SDK stopped
+   * sending it.
+   */
+  async function headersFrom(mgr: ProfileManager): Promise<Record<string, string>> {
+    const calls: RequestInit[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (_i: RequestInfo | URL, init?: RequestInit) => {
+      calls.push(init!);
+      return new Response(JSON.stringify({ event_ids: ["e1"] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+    try {
+      await mgr.current().client.ingest([
+        { actorId: "a", sessionId: "s", kind: "user_message", content: "hello" },
+      ]);
+    } finally {
+      globalThis.fetch = original;
+    }
+    return calls[0]!.headers as Record<string, string>;
+  }
+
+  it("records this server as mcp, not as the SDK it is built on", async () => {
+    // The regression that would be invisible: drop the surface option and every
+    // MCP memory is filed as sdk/node-sdk, indistinguishable from an ordinary
+    // application that happens to use the same SDK. Nothing errors.
+    const headers = await headersFrom(new ProfileManager(fixture()));
+    expect(headers["X-Memsy-Surface"]).toBe("mcp");
+  });
+
+  it("still identifies the underlying library", async () => {
+    // Both headers, not one. Core prefers the surface; the client header is
+    // what a plain SDK caller falls back to, and it stays true here.
+    const headers = await headersFrom(new ProfileManager(fixture()));
+    expect(headers["X-Memsy-Client"]).toBe("node-sdk");
+  });
+
+  it("switching profiles keeps the surface", async () => {
+    // Each switch builds a NEW MemsyClient, so the option has to be on that
+    // construction path rather than applied once at startup.
+    const mgr = new ProfileManager(fixture());
+    mgr.activate("work");
+    const headers = await headersFrom(mgr);
+    expect(headers["X-Memsy-Surface"]).toBe("mcp");
+  });
+});
