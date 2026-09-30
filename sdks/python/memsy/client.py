@@ -5,7 +5,12 @@ from typing import Any
 
 import httpx
 
-from memsy._http import DEFAULT_MAX_RETRIES, DEFAULT_RETRY_BACKOFF, HttpCoreMixin
+from memsy._http import (
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_RETRY_BACKOFF,
+    HttpCoreMixin,
+    default_headers,
+)
 from memsy.exceptions import MemsyAPIError, MemsyConnectionError
 from memsy.models import (
     EventPayload,
@@ -62,6 +67,10 @@ class MemsyClient(HttpCoreMixin):
         timeout: float = 30.0,
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+        # What sits ON TOP of this SDK, when the wrapper is itself the product
+        # the user chose. Leave unset in an application: the SDK identifies
+        # itself separately and core falls back to that.
+        surface: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
@@ -70,7 +79,7 @@ class MemsyClient(HttpCoreMixin):
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=default_headers(api_key, surface),
         )
         self.orgs = OrgsResource(self)
         self.roles = RolesResource(self)

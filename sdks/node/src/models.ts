@@ -68,6 +68,21 @@ export interface EventPayload {
   teamId?: string;
   ts?: string;
   metadata?: string;
+  // Per-EVENT provenance. The request-level half (source type and surface) is
+  // deliberately absent: those travel as headers, and a body field would be a
+  // second, unclamped route to a value memsy-core only honours from one place.
+  //
+  // Not a substitute for `metadata` either — core stores that blob unindexed,
+  // so nothing inside it can be filtered on, whereas these three can.
+  /** The object this came from — a file id, "{repo}:{path}", "{bucket}/{key}". */
+  sourceId?: string;
+  /**
+   * Who the SOURCE SYSTEM says wrote this, which need not be the actor: one
+   * shared connection is a single actor but many authors.
+   */
+  sourceAuthorEmail?: string;
+  /** The same person as a stable provider id, for when the address is withheld. */
+  sourceAuthorId?: string;
 }
 
 export function serializeEvent(e: EventPayload): Record<string, unknown> {
@@ -81,6 +96,11 @@ export function serializeEvent(e: EventPayload): Record<string, unknown> {
   if (e.teamId !== undefined) out.team_id = e.teamId;
   if (e.ts !== undefined) out.ts = e.ts;
   if (e.metadata !== undefined) out.metadata = e.metadata;
+  // Omit-when-undefined like every optional above, so a caller who sets none
+  // of these sends a byte-identical body to before they existed.
+  if (e.sourceId !== undefined) out.source_id = e.sourceId;
+  if (e.sourceAuthorEmail !== undefined) out.source_author_email = e.sourceAuthorEmail;
+  if (e.sourceAuthorId !== undefined) out.source_author_id = e.sourceAuthorId;
   return out;
 }
 
