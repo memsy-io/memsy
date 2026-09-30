@@ -85,6 +85,20 @@ class EventPayload:
     team_id: str | None = None
     ts: str | None = None  # ISO 8601 timestamp
     metadata: str | None = None  # JSON-serialised string
+    # Per-EVENT provenance. The request-level half (source type and surface) is
+    # deliberately absent: it travels as headers, and a body field would be a
+    # second, unclamped route to a value memsy-core only honours from one place.
+    #
+    # Not a substitute for `metadata` either — core stores that blob unindexed,
+    # so nothing inside it can be filtered on, whereas these three can.
+    #
+    # The object this came from: a file id, "{repo}:{path}", "{bucket}/{key}".
+    source_id: str | None = None
+    # Who the SOURCE SYSTEM says wrote it, which need not be the actor: one
+    # shared connection is a single actor but many authors.
+    source_author_email: str | None = None
+    # The same person as a stable provider id, for when the address is withheld.
+    source_author_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -101,6 +115,14 @@ class EventPayload:
             d["ts"] = self.ts
         if self.metadata is not None:
             d["metadata"] = self.metadata
+        # Omit-when-None like every optional above, so a caller who sets none
+        # of these sends a body identical to one built before they existed.
+        if self.source_id is not None:
+            d["source_id"] = self.source_id
+        if self.source_author_email is not None:
+            d["source_author_email"] = self.source_author_email
+        if self.source_author_id is not None:
+            d["source_author_id"] = self.source_author_id
         return d
 
 
