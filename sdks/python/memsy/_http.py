@@ -24,6 +24,33 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF = 1.0
 
 
+def default_headers(api_key: str, surface: str | None = None) -> dict[str, str]:
+    """Headers every client sends on every request.
+
+    Shared rather than repeated because there are FOUR clients here — sync and
+    async, core and control — each building this dict at its own constructor. A
+    header added to three of them is the kind of gap nothing fails on.
+
+    X-Memsy-Client is the LIBRARY and is always true of this request;
+    X-Memsy-Surface is whatever sits on top, set only by a wrapper that is
+    itself the product the user chose. memsy-core resolves surface-then-client,
+    so a plain application is recorded as sdk/python-sdk while the very same
+    SDK inside a wrapper is recorded as that wrapper — without this layer
+    knowing which it is in.
+
+    Omitted rather than blank when there is no surface: core reads an
+    unparseable header as an affirmative "unknown" finding about a real caller,
+    whereas an absent one correctly falls through to the client header.
+    """
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "X-Memsy-Client": "python-sdk",
+    }
+    if surface:
+        headers["X-Memsy-Surface"] = surface
+    return headers
+
+
 def _detail_from_body(body: dict[str, Any], fallback: str = "") -> str:
     """Extract a human-readable detail string from a parsed error body."""
     detail = body.get("detail")
