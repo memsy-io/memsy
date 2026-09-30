@@ -3,6 +3,21 @@ import { MemsyClient, MemsyControlClient } from "@memsy-io/memsy";
 import { reloadProfilesFromDisk, type Profile, type ResolvedConfig } from "./config.js";
 import { buildIdentity, type Identity } from "./identity.js";
 
+/**
+ * What memsy-core records this server as.
+ *
+ * "mcp" for the local stdio server. The hosted (remote) deployment is the same
+ * artifact with different config, so it sets MEMSY_MCP_SURFACE=mcp-hosted
+ * rather than needing a separate build — core maps both, and the distinction
+ * matters because "memories our hosted service ingested" and "memories a user
+ * ran locally" answer different questions.
+ *
+ * Constrained to the two values core knows: an arbitrary string would be
+ * resolved as sdk/<whatever> and quietly create a bucket nobody is looking at.
+ */
+const MCP_SURFACE =
+  process.env.MEMSY_MCP_SURFACE === "mcp-hosted" ? "mcp-hosted" : "mcp";
+
 export interface ActiveContext {
   profileName: string;
   profile: Profile;
@@ -141,6 +156,12 @@ export class ProfileManager {
     const client = new MemsyClient({
       baseUrl: profile.baseUrl,
       apiKey: profile.apiKey,
+      // Without this, everything this server ingests is recorded as
+      // sdk/node-sdk — indistinguishable from an application that happens to
+      // use the same SDK. The SDK still identifies itself separately
+      // (X-Memsy-Client); memsy-core prefers this surface over that, which is
+      // the entire reason there are two headers.
+      surface: MCP_SURFACE,
     });
 
     this.active = { profileName: name, profile, identity, client };
