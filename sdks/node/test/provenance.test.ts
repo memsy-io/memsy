@@ -58,10 +58,11 @@ describe("provenance headers", () => {
   });
 
   it("sends no surface when the caller is the application itself", async () => {
-    // The header must be ABSENT, not empty. memsy-core treats an unparseable
-    // header as an affirmative "unknown" finding, while an absent one leaves
-    // the row unlabelled — and it falls back to the client header, which is
-    // how a plain integration lands in sdk/node-sdk.
+    // A plain application makes no claim about what sits on top of it, so
+    // core falls back to the client header and records sdk/node-sdk. Sending
+    // an empty surface resolves the same way — core tries `surface or client`
+    // — so this is about the two SDKs agreeing on the wire, not about
+    // avoiding a wrong label.
     const mock = stubFetch();
     await new MemsyClient({ baseUrl: "https://api.test", apiKey: "k" }).ingest([event()]);
     expect(sentHeaders(mock)).not.toHaveProperty("X-Memsy-Surface");
