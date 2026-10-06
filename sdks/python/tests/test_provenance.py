@@ -55,10 +55,11 @@ class TestClientHeader:
 class TestSurfaceHeader:
     @pytest.mark.parametrize("cls", _ALL_CLIENTS)
     def test_absent_when_the_caller_is_the_application(self, cls):
-        # ABSENT, not blank. Core reads an unparseable header as an affirmative
-        # "unknown" finding about a real caller, while an absent one falls
-        # through to the client header — which is how a plain integration lands
-        # in sdk/python-sdk rather than in unknown/unknown.
+        # A plain application makes no claim about what sits on top of it, so
+        # core falls back to the client header and records sdk/python-sdk.
+        # Sending an empty surface would resolve the same way — core tries
+        # `surface or client` — so this is about the two SDKs agreeing on the
+        # wire, not about avoiding a wrong label.
         assert "x-memsy-surface" not in _headers(cls)
 
     @pytest.mark.parametrize("cls", _ALL_CLIENTS)
@@ -70,9 +71,10 @@ class TestSurfaceHeader:
 
     @pytest.mark.parametrize("cls", _ALL_CLIENTS)
     def test_an_empty_surface_is_treated_as_unset(self, cls):
-        # surface="" is a caller mistake, not a claim. Sending it would stamp
-        # the row unknown/unknown, which is strictly worse than falling back to
-        # the client header.
+        # surface="" is a caller mistake, not a claim. Core would resolve it
+        # identically either way — `surface or client` falls through to the
+        # client header — so this pins consistency with the Node SDK, which
+        # also omits it, rather than guarding the stored value.
         assert "x-memsy-surface" not in _headers(cls, surface="")
 
 

@@ -38,9 +38,11 @@ def default_headers(api_key: str, surface: str | None = None) -> dict[str, str]:
     SDK inside a wrapper is recorded as that wrapper — without this layer
     knowing which it is in.
 
-    Omitted rather than blank when there is no surface: core reads an
-    unparseable header as an affirmative "unknown" finding about a real caller,
-    whereas an absent one correctly falls through to the client header.
+    Omitted rather than blank when there is no surface. Not for correctness —
+    core resolves `surface or client`, so a blank surface falls through to the
+    client header and records sdk/python-sdk either way. It is so the two SDKs
+    put the same bytes on the wire for the same input; the Node client omits it
+    too, and a difference there costs someone an afternoon diffing requests.
     """
     headers = {
         "Authorization": f"Bearer {api_key}",
