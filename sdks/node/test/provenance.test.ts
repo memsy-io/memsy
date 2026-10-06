@@ -80,6 +80,21 @@ describe("provenance headers", () => {
     expect(sentHeaders(mock)["X-Memsy-Client"]).toBe("node-sdk");
   });
 
+  it("treats an empty surface as unset", async () => {
+    // surface: "" is a caller mistake, not a claim. Core cannot parse an empty
+    // header so it would fall through to X-Memsy-Client regardless — this is
+    // about matching the Python SDK, which omits it on a truthiness check.
+    // Two SDKs differing on the wire for the same input is worth preventing
+    // even where the stored row is identical.
+    const mock = stubFetch();
+    await new MemsyClient({
+      baseUrl: "https://api.test",
+      apiKey: "k",
+      surface: "",
+    }).ingest([event()]);
+    expect(sentHeaders(mock)).not.toHaveProperty("X-Memsy-Surface");
+  });
+
   it("identifies the library on the control client too", async () => {
     // Both clients extend BaseHttpClient, so this is one code path rather than
     // a rule each client has to remember.

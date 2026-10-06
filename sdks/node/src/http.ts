@@ -104,7 +104,12 @@ export class BaseHttpClient {
       Authorization: `Bearer ${this.apiKey}`,
       "X-Memsy-Client": "node-sdk",
     };
-    if (this.surface !== undefined) headers["X-Memsy-Surface"] = this.surface;
+    // Truthiness, not `!== undefined`: surface: "" is a caller mistake rather
+    // than a claim, and sending it empty would differ from the Python SDK,
+    // which omits it. Harmless either way — core cannot parse an empty header
+    // so it falls through to X-Memsy-Client — but two SDKs disagreeing on the
+    // wire is the kind of difference that costs an afternoon later.
+    if (this.surface) headers["X-Memsy-Surface"] = this.surface;
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
