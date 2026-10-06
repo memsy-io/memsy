@@ -6,17 +6,22 @@ import { buildIdentity, type Identity } from "./identity.js";
 /**
  * What memsy-core records this server as.
  *
- * "mcp" for the local stdio server. The hosted (remote) deployment is the same
- * artifact with different config, so it sets MEMSY_MCP_SURFACE=mcp-hosted
- * rather than needing a separate build — core maps both, and the distinction
- * matters because "memories our hosted service ingested" and "memories a user
- * ran locally" answer different questions.
+ * Hardcoded, deliberately. memsy-core also maps "mcp-hosted", and a hosted
+ * deployment should send that instead — "memories our hosted service ingested"
+ * and "memories a user ran locally" answer different questions. But there is
+ * no hosted deployment today: no MCP service exists in infra/terraform, and
+ * mcp/src/http/ holds planning notes rather than a server.
  *
- * Constrained to the two values core knows: an arbitrary string would be
- * resolved as sdk/<whatever> and quietly create a bucket nobody is looking at.
+ * An env-var switch was tried here and removed. It protected nothing — a
+ * hosted deployment that does not set the variable records "mcp" either way —
+ * while adding an unexercised branch that implies a configured deployment
+ * exists. A reader checking how hosted traffic is labelled would find the
+ * knob, assume it was wired up, and be wrong.
+ *
+ * WHEN THE HOSTED SERVER SHIPS: set this from its environment there, and
+ * verify a hosted ingest records mcp/mcp-hosted before relying on the split.
  */
-const MCP_SURFACE =
-  process.env.MEMSY_MCP_SURFACE === "mcp-hosted" ? "mcp-hosted" : "mcp";
+const MCP_SURFACE = "mcp";
 
 export interface ActiveContext {
   profileName: string;
