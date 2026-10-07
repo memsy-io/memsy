@@ -68,12 +68,11 @@ export interface EventPayload {
   teamId?: string;
   ts?: string;
   metadata?: string;
-  // Per-EVENT provenance. The request-level half (source type and surface) is
-  // deliberately absent: those travel as headers, and a body field would be a
-  // second, unclamped route to a value memsy-core only honours from one place.
+  // Per-EVENT provenance, so it lives on the body. The request-level half
+  // (surface, capture mode) travels as headers — see BaseClientOptions.
   //
-  // Not a substitute for `metadata` either — core stores that blob unindexed,
-  // so nothing inside it can be filtered on, whereas these three can.
+  // Not a substitute for `metadata`: core stores that blob unindexed, so
+  // nothing inside it can be filtered on, whereas these three can.
   /** The object this came from — a file id, "{repo}:{path}", "{bucket}/{key}". */
   sourceId?: string;
   /**

@@ -85,12 +85,11 @@ class EventPayload:
     team_id: str | None = None
     ts: str | None = None  # ISO 8601 timestamp
     metadata: str | None = None  # JSON-serialised string
-    # Per-EVENT provenance. The request-level half (source type and surface) is
-    # deliberately absent: it travels as headers, and a body field would be a
-    # second, unclamped route to a value memsy-core only honours from one place.
+    # Per-EVENT provenance, so it lives on the body. The request-level half
+    # (surface, capture mode) travels as headers — see _http.default_headers.
     #
-    # Not a substitute for `metadata` either — core stores that blob unindexed,
-    # so nothing inside it can be filtered on, whereas these three can.
+    # Not a substitute for `metadata`: core stores that blob unindexed, so
+    # nothing inside it can be filtered on, whereas these three can.
     #
     # The object this came from: a file id, "{repo}:{path}", "{bucket}/{key}".
     source_id: str | None = None

@@ -7,11 +7,8 @@ import { serializeEvent, type EventPayload } from "../src/models.js";
 /**
  * Where a memory came from, as this SDK reports it.
  *
- * Two levels that must not collapse into one: X-Memsy-Client names the library
- * and is always true, X-Memsy-Surface names whatever sits on top and only a
- * wrapper sets it. memsy-core resolves surface-then-client, so the SAME SDK is
- * recorded as sdk/node-sdk in an application and mcp/mcp under the MCP server.
- * Send only one of them and that distinction is gone.
+ * The design — two header levels and why — is documented once on
+ * BaseClientOptions in src/http.ts. These tests pin the observable behaviour.
  */
 
 function stubFetch(payload: unknown = { event_ids: [] }) {
@@ -58,19 +55,15 @@ describe("provenance headers", () => {
   });
 
   it("sends no surface when the caller is the application itself", async () => {
-    // A plain application makes no claim about what sits on top of it, so
-    // core falls back to the client header and records sdk/node-sdk. Sending
-    // an empty surface resolves the same way — core tries `surface or client`
-    // — so this is about the two SDKs agreeing on the wire, not about
-    // avoiding a wrong label.
+    // Absent, not empty — the two SDKs must put the same bytes on the wire
+    // for the same input. Core resolves both identically either way.
     const mock = stubFetch();
     await new MemsyClient({ baseUrl: "https://api.test", apiKey: "k" }).ingest([event()]);
     expect(sentHeaders(mock)).not.toHaveProperty("X-Memsy-Surface");
   });
 
   it("sends both when a wrapper declares itself", async () => {
-    // The MCP server's case. Core takes the surface and ignores the client,
-    // so this request is recorded as mcp, not sdk.
+    // The MCP server's case: recorded as mcp, not sdk.
     const mock = stubFetch();
     await new MemsyClient({
       baseUrl: "https://api.test",
