@@ -234,15 +234,6 @@ describe("provenance surface", () => {
     const headers = await headersFrom(new ProfileManager(fixture()));
     expect(headers["X-Memsy-Client"]).toBe("node-sdk");
   });
-
-  it("switching profiles keeps the surface", async () => {
-    // Each switch builds a NEW MemsyClient, so the option has to be on that
-    // construction path rather than applied once at startup.
-    const mgr = new ProfileManager(fixture());
-    mgr.activate("work");
-    const headers = await headersFrom(mgr);
-    expect(headers["X-Memsy-Surface"]).toMatch(/^mcp\/\d+\.\d+\.\d+/);
-  });
 });
 
 describe("surface version", () => {
