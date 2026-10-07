@@ -160,3 +160,28 @@ class TestProvenanceValidation:
         for cls in _ALL_CLIENTS:
             with pytest.raises(ValueError):
                 cls(base_url="https://test.memsy.io", api_key="k", surface="nope!")
+
+
+class TestBlankEventFields:
+    """`source_id=row.file_id or ""` is the shape that produces these.
+
+    A blank is worse than a value or an absence: it matches no real object,
+    and is invisible to "events with no source" because the field exists — so
+    the row escapes both halves of a question that should be exhaustive.
+    """
+
+    @pytest.mark.parametrize(
+        "field", ["source_id", "source_author_email", "source_author_id"]
+    )
+    def test_empty_is_omitted(self, field):
+        assert field not in _event(**{field: ""}).to_dict()
+
+    def test_real_values_still_sent(self):
+        assert _event(source_id="repo:file.py").to_dict()["source_id"] == "repo:file.py"
+
+    def test_whitespace_is_not_caught_here(self):
+        # Documented rather than fixed: " " is truthy in Python, so a
+        # client-side falsy check cannot catch it. memsy-core's
+        # _optional_strings_no_null strips before testing, which is why that
+        # is the real guard and this is only consistency.
+        assert _event(source_id=" ").to_dict()["source_id"] == " "

@@ -117,11 +117,16 @@ class EventPayload:
             d["metadata"] = self.metadata
         # Omit-when-None like every optional above, so a caller who sets none
         # of these sends a body identical to one built before they existed.
-        if self.source_id is not None:
+        # Truthiness, not `is not None`: `source_id=row.file_id or ""` is a
+        # natural-looking default that sends a blank, and a blank matches no
+        # real object while also being invisible to "events with no source" —
+        # the field exists. Core collapses these too; this stops the round
+        # trip. It does NOT catch "   ", which is why core strips as well.
+        if self.source_id:
             d["source_id"] = self.source_id
-        if self.source_author_email is not None:
+        if self.source_author_email:
             d["source_author_email"] = self.source_author_email
-        if self.source_author_id is not None:
+        if self.source_author_id:
             d["source_author_id"] = self.source_author_id
         return d
 
