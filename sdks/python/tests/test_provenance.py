@@ -1,13 +1,10 @@
 """Where a memory came from, as this SDK reports it.
 
-Two header levels that must not collapse into one: X-Memsy-Client names the
-library and is always true, X-Memsy-Surface names whatever sits on top and only
-a wrapper sets it. memsy-core resolves surface-then-client, so the SAME SDK is
-recorded as sdk/python-sdk in an application and as the wrapper inside one.
-Send only one of them and that distinction is gone.
+The design — two header levels and why — is documented once on
+_http.default_headers. These tests pin the observable behaviour.
 
-Asserted on the constructed httpx client's default headers rather than on a
-mocked request, because that is where all four clients set them — and four
+Asserted on the constructed client's default headers rather than on a mocked
+request, because that is where all four clients set them, and four
 constructors quietly disagreeing is the failure these tests exist to catch.
 """
 
@@ -81,11 +78,8 @@ class TestClientHeader:
 class TestSurfaceHeader:
     @pytest.mark.parametrize("cls", _ALL_CLIENTS)
     def test_absent_when_the_caller_is_the_application(self, cls):
-        # A plain application makes no claim about what sits on top of it, so
-        # core falls back to the client header and records sdk/python-sdk.
-        # Sending an empty surface would resolve the same way — core tries
-        # `surface or client` — so this is about the two SDKs agreeing on the
-        # wire, not about avoiding a wrong label.
+        # Absent, not empty — the two SDKs must put the same bytes on the
+        # wire for the same input. Core resolves both identically either way.
         assert "x-memsy-surface" not in _headers(cls)
 
     @pytest.mark.parametrize("cls", _ALL_CLIENTS)

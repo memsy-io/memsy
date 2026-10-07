@@ -70,13 +70,9 @@ class MemsyControlClient(HttpCoreMixin):
         timeout: float = 30.0,
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_backoff: float = DEFAULT_RETRY_BACKOFF,
-        # What sits ON TOP of this SDK, when the wrapper is itself the product
-        # the user chose. Leave unset in an application: the SDK identifies
-        # itself separately and core falls back to that.
+        # Provenance. See _http.default_headers for what these mean and why
+        # they are client options; validate_provenance for the accepted values.
         surface: str | None = None,
-        # ambient (swept automatically) or explicit (someone chose to save).
-        # A client option, not per-call: for an SDK this is a property of the
-        # integration, which is why core has no `sdk` derivation entry.
         capture_mode: str | None = None,
     ) -> None:
         validate_provenance(surface, capture_mode)
