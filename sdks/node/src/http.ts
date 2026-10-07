@@ -27,7 +27,22 @@ export interface BaseClientOptions {
    * integration is recorded as the SDK without having to say so.
    */
   surface?: string;
+  /**
+   * Whether memories from this integration are swept up automatically
+   * ("ambient") or saved because someone chose to ("explicit").
+   *
+   * A CLIENT option rather than per-call, because for an SDK this is a
+   * property of the integration: an application that sweeps conversations
+   * sweeps all of them, and one with a save button is explicit throughout.
+   * The variation is between customers, not between calls — which is exactly
+   * why memsy-core has no `sdk` entry in its derivation table and expects the
+   * caller to say. Unset leaves capture_mode null on every row.
+   */
+  captureMode?: "ambient" | "explicit";
 }
+
+/** What memsy-core's _sanitize reduces a surface to, and its 64-char cap. */
+const SURFACE_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 export interface RequestOptions {
   body?: unknown;
@@ -76,13 +91,48 @@ export class BaseHttpClient {
   protected readonly timeoutMs: number;
   protected readonly maxRetries: number;
   protected readonly surface: string | undefined;
+  protected readonly captureMode: string | undefined;
 
   constructor(options: BaseClientOptions) {
+    // Validated HERE rather than at request time, and rejected rather than
+    // sanitised. A surface fetch cannot encode ("acme-bot™", or anything with
+    // a newline) throws inside fetch, which the handler below turns into
+    // `MemsyConnectionError: Could not connect to Memsy at <url>` — on EVERY
+    // call, search included. Someone would check their network, their URL and
+    // their firewall long before suspecting a header they set once.
+    //
+    // Rejecting beats quietly rewriting: core would store the sanitised form,
+    // and "why is my surface called acme-bot-" is a worse puzzle than an
+    // error naming the rule at the point the mistake was made.
+    // Truthy-gated: surface: "" means NOT CONFIGURED, not a bad value —
+    // `process.env.MEMSY_SURFACE ?? ""` is an ordinary way to reach this, and
+    // throwing on an unset variable would be hostile. It is omitted from the
+    // request below, matching the Python SDK. A non-empty wrong value is a
+    // typo and does throw.
+    if (options.surface && !SURFACE_PATTERN.test(options.surface)) {
+      throw new TypeError(
+        `surface must match [A-Za-z0-9._-] and be 1-64 characters; received ` +
+          `${JSON.stringify(options.surface)}. memsy-core rewrites anything else, ` +
+          `and a character that cannot be sent as an HTTP header fails every request.`
+      );
+    }
+    if (
+      options.captureMode &&
+      options.captureMode !== "ambient" &&
+      options.captureMode !== "explicit"
+    ) {
+      throw new TypeError(
+        `captureMode must be "ambient" or "explicit"; received ` +
+          `${JSON.stringify(options.captureMode)}. Core drops anything else, so the ` +
+          `row would silently carry no capture mode at all.`
+      );
+    }
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.surface = options.surface;
+    this.captureMode = options.captureMode;
   }
 
   /** @internal */
@@ -110,6 +160,10 @@ export class BaseHttpClient {
     // so it falls through to X-Memsy-Client — but two SDKs disagreeing on the
     // wire is the kind of difference that costs an afternoon later.
     if (this.surface) headers["X-Memsy-Surface"] = this.surface;
+    // Only core can derive capture_mode for a KNOWN surface; `sdk` has no
+    // entry in its table by design, so an SDK that does not send this leaves
+    // capture_mode null on every row it produces.
+    if (this.captureMode) headers["X-Memsy-Capture"] = this.captureMode;
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
