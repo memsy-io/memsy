@@ -10,6 +10,7 @@ from memsy._http import (
     DEFAULT_RETRY_BACKOFF,
     HttpCoreMixin,
     default_headers,
+    validate_provenance,
 )
 from memsy.exceptions import MemsyAPIError, MemsyConnectionError
 from memsy.models import (
@@ -71,7 +72,12 @@ class MemsyClient(HttpCoreMixin):
         # the user chose. Leave unset in an application: the SDK identifies
         # itself separately and core falls back to that.
         surface: str | None = None,
+        # ambient (swept automatically) or explicit (someone chose to save).
+        # A client option, not per-call: for an SDK this is a property of the
+        # integration, which is why core has no `sdk` derivation entry.
+        capture_mode: str | None = None,
     ) -> None:
+        validate_provenance(surface, capture_mode)
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._max_retries = max_retries
@@ -79,7 +85,7 @@ class MemsyClient(HttpCoreMixin):
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
-            headers=default_headers(api_key, surface),
+            headers=default_headers(api_key, surface, capture_mode),
         )
         self.orgs = OrgsResource(self)
         self.roles = RolesResource(self)

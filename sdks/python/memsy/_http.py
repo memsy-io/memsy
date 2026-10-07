@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import httpx
@@ -24,7 +25,44 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF = 1.0
 
 
-def default_headers(api_key: str, surface: str | None = None) -> dict[str, str]:
+# What memsy-core's _sanitize reduces a surface to, and its 64-char cap.
+_SURFACE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_CAPTURE_MODES = ("ambient", "explicit")
+
+
+def validate_provenance(surface: str | None, capture_mode: str | None) -> None:
+    """Reject bad provenance options at CONSTRUCTION, not on every request.
+
+    Rejected rather than sanitised, and early rather than late. httpx refuses a
+    header it cannot encode, so `surface="acme-bot\u2122"` raises
+    UnicodeEncodeError from deep inside the client — and Node, left alone,
+    reports the same mistake as "Could not connect to Memsy" on every call
+    including search. Neither tells the caller what the rule is.
+
+    Quietly rewriting would be worse than erroring: core would store the
+    sanitised form, and "why is my surface called acme-bot-" is a harder
+    puzzle than a message naming the charset at the point of the mistake.
+
+    Empty means NOT CONFIGURED and passes: `os.environ.get("MEMSY_SURFACE", "")`
+    is an ordinary way to reach this, and the header is simply omitted.
+    """
+    if surface and not _SURFACE_RE.match(surface):
+        raise ValueError(
+            f"surface must match [A-Za-z0-9._-] and be 1-64 characters; "
+            f"received {surface!r}. memsy-core rewrites anything else, and a "
+            f"character that cannot be sent as an HTTP header fails every request."
+        )
+    if capture_mode and capture_mode not in _CAPTURE_MODES:
+        raise ValueError(
+            f"capture_mode must be 'ambient' or 'explicit'; received "
+            f"{capture_mode!r}. Core drops anything else, so the row would "
+            f"silently carry no capture mode at all."
+        )
+
+
+def default_headers(
+    api_key: str, surface: str | None = None, capture_mode: str | None = None
+) -> dict[str, str]:
     """Headers every client sends on every request.
 
     Shared rather than repeated because there are FOUR clients here — sync and
@@ -50,6 +88,11 @@ def default_headers(api_key: str, surface: str | None = None) -> dict[str, str]:
     }
     if surface:
         headers["X-Memsy-Surface"] = surface
+    # Only core can derive capture_mode for a KNOWN surface; `sdk` has no entry
+    # in its table by design, so an SDK that does not send this leaves
+    # capture_mode null on every row it produces.
+    if capture_mode:
+        headers["X-Memsy-Capture"] = capture_mode
     return headers
 
 

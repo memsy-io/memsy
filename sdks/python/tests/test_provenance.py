@@ -106,3 +106,57 @@ class TestEventPayload:
         assert "source_type" not in d
         assert "source" not in d
         assert "source_instance_id" not in d
+
+
+class TestCaptureMode:
+    @pytest.mark.parametrize("cls", _ALL_CLIENTS)
+    def test_sent_when_the_integration_declares_one(self, cls):
+        # memsy-core has no `sdk` entry in its derivation table, on purpose:
+        # only the integration knows whether it sweeps conversations or saves
+        # deliberately. An SDK that cannot send this leaves capture_mode null
+        # on every row it ever produces.
+        assert _headers(cls, capture_mode="ambient")["x-memsy-capture"] == "ambient"
+
+    @pytest.mark.parametrize("cls", _ALL_CLIENTS)
+    def test_absent_when_the_integration_says_nothing(self, cls):
+        assert "x-memsy-capture" not in _headers(cls)
+
+    @pytest.mark.parametrize("cls", _ALL_CLIENTS)
+    def test_rejects_a_value_core_would_drop(self, cls):
+        with pytest.raises(ValueError, match="ambient"):
+            _headers(cls, capture_mode="sometimes")
+
+
+class TestProvenanceValidation:
+    """Rejected at construction, not on every request.
+
+    httpx refuses a header it cannot encode, so surface="acme-bot™" raised
+    UnicodeEncodeError from deep inside the client — while "bad\\nvalue" was
+    accepted outright, diverging from Node, which rejected it. Neither told the
+    caller what the rule was.
+    """
+
+    @pytest.mark.parametrize(
+        "surface", ["acme-bot™", "bad\nvalue", "has space", "a" * 65]
+    )
+    def test_rejects_what_core_would_rewrite(self, surface):
+        with pytest.raises(ValueError, match=r"A-Za-z0-9"):
+            MemsyClient(base_url="https://test.memsy.io", api_key="k", surface=surface)
+
+    @pytest.mark.parametrize("surface", ["mcp", "mcp-hosted", "my-bot", "acme_agent", "v1.2"])
+    def test_accepts_what_core_keeps_verbatim(self, surface):
+        MemsyClient(base_url="https://test.memsy.io", api_key="k", surface=surface).close()
+
+    @pytest.mark.parametrize("cls", _ALL_CLIENTS)
+    def test_empty_is_not_configured_rather_than_invalid(self, cls):
+        # os.environ.get("MEMSY_SURFACE", "") is an ordinary way to reach this.
+        # Throwing on an unset variable would be hostile; the header is simply
+        # omitted, matching the Node SDK.
+        assert "x-memsy-surface" not in _headers(cls, surface="")
+
+    def test_every_client_validates(self):
+        # The same gap default_headers() exists to prevent: four constructors,
+        # and a check added to three of them looks done.
+        for cls in _ALL_CLIENTS:
+            with pytest.raises(ValueError):
+                cls(base_url="https://test.memsy.io", api_key="k", surface="nope!")

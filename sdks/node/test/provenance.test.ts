@@ -152,3 +152,77 @@ describe("per-event provenance", () => {
     expect(sent).not.toHaveProperty("source_instance_id");
   });
 });
+
+describe("capture mode", () => {
+  it("is sent when the integration declares one", async () => {
+    // memsy-core has no `sdk` entry in its derivation table, on purpose: only
+    // the integration knows whether it sweeps or saves deliberately. An SDK
+    // that cannot send this leaves capture_mode null on every row forever.
+    const mock = stubFetch();
+    await new MemsyClient({
+      baseUrl: "https://api.test",
+      apiKey: "k",
+      captureMode: "ambient",
+    }).ingest([event()]);
+    expect(sentHeaders(mock)["X-Memsy-Capture"]).toBe("ambient");
+  });
+
+  it("is absent when the integration says nothing", async () => {
+    const mock = stubFetch();
+    await new MemsyClient({ baseUrl: "https://api.test", apiKey: "k" }).ingest([event()]);
+    expect(sentHeaders(mock)).not.toHaveProperty("X-Memsy-Capture");
+  });
+
+  it("rejects a value core would drop", () => {
+    expect(
+      () =>
+        new MemsyClient({
+          baseUrl: "https://api.test",
+          apiKey: "k",
+          // @ts-expect-error — the type forbids it; the guard is for JS callers.
+          captureMode: "sometimes",
+        })
+    ).toThrow(TypeError);
+  });
+});
+
+describe("surface validation", () => {
+  // The failure this prevents: an unencodable header throws inside fetch, and
+  // the handler reports `MemsyConnectionError: Could not connect to Memsy` on
+  // EVERY call including search. Someone checks their network, their URL and
+  // their firewall before suspecting a header set once at construction.
+  it.each(["acme-bot™", "bad\nvalue", "has space", "a".repeat(65)])(
+    "rejects %j at construction",
+    (surface) => {
+      expect(
+        () => new MemsyClient({ baseUrl: "https://api.test", apiKey: "k", surface })
+      ).toThrow(TypeError);
+    }
+  );
+
+  it("names the rule in the message", () => {
+    // A caller who gets this should not have to read the source to fix it.
+    expect(
+      () => new MemsyClient({ baseUrl: "https://api.test", apiKey: "k", surface: "acme bot" })
+    ).toThrow(/A-Za-z0-9\._-/);
+  });
+
+  it.each(["mcp", "mcp-hosted", "my-bot", "acme_agent", "v1.2"])(
+    "accepts %j",
+    (surface) => {
+      expect(
+        () => new MemsyClient({ baseUrl: "https://api.test", apiKey: "k", surface })
+      ).not.toThrow();
+    }
+  );
+
+  it("rejects before any request is attempted", () => {
+    // Construction-time, so the mistake surfaces at its origin rather than on
+    // a later call that looks like a network problem.
+    const mock = stubFetch();
+    expect(
+      () => new MemsyClient({ baseUrl: "https://api.test", apiKey: "k", surface: "bad†" })
+    ).toThrow();
+    expect(mock).not.toHaveBeenCalled();
+  });
+});
