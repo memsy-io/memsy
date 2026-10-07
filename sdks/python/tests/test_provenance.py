@@ -13,6 +13,9 @@ constructors quietly disagreeing is the failure these tests exist to catch.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
+
 import pytest
 
 from memsy import (
@@ -26,9 +29,32 @@ from memsy import (
 _ALL_CLIENTS = [MemsyClient, AsyncMemsyClient, MemsyControlClient, AsyncMemsyControlClient]
 
 
+def _close(client) -> None:
+    """Close a client of either flavour.
+
+    The async clients' `close` is a coroutine and the sync ones' is not, so
+    this dispatches on the return value rather than on the class. No request
+    has been made by the time we get here, so driving the coroutine with
+    asyncio.run is only tearing down an idle pool.
+    """
+    result = client.close()
+    if inspect.isawaitable(result):
+        asyncio.run(result)
+
+
 def _headers(cls, **kw) -> dict[str, str]:
+    """Headers a freshly-built client would send, with the client closed.
+
+    Closed in a finally rather than left to the garbage collector: these cases
+    are parametrised across four classes, so an unclosed client per case leaks
+    ~20 connection pools and emits ResourceWarning — which fails the suite
+    under `-W error`.
+    """
     client = cls(base_url="https://test.memsy.io", api_key="test_key", **kw)
-    return dict(client._client.headers)
+    try:
+        return dict(client._client.headers)
+    finally:
+        _close(client)
 
 
 def _event(**kw) -> EventPayload:
