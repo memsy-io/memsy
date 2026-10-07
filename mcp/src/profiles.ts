@@ -2,26 +2,33 @@ import { MemsyClient, MemsyControlClient } from "@memsy-io/memsy";
 
 import { reloadProfilesFromDisk, type Profile, type ResolvedConfig } from "./config.js";
 import { buildIdentity, type Identity } from "./identity.js";
+import { VERSION } from "./version.js";
 
 /**
- * What memsy-core records this server as.
+ * What memsy-core records this server as, as `name/version`.
  *
- * Hardcoded, deliberately. memsy-core also maps "mcp-hosted", and a hosted
- * deployment should send that instead — "memories our hosted service ingested"
- * and "memories a user ran locally" answer different questions. But there is
- * no hosted deployment today: no MCP service exists in infra/terraform, and
- * mcp/src/http/ holds planning notes rather than a server.
+ * Core splits on the slash: `source` is the name and `source_version` is the
+ * rest, so this stores as mcp/mcp with the version beside it. Omitting the
+ * version is not neutral — the column is null for that row forever, and
+ * provenance cannot be reconstructed after the fact, so "which MCP version
+ * wrote this" becomes unanswerable for everything written before it was added.
  *
- * An env-var switch was tried here and removed. It protected nothing — a
- * hosted deployment that does not set the variable records "mcp" either way —
- * while adding an unexercised branch that implies a configured deployment
- * exists. A reader checking how hosted traffic is labelled would find the
- * knob, assume it was wired up, and be wrong.
+ * Interpolated from the manifest rather than written out, for the reason
+ * version.ts gives: a hand-maintained copy drifts, and this one already did.
  *
- * WHEN THE HOSTED SERVER SHIPS: set this from its environment there, and
+ * The NAME is hardcoded. Core also maps "mcp-hosted", and a hosted deployment
+ * should send that — "memories our hosted service ingested" and "memories a
+ * user ran locally" answer different questions. But no hosted deployment
+ * exists: there is no MCP service in infra/terraform, and mcp/src/http/ holds
+ * planning notes rather than a server. An env switch for it was tried here and
+ * removed, because it protected nothing — a hosted deployment that did not set
+ * the variable would record "mcp" either way — while implying a configured
+ * deployment that does not exist.
+ *
+ * WHEN THE HOSTED SERVER SHIPS: set the name from its environment there, and
  * verify a hosted ingest records mcp/mcp-hosted before relying on the split.
  */
-const MCP_SURFACE = "mcp";
+const MCP_SURFACE = `mcp/${VERSION}`;
 
 export interface ActiveContext {
   profileName: string;

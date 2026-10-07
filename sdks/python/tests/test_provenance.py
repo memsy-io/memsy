@@ -169,7 +169,11 @@ class TestProvenanceValidation:
         with pytest.raises(ValueError, match=r"A-Za-z0-9"):
             MemsyClient(base_url="https://test.memsy.io", api_key="k", surface=surface)
 
-    @pytest.mark.parametrize("surface", ["mcp", "mcp-hosted", "my-bot", "acme_agent", "v1.2"])
+    @pytest.mark.parametrize(
+        "surface",
+        ["mcp", "mcp-hosted", "my-bot", "acme_agent", "v1.2",
+         "mcp/0.1.3", "connector/slack"],
+    )
     def test_accepts_what_core_keeps_verbatim(self, surface):
         MemsyClient(base_url="https://test.memsy.io", api_key="k", surface=surface).close()
 

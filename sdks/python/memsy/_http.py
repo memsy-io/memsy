@@ -25,8 +25,12 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_BACKOFF = 1.0
 
 
-# What memsy-core's _sanitize reduces a surface to, and its 64-char cap.
-_SURFACE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+# A surface as memsy-core parses it: `name` or `name/detail`. Core splits on
+# the FIRST slash and sanitises each half separately, capping each at 64 — so
+# the slash is structural and the cap is per segment, not on the whole string.
+# An earlier version applied the per-segment charset to the whole value, which
+# rejected `mcp/0.1.3` and would have rejected `connector/slack` too.
+_SURFACE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}(/[A-Za-z0-9._-]{1,64})?$")
 _CAPTURE_MODES = ("ambient", "explicit")
 
 
@@ -48,7 +52,8 @@ def validate_provenance(surface: str | None, capture_mode: str | None) -> None:
     """
     if surface and not _SURFACE_RE.match(surface):
         raise ValueError(
-            f"surface must match [A-Za-z0-9._-] and be 1-64 characters; "
+            f"surface must be 'name' or 'name/detail', each 1-64 "
+            f"characters of [A-Za-z0-9._-]; "
             f"received {surface!r}. memsy-core rewrites anything else, and a "
             f"character that cannot be sent as an HTTP header fails every request."
         )
