@@ -41,8 +41,16 @@ export interface BaseClientOptions {
   captureMode?: "ambient" | "explicit";
 }
 
-/** What memsy-core's _sanitize reduces a surface to, and its 64-char cap. */
-const SURFACE_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+/**
+ * A surface as memsy-core parses it: `name` or `name/detail`.
+ *
+ * Core splits on the FIRST slash and sanitises each half separately, capping
+ * each at 64 — so the slash is structural, and the cap is per segment rather
+ * than on the whole string. An earlier version of this pattern applied the
+ * per-segment charset to the entire value, which rejected `mcp/0.1.3` and
+ * would have rejected `connector/slack` too.
+ */
+const SURFACE_PATTERN = /^[A-Za-z0-9._-]{1,64}(\/[A-Za-z0-9._-]{1,64})?$/;
 
 export interface RequestOptions {
   body?: unknown;
@@ -111,7 +119,8 @@ export class BaseHttpClient {
     // typo and does throw.
     if (options.surface && !SURFACE_PATTERN.test(options.surface)) {
       throw new TypeError(
-        `surface must match [A-Za-z0-9._-] and be 1-64 characters; received ` +
+        `surface must be "name" or "name/detail", each 1-64 characters of ` +
+          `[A-Za-z0-9._-]; received ` +
           `${JSON.stringify(options.surface)}. memsy-core rewrites anything else, ` +
           `and a character that cannot be sent as an HTTP header fails every request.`
       );

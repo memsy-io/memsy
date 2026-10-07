@@ -223,7 +223,9 @@ describe("provenance surface", () => {
     // MCP memory is filed as sdk/node-sdk, indistinguishable from an ordinary
     // application that happens to use the same SDK. Nothing errors.
     const headers = await headersFrom(new ProfileManager(fixture()));
-    expect(headers["X-Memsy-Surface"]).toBe("mcp");
+    // Shape, not literal: the version moves on every release, but the NAME
+    // is what core buckets on and what would silently regress.
+    expect(headers["X-Memsy-Surface"]).toMatch(/^mcp\/\d+\.\d+\.\d+/);
   });
 
   it("still identifies the underlying library", async () => {
@@ -239,6 +241,19 @@ describe("provenance surface", () => {
     const mgr = new ProfileManager(fixture());
     mgr.activate("work");
     const headers = await headersFrom(mgr);
-    expect(headers["X-Memsy-Surface"]).toBe("mcp");
+    expect(headers["X-Memsy-Surface"]).toMatch(/^mcp\/\d+\.\d+\.\d+/);
+  });
+});
+
+describe("surface version", () => {
+  it("carries this package's version, not a hand-written one", async () => {
+    // Omitting it is not neutral: source_version is null for that row
+    // forever, and provenance cannot be reconstructed afterwards — so
+    // "which MCP version wrote this" stays unanswerable for every row
+    // written before it was added.
+    const { VERSION } = await import("../src/version.js");
+    const { readFileSync } = await import("node:fs");
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(VERSION).toBe(pkg.version);
   });
 });
