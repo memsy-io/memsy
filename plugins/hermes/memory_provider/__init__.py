@@ -523,14 +523,40 @@ class MemsyMemoryProvider(MemoryProvider):
         threading.Thread(target=_save, daemon=True).start()
 
     def on_memory_write(self, action: str, target: str, content: str) -> None:
-        """Mirror Hermes built-in memory writes to Memsy."""
+        """Mirror Hermes built-in memory WRITES to Memsy.
+
+        Hermes' memory tool has three actions — add, replace, remove — and only
+        the first two are writes. See the removal guard below.
+        """
         if not self._api_key or not content:
             return
+
+        # Removals are NOT mirrored, and this is the whole point of the guard:
+        # `content` for a remove is the entry being DELETED. Ingesting it hands
+        # extraction the very text someone just decided was no longer true, and
+        # a durable memory can be promoted from it — so "forget this" would
+        # make it MORE permanent. Tagging it differently does not help; the
+        # text is stored either way.
+        #
+        # Worse, remove matches on a unique SUBSTRING rather than the whole
+        # entry, so `content` may be a fragment: a decontextualised quote of
+        # something being deleted.
+        #
+        # The cost is that Memsy keeps no record that a deletion happened.
+        # Accepted — there is no delete-by-content path from here, so the only
+        # alternative is retaining what the user asked to drop.
+        #
+        # Exact match, so a verb Hermes adds later still mirrors: a new action
+        # is far likelier to be a write than a second kind of deletion, and
+        # failing to record a write is the cheaper mistake.
+        if action.strip().lower() == "remove":
+            return
+
         payload = f"[hermes-memory:{action}:{target}] {content}"
 
         def _mirror() -> None:
             try:
-                # explicit: mirrors a deliberate Hermes memory write.
+                # explicit: add and replace are both deliberate saves.
                 self._post(
                     "/ingest",
                     {"events": [self._event("app_event", payload)]},
