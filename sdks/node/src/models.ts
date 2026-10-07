@@ -96,11 +96,16 @@ export function serializeEvent(e: EventPayload): Record<string, unknown> {
   if (e.teamId !== undefined) out.team_id = e.teamId;
   if (e.ts !== undefined) out.ts = e.ts;
   if (e.metadata !== undefined) out.metadata = e.metadata;
-  // Omit-when-undefined like every optional above, so a caller who sets none
-  // of these sends a byte-identical body to before they existed.
-  if (e.sourceId !== undefined) out.source_id = e.sourceId;
-  if (e.sourceAuthorEmail !== undefined) out.source_author_email = e.sourceAuthorEmail;
-  if (e.sourceAuthorId !== undefined) out.source_author_id = e.sourceAuthorId;
+  // Truthiness, not `!== undefined`, and for the same reason `surface` uses
+  // it: `sourceId: row.fileId ?? ""` is a natural-looking default that sends a
+  // blank, and a blank matches no real object while also being invisible to
+  // "events with no source" — the field exists. Core collapses these too; this
+  // just stops the round trip.
+  //
+  // Note truthiness does NOT catch "   ", which is why core strips as well.
+  if (e.sourceId) out.source_id = e.sourceId;
+  if (e.sourceAuthorEmail) out.source_author_email = e.sourceAuthorEmail;
+  if (e.sourceAuthorId) out.source_author_id = e.sourceAuthorId;
   return out;
 }
 
