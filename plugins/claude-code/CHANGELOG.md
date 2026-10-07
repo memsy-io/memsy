@@ -6,6 +6,24 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-07
+
+### Added
+- **Turn-sync now identifies itself to memsy-core**, so memories it produces can be
+  told apart from everything else landing in the same org. The `Stop` hook sends
+  `X-Memsy-Surface: claude-code-hook`, which core records as `plugin` / `claude-code`
+  and renders as a Source column and filter in the console.
+
+  No capture header is sent. Core derives `capture_mode: ambient` for this pair on
+  its own, and correctly: the hook fires on every completed turn whether or not
+  anyone asked it to.
+
+  Behaviour is otherwise unchanged — one header on an existing request, and the hook
+  remains opt-in behind `MEMSY_TURN_SYNC`. Turns ingested by earlier versions keep no
+  source, which is right: provenance cannot be reconstructed after the fact, and
+  leaving them blank keeps "we had not shipped this yet" distinguishable from "this
+  caller really was unidentifiable".
+
 ## [0.1.3] - 2026-09-17
 
 ### Added

@@ -360,7 +360,8 @@ class MemsyMemoryProvider(MemoryProvider):
                 return self._post("/search", body)
             elif tool_name == "memsy_ingest":
                 event = self._event(args.get("kind", "user_message"), args["content"])
-                return self._post("/ingest", {"events": [event]})
+                # explicit: the agent called the memsy_ingest tool.
+                return self._post("/ingest", {"events": [event]}, capture="explicit")
             elif tool_name == "memsy_health":
                 return self._get("/health")
             elif tool_name == "memsy_list_memories":
@@ -472,7 +473,8 @@ class MemsyMemoryProvider(MemoryProvider):
                     self._event("user_message", user_content[:32000], session_id),
                     self._event("assistant_message", assistant_content[:32000], session_id),
                 ]
-                self._post("/ingest", {"events": events})
+                # ambient: every turn is swept, whether or not it matters.
+                self._post("/ingest", {"events": events}, capture="ambient")
             except Exception as exc:
                 logger.debug("Memsy sync_turn failed: %s", exc)
 
@@ -509,9 +511,11 @@ class MemsyMemoryProvider(MemoryProvider):
 
         def _save() -> None:
             try:
+                # ambient: salvaging context before compaction discards it.
                 self._post(
                     "/ingest",
                     {"events": [self._event("app_event", f"[pre-compress] {snippet}")]},
+                    capture="ambient",
                 )
             except Exception:
                 pass
@@ -519,14 +523,45 @@ class MemsyMemoryProvider(MemoryProvider):
         threading.Thread(target=_save, daemon=True).start()
 
     def on_memory_write(self, action: str, target: str, content: str) -> None:
-        """Mirror Hermes built-in memory writes to Memsy."""
+        """Mirror Hermes built-in memory WRITES to Memsy.
+
+        Hermes' memory tool has three actions — add, replace, remove — and only
+        the first two are writes. See the removal guard below.
+        """
         if not self._api_key or not content:
             return
+
+        # Removals are NOT mirrored, and this is the whole point of the guard:
+        # `content` for a remove is the entry being DELETED. Ingesting it hands
+        # extraction the very text someone just decided was no longer true, and
+        # a durable memory can be promoted from it — so "forget this" would
+        # make it MORE permanent. Tagging it differently does not help; the
+        # text is stored either way.
+        #
+        # Worse, remove matches on a unique SUBSTRING rather than the whole
+        # entry, so `content` may be a fragment: a decontextualised quote of
+        # something being deleted.
+        #
+        # The cost is that Memsy keeps no record that a deletion happened.
+        # Accepted — there is no delete-by-content path from here, so the only
+        # alternative is retaining what the user asked to drop.
+        #
+        # Exact match, so a verb Hermes adds later still mirrors: a new action
+        # is far likelier to be a write than a second kind of deletion, and
+        # failing to record a write is the cheaper mistake.
+        if action.strip().lower() == "remove":
+            return
+
         payload = f"[hermes-memory:{action}:{target}] {content}"
 
         def _mirror() -> None:
             try:
-                self._post("/ingest", {"events": [self._event("app_event", payload)]})
+                # explicit: add and replace are both deliberate saves.
+                self._post(
+                    "/ingest",
+                    {"events": [self._event("app_event", payload)]},
+                    capture="explicit",
+                )
             except Exception:
                 pass
 
@@ -778,17 +813,31 @@ class MemsyMemoryProvider(MemoryProvider):
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
 
-    def _headers(self) -> dict[str, str]:
-        return {
+    def _headers(self, capture: str | None = None) -> dict[str, str]:
+        """Headers for every request this provider makes.
+
+        `capture` is ambient (swept up automatically) or explicit (someone or
+        something chose to save this). It is a PARAMETER rather than a constant
+        because Hermes runs both modes through one surface — sync_turn and
+        on_pre_compress sweep, while the memsy_ingest tool and on_memory_write
+        are deliberate saves. memsy-core cannot derive which from the transport,
+        so it takes our word for it; sending one fixed value would be
+        confidently wrong for half the traffic.
+        """
+        headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
+            "X-Memsy-Surface": "hermes",
         }
+        if capture:
+            headers["X-Memsy-Capture"] = capture
+        return headers
 
-    def _post(self, path: str, body: dict) -> str:
+    def _post(self, path: str, body: dict, capture: str | None = None) -> str:
         req = urllib.request.Request(
             f"{self._base_url}{path}",
             data=json.dumps(body).encode(),
-            headers=self._headers(),
+            headers=self._headers(capture),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

@@ -2,6 +2,33 @@ import { MemsyClient, MemsyControlClient } from "@memsy-io/memsy";
 
 import { reloadProfilesFromDisk, type Profile, type ResolvedConfig } from "./config.js";
 import { buildIdentity, type Identity } from "./identity.js";
+import { VERSION } from "./version.js";
+
+/**
+ * What memsy-core records this server as, as `name/version`.
+ *
+ * Core splits on the slash: `source` is the name and `source_version` is the
+ * rest, so this stores as mcp/mcp with the version beside it. Omitting the
+ * version is not neutral — the column is null for that row forever, and
+ * provenance cannot be reconstructed after the fact, so "which MCP version
+ * wrote this" becomes unanswerable for everything written before it was added.
+ *
+ * Interpolated from the manifest rather than written out, for the reason
+ * version.ts gives: a hand-maintained copy drifts, and this one already did.
+ *
+ * The NAME is hardcoded. Core also maps "mcp-hosted", and a hosted deployment
+ * should send that — "memories our hosted service ingested" and "memories a
+ * user ran locally" answer different questions. But no hosted deployment
+ * exists: there is no MCP service in infra/terraform, and mcp/src/http/ holds
+ * planning notes rather than a server. An env switch for it was tried here and
+ * removed, because it protected nothing — a hosted deployment that did not set
+ * the variable would record "mcp" either way — while implying a configured
+ * deployment that does not exist.
+ *
+ * WHEN THE HOSTED SERVER SHIPS: set the name from its environment there, and
+ * verify a hosted ingest records mcp/mcp-hosted before relying on the split.
+ */
+const MCP_SURFACE = `mcp/${VERSION}`;
 
 export interface ActiveContext {
   profileName: string;
@@ -141,6 +168,12 @@ export class ProfileManager {
     const client = new MemsyClient({
       baseUrl: profile.baseUrl,
       apiKey: profile.apiKey,
+      // Without this, everything this server ingests is recorded as
+      // sdk/node-sdk — indistinguishable from an application that happens to
+      // use the same SDK. The SDK still identifies itself separately
+      // (X-Memsy-Client); memsy-core prefers this surface over that, which is
+      // the entire reason there are two headers.
+      surface: MCP_SURFACE,
     });
 
     this.active = { profileName: name, profile, identity, client };
