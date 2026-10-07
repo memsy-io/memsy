@@ -191,7 +191,8 @@ describe("surface validation", () => {
   // the handler reports `MemsyConnectionError: Could not connect to Memsy` on
   // EVERY call including search. Someone checks their network, their URL and
   // their firewall before suspecting a header set once at construction.
-  it.each(["acme-bot™", "bad\nvalue", "has space", "a".repeat(65)])(
+  it.each(["acme-bot™", "bad\nvalue", "has space", "a".repeat(65),
+           "a/b/c", "/leading", "trailing/"])(
     "rejects %j at construction",
     (surface) => {
       expect(
@@ -207,7 +208,8 @@ describe("surface validation", () => {
     ).toThrow(/A-Za-z0-9\._-/);
   });
 
-  it.each(["mcp", "mcp-hosted", "my-bot", "acme_agent", "v1.2"])(
+  it.each(["mcp", "mcp-hosted", "my-bot", "acme_agent", "v1.2",
+           "mcp/0.1.3", "connector/slack"])(
     "accepts %j",
     (surface) => {
       expect(
