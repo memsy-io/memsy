@@ -226,3 +226,31 @@ describe("surface validation", () => {
     expect(mock).not.toHaveBeenCalled();
   });
 });
+
+describe("blank per-event fields", () => {
+  // `sourceId: row.fileId ?? ""` is the shape that produces these. A blank is
+  // worse than a value or an absence: it matches no real object, and is also
+  // invisible to "events with no source" because the field exists — so the
+  // row escapes both halves of a question that should be exhaustive.
+  it("omits empty source fields rather than sending blanks", () => {
+    const out = serializeEvent(
+      event({ sourceId: "", sourceAuthorEmail: "", sourceAuthorId: "" })
+    );
+    expect(out).not.toHaveProperty("source_id");
+    expect(out).not.toHaveProperty("source_author_email");
+    expect(out).not.toHaveProperty("source_author_id");
+  });
+
+  it("still sends real values", () => {
+    const out = serializeEvent(event({ sourceId: "repo:file.ts" }));
+    expect(out.source_id).toBe("repo:file.ts");
+  });
+
+  it("does NOT catch whitespace — core strips, we do not", () => {
+    // Documented rather than fixed here: " " is truthy in JS, so a
+    // client-side falsy check cannot catch it. memsy-core's
+    // _optional_strings_no_null strips before testing, which is why that is
+    // the real guard and this is only consistency.
+    expect(serializeEvent(event({ sourceId: " " })).source_id).toBe(" ");
+  });
+});
