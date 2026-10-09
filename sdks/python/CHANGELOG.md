@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Agent self-signup**: `agent_signup()` / `async_agent_signup()` let an AI agent get its
+  own Memsy org and API key with no human, by signing in with AgentID through its
+  AgentMail inbox. Returns `AgentCredentials` (`base_url`, `control_url`, `api_key`, ...)
+  that plug straight into the clients. Failures raise the new `AgentSignupError`.
+- **`memsy agent signup` CLI**: prints `export MEMSY_BASE_URL=...` / `export MEMSY_API_KEY=...`
+  for `eval`; reads `AGENTMAIL_API_KEY` from the environment only.
+- **`agent` extra** (`pip install "memsy[agent]"`) pulls in Playwright for the headless
+  sign-in. The base install is unchanged.
+
 ## [0.3.5] - 2026-09-16
 
 ### Added

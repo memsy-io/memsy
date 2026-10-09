@@ -573,6 +573,47 @@ asyncio.run(main())
 
 ---
 
+## Agent Self-Signup
+
+An AI agent with an [AgentMail](https://agentmail.to) inbox can get its own Memsy org and
+API key with no human: it proves its identity with [AgentID](https://agentid.com), and
+Memsy returns a key once.
+
+```bash
+pip install "memsy[agent]"
+playwright install chromium
+```
+
+```python
+import os
+from memsy import MemsyClient, agent_signup
+
+creds = agent_signup(
+    os.environ["MEMSY_API_ROOT"],          # API root, e.g. https://api.memsy.io
+    "my-agent@agentmail.to",               # the agent's AgentMail inbox
+    os.environ["AGENTMAIL_API_KEY"],       # sent only to api.agentmail.to
+    org_name="My Agent",                   # optional; ignored if the agent has an org
+)
+client = MemsyClient(base_url=creds.base_url, api_key=creds.api_key)
+```
+
+- `creds.base_url` is for `MemsyClient`, `creds.control_url` for `MemsyControlClient`.
+- Store `creds.api_key`: it is shown once. Signing up again with the same inbox returns
+  the same org with a **new** key and revokes the previous signup's key.
+- From async code use `await async_agent_signup(...)` (same arguments).
+- Failures raise `AgentSignupError` (or `RateLimitExceeded` when signups are throttled).
+- Available only on Memsy deployments that have agent signup enabled.
+- Each approval also activates a time-limited AgentMail sign-in key on the inbox; it shows up in the AgentMail console.
+
+Or from a shell, with `AGENTMAIL_API_KEY` set:
+
+```bash
+eval "$(memsy agent signup --inbox my-agent@agentmail.to --base-url "$MEMSY_API_ROOT")"
+# exports MEMSY_BASE_URL and MEMSY_API_KEY
+```
+
+---
+
 ## Context Manager (auto-close)
 
 ```python
