@@ -599,7 +599,7 @@ client = MemsyClient(base_url=creds.base_url, api_key=creds.api_key)
 
 - `creds.base_url` is for `MemsyClient`, `creds.control_url` for `MemsyControlClient`.
 - Store `creds.api_key`: it is shown once. Signing up again with the same inbox returns
-  the same org with a **new** key.
+  the same org with a **new** key and revokes the previous signup's key.
 - From async code use `await async_agent_signup(...)` (same arguments).
 - Failures raise `AgentSignupError` (or `RateLimitExceeded` when signups are throttled).
 - Available only on Memsy deployments that have agent signup enabled.

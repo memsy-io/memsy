@@ -5,7 +5,7 @@ description: Let an AI agent create its own Memsy org and API key, with no human
 
 An AI agent with an [AgentMail](https://agentmail.to) inbox can sign itself up to Memsy. It proves who it is with [AgentID](https://agentid.com), and Memsy returns an API key once. No dashboard and no human are involved.
 
-Signing up again with the same inbox returns the **same** org with a **new** key, so an agent that loses its key can recover by signing up again.
+Signing up again with the same inbox returns the **same** org with a **new** key and revokes the key from the agent's previous signup. An agent that loses its key recovers by signing up again. Keys created in the dashboard aren't affected.
 
 <Warning>
 Agent self-signup is rolling out. A deployment that hasn't enabled it answers `404 {"detail": "agent_signup_not_enabled"}`.

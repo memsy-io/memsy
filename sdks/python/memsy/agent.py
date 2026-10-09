@@ -13,7 +13,8 @@ Needs the ``agent`` extra and a Chromium build for Playwright::
 
     pip install "memsy[agent]" && playwright install chromium
 
-Signing up again with the same inbox returns the same org with a new key.
+Signing up again with the same inbox returns the same org with a new key and revokes
+the key from the agent's previous signup.
 """
 
 from __future__ import annotations
