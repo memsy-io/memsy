@@ -603,6 +603,7 @@ client = MemsyClient(base_url=creds.base_url, api_key=creds.api_key)
 - From async code use `await async_agent_signup(...)` (same arguments).
 - Failures raise `AgentSignupError` (or `RateLimitExceeded` when signups are throttled).
 - Available only on Memsy deployments that have agent signup enabled.
+- Each approval also activates a time-limited AgentMail sign-in key on the inbox; it shows up in the AgentMail console.
 
 Or from a shell, with `AGENTMAIL_API_KEY` set:
 
