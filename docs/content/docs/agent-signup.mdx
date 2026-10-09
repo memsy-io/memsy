@@ -1,0 +1,124 @@
+---
+title: Agent Self-Signup
+description: Let an AI agent create its own Memsy org and API key, with no human in the loop.
+---
+
+An AI agent with an [AgentMail](https://agentmail.to) inbox can sign itself up to Memsy. It proves who it is with [AgentID](https://agentid.com), and Memsy returns an API key once. No dashboard and no human are involved.
+
+Signing up again with the same inbox returns the **same** org with a **new** key, so an agent that loses its key can recover by signing up again.
+
+<Warning>
+Agent self-signup is rolling out. A deployment that hasn't enabled it answers `404 {"detail": "agent_signup_not_enabled"}`.
+</Warning>
+
+## With the Python SDK
+
+```bash
+pip install "memsy[agent]"
+playwright install chromium
+```
+
+```python
+import os
+from memsy import MemsyClient, agent_signup
+
+creds = agent_signup(
+    "https://api.memsy.io",               # API root
+    "my-agent@agentmail.to",              # the agent's AgentMail inbox
+    os.environ["AGENTMAIL_API_KEY"],      # sent only to api.agentmail.to
+)
+client = MemsyClient(base_url=creds.base_url, api_key=creds.api_key)
+```
+
+`creds.api_key` is shown once, so store it. From async code, use `await async_agent_signup(...)`.
+
+Or from a shell, with `AGENTMAIL_API_KEY` set:
+
+```bash
+eval "$(memsy agent signup --inbox my-agent@agentmail.to --base-url https://api.memsy.io)"
+# exports MEMSY_BASE_URL and MEMSY_API_KEY
+```
+
+## The HTTP flow
+
+Use this if your agent already drives its own browser and you'd rather not use the SDK.
+
+<Steps>
+  <Step title="Start a signup">
+    ```bash
+    curl -X POST https://api.memsy.io/api/agents/signup \
+      -H "Content-Type: application/json" \
+      -d '{"org_name": "My Agent"}'
+    ```
+
+    `org_name` is optional, and it's ignored if the agent already has an org.
+
+    ```json
+    {
+      "signup_id": "sg_8f2kQ…",
+      "poll_secret": "…",
+      "authorize_url": "https://auth.agentid.com/v0/authorize?…",
+      "expires_in": 600
+    }
+    ```
+
+    Keep `poll_secret` private. It's the only way to collect the key. The signup expires after `expires_in` seconds.
+  </Step>
+
+  <Step title="Open the sign-in page">
+    Open `authorize_url` in the agent's browser. A headless browser works. Check that the page is on `https://auth.agentid.com` before reading anything from it.
+
+    While the sign-in waits for the agent, AgentID describes it in a meta tag:
+
+    ```html
+    <meta name="agentid-session-action" content='{"type":"agentid_session_required",
+      "issuer":"https://auth.agentid.com","auth_token":"…", …}'>
+    ```
+
+    Parse the JSON. Check that `type` is `agentid_session_required` and `issuer` is `https://auth.agentid.com`, then take `auth_token`.
+  </Step>
+
+  <Step title="Approve with the agent's AgentMail key">
+    ```bash
+    curl -X POST "https://api.agentmail.to/v0/inboxes/$AGENTMAIL_INBOX_ID/authorize" \
+      -H "Authorization: Bearer $AGENTMAIL_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"auth_token": "…", "accept_disclosure": true}'
+    ```
+
+    Send the AgentMail key **only** to `api.agentmail.to`. Memsy and AgentID never ask for it.
+
+    Keep the browser open. AgentID then redirects it to Memsy's callback, which creates the agent's account, org and membership.
+  </Step>
+
+  <Step title="Collect the key">
+    Poll every couple of seconds:
+
+    ```bash
+    curl https://api.memsy.io/api/agents/signup/$SIGNUP_ID \
+      -H "Authorization: Bearer $POLL_SECRET"
+    ```
+
+    | Response | Meaning |
+    |---|---|
+    | `{"status": "pending"}` | The sign-in isn't finished yet. Keep polling. |
+    | `{"status": "complete", "api_key": "msy_…", "key_id": "…", "org_id": "…", "user_id": "…"}` | Done. This is the only time the key is returned. |
+    | `{"status": "error", "error": "…"}` | The sign-in failed, for example `access_denied`, `invalid_id_token` or `owner_signup_limit`. Start over. |
+    | `410 api_key_already_issued` | The key was already collected. Start a new signup to get another one. |
+    | `401 invalid_poll_secret` / `404 unknown_or_expired_signup` | Wrong secret, or the signup expired. |
+  </Step>
+
+  <Step title="Use the key">
+    ```bash
+    export MEMSY_BASE_URL="https://api.memsy.io/v1"
+    export MEMSY_API_KEY="msy_…"
+    ```
+
+    The key works with every SDK and the REST API. See the [Quickstart](/docs/quickstart).
+  </Step>
+</Steps>
+
+## Limits
+
+- Starts are rate-limited per IP address, and completed signups per AgentID owner. Over the limit, the start returns `429 too_many_signup_attempts`, or the poll returns `error: owner_signup_limit`.
+- An agent's key is scoped to its own org, like any other Memsy API key.
