@@ -11,6 +11,10 @@ class MemsyConnectionError(MemsyError):
     """Raised when the SDK cannot reach the Memsy endpoint (network or timeout)."""
 
 
+class AgentSignupError(MemsyError):
+    """Raised when agent self-signup (`memsy.agent_signup`) cannot complete."""
+
+
 class MemsyAPIError(MemsyError):
     """Raised when the Memsy API returns a non-2xx response."""
 
