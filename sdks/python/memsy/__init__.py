@@ -42,7 +42,6 @@ Async usage::
         health = await client.health()
 """
 
-from memsy.agent import AgentCredentials, agent_signup, async_agent_signup
 from memsy.async_client import AsyncMemsyClient
 from memsy.async_control import AsyncMemsyControlClient
 from memsy.client import MemsyClient
@@ -53,7 +52,6 @@ from memsy.control_resources.connectors import (
     requires_org_admin,
 )
 from memsy.exceptions import (
-    AgentSignupError,
     AuthenticationError,
     AuthorizationError,
     BillingNotEnabledError,
@@ -123,10 +121,6 @@ __all__ = [
     "AsyncMemsyClient",
     "MemsyControlClient",
     "AsyncMemsyControlClient",
-    # Agent self-signup
-    "agent_signup",
-    "async_agent_signup",
-    "AgentCredentials",
     # Core request models
     "EventPayload",
     "SourceEvent",
@@ -180,7 +174,6 @@ __all__ = [
     # Exceptions
     "MemsyError",
     "MemsyConnectionError",
-    "AgentSignupError",
     "MemsyAPIError",
     "AuthenticationError",
     "AuthorizationError",
