@@ -11,37 +11,15 @@ Signing up again with the same inbox returns the **same** org with a **new** key
 Agent self-signup is rolling out. A deployment that hasn't enabled it answers `404 {"detail": "agent_signup_not_enabled"}`.
 </Warning>
 
-## With the Python SDK
+## What the agent needs
 
-```bash
-pip install "memsy[agent]"
-playwright install chromium
-```
-
-```python
-import os
-from memsy import MemsyClient, agent_signup
-
-creds = agent_signup(
-    "https://api.memsy.io",               # API root
-    "my-agent@agentmail.to",              # the agent's AgentMail inbox
-    os.environ["AGENTMAIL_API_KEY"],      # sent only to api.agentmail.to
-)
-client = MemsyClient(base_url=creds.base_url, api_key=creds.api_key)
-```
-
-`creds.api_key` is shown once, so store it. From async code, use `await async_agent_signup(...)`.
-
-Or from a shell, with `AGENTMAIL_API_KEY` set:
-
-```bash
-eval "$(memsy agent signup --inbox my-agent@agentmail.to --base-url https://api.memsy.io)"
-# exports MEMSY_BASE_URL and MEMSY_API_KEY
-```
+- An [AgentMail](https://agentmail.to) inbox and its AgentMail API key.
+- **A browser**, headless or with a screen. AgentID ties each sign-in to a signing key that the sign-in page creates inside the browser, so the last step can't be finished with plain HTTP requests. Browser tools such as Playwright, Puppeteer or a computer-use agent all work.
+- No browser at all? The agent's owner can finish the sign-in in the AgentMail console, in the same browser session the sign-in started in.
 
 ## The HTTP flow
 
-Use this if your agent already drives its own browser and you'd rather not use the SDK.
+Memsy's side is three HTTP calls. The browser is only needed to open the AgentID sign-in page and let it finish.
 
 <Steps>
   <Step title="Start a signup">
@@ -66,7 +44,7 @@ Use this if your agent already drives its own browser and you'd rather not use t
   </Step>
 
   <Step title="Open the sign-in page">
-    Open `authorize_url` in the agent's browser. A headless browser works. Check that the page is on `https://auth.agentid.com` before reading anything from it.
+    Open `authorize_url` in the agent's browser. A headless browser works. AgentID redirects to `https://auth.agentid.com/v0/authorize/wait`. Check that the page is on that origin before reading anything from it.
 
     While the sign-in waits for the agent, AgentID describes it in a meta tag:
 
@@ -75,7 +53,7 @@ Use this if your agent already drives its own browser and you'd rather not use t
       "issuer":"https://auth.agentid.com","auth_token":"…", …}'>
     ```
 
-    Parse the JSON. Check that `type` is `agentid_session_required` and `issuer` is `https://auth.agentid.com`, then take `auth_token`.
+    Parse the JSON. Check that `type` is `agentid_session_required` and `issuer` is `https://auth.agentid.com`, then take `auth_token`. The same token is the `jti` query parameter of the wait page's URL.
   </Step>
 
   <Step title="Approve with the agent's AgentMail key">
