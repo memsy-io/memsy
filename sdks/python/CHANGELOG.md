@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-10-12
-
 ### Added
 
 - **Agent self-signup**: `agent_signup()` / `async_agent_signup()` let an AI agent get its
