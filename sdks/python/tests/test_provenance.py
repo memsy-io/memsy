@@ -44,8 +44,9 @@ def _headers(cls, **kw) -> dict[str, str]:
 
     Closed in a finally rather than left to the garbage collector: these cases
     are parametrised across four classes, so an unclosed client per case leaks
-    ~20 connection pools and emits ResourceWarning — which fails the suite
-    under `-W error`.
+    ~20 connection pools. No warning fires today — httpx.Client defines no
+    __del__ — so this is about not depending on GC timing rather than a build
+    that currently breaks. It would start failing if httpx ever added one.
     """
     client = cls(base_url="https://test.memsy.io", api_key="test_key", **kw)
     try:
@@ -157,7 +158,24 @@ class TestProvenanceValidation:
     """
 
     @pytest.mark.parametrize(
-        "surface", ["acme-bot™", "bad\nvalue", "has space", "a" * 65]
+        "surface",
+        [
+            "acme-bot™",
+            "bad\nvalue",
+            "has space",
+            "a" * 65,
+            # The slash is structural — one optional segment, not free use.
+            "a/b/c",
+            "/leading",
+            "trailing/",
+            # TRAILING newline specifically. Python's $ matches just before
+            # one, so these passed the old pattern and then raised
+            # LocalProtocolError on every request — the exact failure this
+            # check exists to prevent. Node always rejected them, so the two
+            # SDKs disagreed on identical input.
+            "acme-bot\n",
+            "mcp/0.1.3\n",
+        ],
     )
     def test_rejects_what_core_would_rewrite(self, surface):
         with pytest.raises(ValueError, match=r"A-Za-z0-9"):
