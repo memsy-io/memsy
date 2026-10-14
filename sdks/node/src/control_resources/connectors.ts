@@ -21,8 +21,8 @@ export const USER_SCOPED_PROVIDERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Providers that are a single shared org resource — an org admin or an API key
- * is required to connect or manage them. Advisory only; the server owns the
+ * Providers that are a single shared org resource — an org admin or an
+ * `admin`-scoped API key is required to connect or manage them. Advisory only; the server owns the
  * real check and knows about providers newer than this SDK.
  */
 export const ORG_SCOPED_PROVIDERS: ReadonlySet<string> = new Set([
@@ -36,7 +36,8 @@ export const ORG_SCOPED_PROVIDERS: ReadonlySet<string> = new Set([
 export const NON_OAUTH_PROVIDERS: ReadonlySet<string> = new Set(["s3"]);
 
 /**
- * Whether connecting/managing `provider` needs an org admin or an API key.
+ * Whether connecting/managing `provider` needs an org admin or an
+ * `admin`-scoped API key.
  *
  * True for org-scoped providers (Slack, S3, Notion, GitHub), false for
  * user-scoped ones (Google Drive, OneDrive). Use it to fail fast or hide UI —
@@ -87,11 +88,14 @@ function toSelectionBody(
  * Two scoping models, and the difference decides who may connect what:
  *
  * - **Org-scoped** — `slack`, `s3`, `notion`, `github`. One shared connection
- *   per org. **Only an org admin (or an API key, which the server treats as a
- *   service caller acting org-wide) may connect, configure, sync or disconnect
- *   one.** A seated non-admin member gets a 403 and may only read.
+ *   per org. **Only an org admin, or an API key minted with the `admin` scope,
+ *   may connect, configure, sync or disconnect one.** A key without `admin`
+ *   (plain `read`/`write`) or a seated non-admin member gets a 403
+ *   (`requiredScope === "admin"` for keys) and may only read.
  * - **User-scoped** — `google_drive`, `onedrive`. Each member connects their
- *   own account; an org admin can see it for auditing but never mutate it.
+ *   own account; an org admin can see it for auditing but never mutate it. An
+ *   API key acts as its owning user here: it only sees and manages connectors
+ *   that user created, with or without `admin`.
  *
  * Typical OAuth flow:
  * ```ts
@@ -156,7 +160,7 @@ export class ConnectorsResource {
    *
    * Credentials are validated before anything is stored, the bucket is
    * auto-selected as the only resource, and the backfill starts immediately.
-   * Org-scoped: admins / API keys only.
+   * Org-scoped: org admins / `admin`-scoped API keys only.
    */
   async configureS3(options: ConfigureS3Options): Promise<Connector> {
     const body: Record<string, unknown> = {
@@ -285,7 +289,7 @@ export class ConnectorsResource {
    *
    * Accepts `ResourceSelection`s or the items returned by {@link listResources}.
    *
-   * Org-scoped connectors: admins / API keys only. User-scoped: owner only.
+   * Org-scoped connectors: org admins / `admin`-scoped API keys only. User-scoped: owner only.
    */
   async configureResources(
     connectorId: string,

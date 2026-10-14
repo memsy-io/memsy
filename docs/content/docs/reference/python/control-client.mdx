@@ -170,7 +170,7 @@ already_expressed: bool = control.interest.status()
 Connect knowledge sources and choose what they sync. 
 Providers today: `slack`, `google_drive`, `s3`, `notion`, `github`, `onedrive`. 
 
-> **Org-scoped providers require an admin.** `slack`, `s3`, `notion` and `github` are a single shared connection per org — only an org admin, or an API key (which the server treats as a service caller acting org-wide), may connect, configure, sync or disconnect them. A seated non-admin member gets `AuthorizationError` (403) and read-only access. `google_drive` and `onedrive` are user-scoped: each member connects their own account, and an admin may audit but never mutate it. `requires_org_admin(provider)` is a client-side pre-flight helper only — the server enforces the rule.
+> **Org-scoped providers require an admin.** `slack`, `s3`, `notion` and `github` are a single shared connection per org — only an org admin, or an API key minted with the `admin` scope, may connect, configure, sync or disconnect them. A key with only `read`/`write` raises `AuthorizationError` (403, `required_scope == "admin"`), and a seated non-admin member gets the same 403 with read-only access. `google_drive` and `onedrive` are user-scoped: each member connects their own account, and an admin may audit but never mutate it. An API key acts as its owning user for these — it only sees and manages connectors that user created, with or without `admin`. Create an admin key with `control.keys.create("name", scopes=["read", "write", "admin"])` (org admins only; `admin` is never a default). `requires_org_admin(provider)` is a client-side pre-flight helper only — the server enforces the rule.
 
 ```python
 from memsy import MemsyControlClient, ResourceSelection
@@ -193,7 +193,7 @@ connector: Connector = control.connectors.configure_resources(
 
 control.connectors.status("slack")        # member-safe: {connected, display_name}
 control.connectors.list_providers()
-control.connectors.list()                 # admin / API-key view
+control.connectors.list()                 # admin / admin-key view of org connectors
 control.connectors.get(connector.id)      # status, last_sync_at, last_error
 control.connectors.sync(connector.id)     # manual refresh (must be active)
 control.connectors.delete(connector.id)   # disconnect + revoke

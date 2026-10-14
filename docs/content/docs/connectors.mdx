@@ -74,13 +74,24 @@ From any connector's page in the console you can:
 - **Change selection** — pick different channels/folders/repos (Slack, Drive, GitHub, OneDrive)
 - **Disconnect** — revoke access; Memsy stops syncing and cleans up anything it installed on the provider's side (e.g. GitHub webhooks)
 
-Shared connectors (Slack, Notion, GitHub, S3) can only be connected, reconfigured, or disconnected by an org admin — other members can see that it's connected but can't change it. Personal connectors (Google Drive, OneDrive) can only be managed by the person who connected them.
+Shared (org) connectors (Slack, Notion, GitHub, S3) can only be connected, reconfigured, or disconnected by an org admin. Other members can see that it's connected but can't change it.
+
+Personal connectors (Google Drive, OneDrive) can only be managed by the person who connected them.
 
 ## Connecting programmatically
 
 The console is the easiest way to set a connector up, and most people never need anything else. If you're onboarding orgs in bulk or wiring connectors into your own admin UI, the same operations are available on the SDK through `MemsyControlClient` — connectors live on the control plane, so they hang off the control client rather than `MemsyClient`.
 
-The permission rules are identical to the console: shared providers need an org admin or an API key, personal ones can only be managed by their owner.
+The permission rules are the same as in the console:
+
+- **Shared (org) connectors** need an org admin, or an API key with the `admin` scope. Keys with only `read`/`write` get a 403.
+- **Personal connectors** can only be managed by their owner. An API key acts as the user who created it, so it only sees that user's connectors — even with `admin`.
+
+To manage shared connectors from code, create a key with the `admin` scope (older keys must be re-created):
+
+```python
+control.keys.create("connector-admin", scopes=["read", "write", "admin"])
+```
 
 ```python
 from memsy import MemsyControlClient, ResourceSelection
