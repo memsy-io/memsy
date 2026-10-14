@@ -267,7 +267,7 @@ await control.connectors.list();        // knowledge-source connectors (admin)
 
 Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive — and choose what they sync.
 
-**Who may connect what.** Org-scoped providers (`slack`, `s3`, `notion`, `github`) are one shared connection per org: only an **org admin — or any API key, which the server treats as a service caller acting org-wide** — may connect, configure, sync or disconnect them. A seated non-admin member gets a 403 and may only read. User-scoped providers (`google_drive`, `onedrive`) are per-member: the owner manages their own connection, and an admin can see it for auditing but never mutate it. `requiresOrgAdmin(provider)` answers this client-side for pre-flight checks — the server is the enforcement point.
+**Who may connect what.** Org-scoped providers (`slack`, `s3`, `notion`, `github`) are one shared connection per org: only an **org admin — or an API key minted with the `admin` scope** — may connect, configure, sync or disconnect them. A key with only `read`/`write` gets a `MemsyAuthorizationError` (403, `requiredScope === "admin"`), and so does a seated non-admin member, who may only read. User-scoped providers (`google_drive`, `onedrive`) are per-member: the owner manages their own connection, and an admin can see it for auditing but never mutate it. `requiresOrgAdmin(provider)` answers this client-side for pre-flight checks — the server is the enforcement point.
 
 ```ts
 import { MemsyControlClient, requiresOrgAdmin } from "@memsy-io/memsy";
@@ -279,7 +279,7 @@ const control = new MemsyControlClient({
 
 await control.connectors.listProviders();
 // ["slack", "google_drive", "s3", "notion", "github", "onedrive"]
-requiresOrgAdmin("slack");        // true — admin/API key only
+requiresOrgAdmin("slack");        // true — org admin / admin-scoped key only
 requiresOrgAdmin("google_drive"); // false — per-member connection
 
 // 1. Start OAuth and send the end user to the consent screen
@@ -296,7 +296,7 @@ await control.connectors.configureResources(connection.connectorId, resources);
 
 // Later
 await control.connectors.status("slack");        // member-safe: connected? (no ids)
-await control.connectors.list();                 // admin/API-key view
+await control.connectors.list();                 // admin / admin-key view of org connectors
 await control.connectors.get(connectorId);       // status, lastSyncAt, lastError
 await control.connectors.sync(connectorId);      // manual refresh (must be active)
 await control.connectors.delete(connectorId);    // disconnect + revoke

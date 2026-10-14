@@ -375,9 +375,10 @@ and choose what they sync.
 
 **Who may connect what.** 
 Org-scoped providers (`slack`, `s3`, `notion`,
-`github`) are one shared connection per org: only an **org admin — or any API
-key, which the server treats as a service caller acting org-wide** — may
-connect, configure, sync or disconnect them. A seated non-admin member gets
+`github`) are one shared connection per org: only an **org admin — or an API
+key minted with the `admin` scope** — may
+connect, configure, sync or disconnect them. A key with only `read`/`write`
+gets `AuthorizationError` (403, `required_scope == "admin"`). A seated non-admin member gets
 `AuthorizationError` (403) and may only read. User-scoped providers
 (`google_drive`, `onedrive`) are per-member: the owner manages their own
 connection, and an admin can see it for auditing but never mutate it.
@@ -391,7 +392,7 @@ control = MemsyControlClient(base_url=MEMSY_CONTROL_URL, api_key=MEMSY_API_KEY)
 
 control.connectors.list_providers()
 # ['slack', 'google_drive', 's3', 'notion', 'github', 'onedrive']
-requires_org_admin("slack")         # True — admin/API key only
+requires_org_admin("slack")         # True — org admin / admin-scoped key only
 requires_org_admin("google_drive")  # False — per-member connection
 
 # 1. Start OAuth and send the end user to the consent screen
@@ -411,7 +412,7 @@ control.connectors.configure_resources(
 
 # Later
 control.connectors.status("slack")            # member-safe: connected? (no ids)
-control.connectors.list()                     # admin/API-key view
+control.connectors.list()                     # admin / admin-key view of org connectors
 control.connectors.get(connector_id)          # status, last_sync_at, last_error
 control.connectors.sync(connector_id)         # manual refresh (must be active)
 control.connectors.delete(connector_id)       # disconnect + revoke

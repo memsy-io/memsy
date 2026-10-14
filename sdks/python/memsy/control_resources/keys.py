@@ -37,7 +37,9 @@ class KeysResource:
         The ``raw_key`` in the response is only returned once — store it securely.
 
         :param name: Human-readable label for this key.
-        :param scopes: Permission scopes. Defaults to ``("read", "write")``.
+        :param scopes: Permission scopes: ``read``, ``write``, ``admin``. Defaults to
+            ``("read", "write")``. ``admin`` (opt-in) lets the key connect and manage
+            org-scoped connectors; unknown scopes are rejected with 422.
         :param expires_at: Optional ISO 8601 expiry datetime.
         """
         body: dict[str, Any] = {"name": name, "scopes": list(scopes)}
@@ -84,7 +86,9 @@ class AsyncKeysResource:
         The ``raw_key`` in the response is only returned once — store it securely.
 
         :param name: Human-readable label for this key.
-        :param scopes: Permission scopes. Defaults to ``("read", "write")``.
+        :param scopes: Permission scopes: ``read``, ``write``, ``admin``. Defaults to
+            ``("read", "write")``. ``admin`` (opt-in) lets the key connect and manage
+            org-scoped connectors; unknown scopes are rejected with 422.
         :param expires_at: Optional ISO 8601 expiry datetime.
         """
         body: dict[str, Any] = {"name": name, "scopes": list(scopes)}
