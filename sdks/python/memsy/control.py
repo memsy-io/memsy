@@ -5,7 +5,13 @@ from typing import Any
 
 import httpx
 
-from memsy._http import DEFAULT_MAX_RETRIES, DEFAULT_RETRY_BACKOFF, HttpCoreMixin
+from memsy._http import (
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_RETRY_BACKOFF,
+    HttpCoreMixin,
+    default_headers,
+    validate_provenance,
+)
 from memsy.control_resources.billing import BillingResource
 from memsy.control_resources.connectors import ConnectorsResource
 from memsy.control_resources.events import EventsResource
@@ -64,7 +70,12 @@ class MemsyControlClient(HttpCoreMixin):
         timeout: float = 30.0,
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_backoff: float = DEFAULT_RETRY_BACKOFF,
+        # Provenance. See _http.default_headers for what these mean and why
+        # they are client options; validate_provenance for the accepted values.
+        surface: str | None = None,
+        capture_mode: str | None = None,
     ) -> None:
+        validate_provenance(surface, capture_mode)
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._max_retries = max_retries
@@ -72,7 +83,7 @@ class MemsyControlClient(HttpCoreMixin):
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=default_headers(api_key, surface, capture_mode),
         )
         self.usage = UsageResource(self)
         self.billing = BillingResource(self)

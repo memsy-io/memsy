@@ -318,6 +318,7 @@ http_code="$(curl -s -o /dev/null \
   -X POST "${MEMSY_BASE_URL}/ingest" \
   -H "Authorization: Bearer ${MEMSY_API_KEY}" \
   -H "Content-Type: application/json" \
+  -H "X-Memsy-Surface: claude-code-hook" \
   -d "$TURN_JSON" 2>>"${MEMSY_LOG_DIR}/turn-sync.log")" || http_code="000"
 
 if [[ "$http_code" != "200" && "$http_code" != "201" && "$http_code" != "202" ]]; then

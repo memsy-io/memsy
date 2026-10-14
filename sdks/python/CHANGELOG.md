@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2026-10-07
+
+### Added
+
+- **`surface` and `capture_mode` on all four clients**: tell memsy-core where a memory
+  came from, so the console can filter by it.
+
+  `surface` is for a wrapper that is itself the product the user chose — the MCP server
+  passes `"mcp"`. Leave it unset in an application: the SDK always identifies itself
+  separately, and core falls back to that, so a plain integration is recorded as
+  `sdk/python-sdk` without having to say so.
+
+  `capture_mode` is `"ambient"` (swept up automatically) or `"explicit"` (someone chose
+  to save this). It is a client option rather than per-call because for an SDK this is a
+  property of the integration: an app that sweeps conversations sweeps all of them, and
+  one with a save button is explicit throughout. Core cannot derive it — the variation is
+  between customers, not between requests — so a client that sends nothing leaves
+  `capture_mode` null on every row it produces.
+
+- **`source_id`, `source_author_email` and `source_author_id` on `EventPayload`**: who the
+  SOURCE SYSTEM says wrote an event, and what object it came from. Distinct from
+  `actor_id`, which is whoever owns the connection — one shared integration is a single
+  actor but many authors. Unlike `metadata`, these are indexed and can be filtered on.
+
+  A caller who sets none of them sends a byte-identical request body to 0.3.5.
+
+### Changed
+
+- **`surface` and `capture_mode` are validated at construction**, raising `ValueError`
+  rather than failing later. This is the only change a 0.3.5 caller could trip over, and
+  only if they were already passing a value core would have rewritten.
+
+  `surface` must match `[A-Za-z0-9._-]` and be 1–64 characters, matching what core
+  stores. Previously a value httpx could not encode — `"acme-bot™"` — raised
+  `UnicodeEncodeError` from deep inside the client, and a value with a newline was
+  accepted outright. Neither told the caller what the rule was.
+
+  Empty is treated as *not configured* rather than invalid, so
+  `os.environ.get("MEMSY_SURFACE", "")` keeps working and simply omits the header.
+
+- **Blank per-event provenance fields are omitted** rather than sent as `""`. A blank
+  matches no real object and is also invisible to "events with no source", because the
+  field exists — so the row escapes both halves of a question that should be exhaustive.
+
 ## [0.3.5] - 2026-09-16
 
 ### Added
