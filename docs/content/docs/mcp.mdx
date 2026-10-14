@@ -11,7 +11,7 @@ The Memsy [MCP](https://modelcontextprotocol.io) server is drop-in memory infras
 
 | Tool | Purpose |
 |---|---|
-| `memsy_search` | Semantic search across stored memories. |
+| `memsy_search` | Semantic search across stored memories, optionally scoped to one conversation. |
 | `memsy_ingest` | Store events (chat turns, decisions, facts) — batched up to 100. |
 | `memsy_status` | Confirm async ingest finished extraction. |
 | `memsy_health` | Connectivity + version check. |
@@ -261,6 +261,24 @@ The wider the question, the more results. Be specific when you want precision.
 - If a search returns nothing, try a shorter / simpler query before assuming the memory isn't there.
 - *"Show me everything I've stored about X"* triggers `memsy_list_memories` (paginated browse) instead of `memsy_search` — useful when semantic search is too narrow.
 
+#### Scoping a search to a conversation
+
+`memsy_search` takes a `scope`, which decides which conversations it looks in:
+
+| `scope` | Searches |
+|---|---|
+| `all` *(default)* | Everything — every past chat **and** all connector-sourced memory. |
+| `this_conversation` | Only the current chat, plus general knowledge belonging to no conversation. |
+| `everything_except_this_conversation` | Earlier chats and connector memory, leaving out what's already in front of you. |
+
+Say *"only what we said in this chat"* or *"have we discussed this before, other than just now?"* and the agent picks the matching scope.
+
+> **`this_conversation` is narrower than it sounds.** Memories from Google Drive, Slack, GitHub, Notion, S3 and OneDrive each carry their *own* conversation id — the folder, channel or repo they came from — so a chat-scoped search excludes all of them, along with every earlier chat. That's why `all` is the default: scoping is opt-in, and switching it on switches connector memory off.
+
+Each result also reports the `session_id` it came from, so an `all` search can be read by origin — `null` means the memory belongs to no conversation, which is how promoted role/team/org knowledge is stored.
+
+If the host can't tell the MCP which conversation is current, a scoped search **degrades to `all`** rather than guessing, and the response says so in its `scope` field — for example `all (requested scope unavailable: this conversation could not be identified)`. Returning too much is visible; returning the wrong conversation's memories would not be.
+
 ### Storing — committing things to long-term memory
 
 Use trigger verbs: **remember**, **note**, **save**, **store**.
@@ -487,6 +505,11 @@ The query may not semantically match. Try:
 - `threshold: 0` (the default — anything stricter hides weak matches).
 
 Search is org-wide by default, so prior-channel memories are findable without setting `actor_id`.
+
+If the search was scoped, check the `scope` field in the response:
+
+- `this_conversation` excludes **all** connector memory (Drive, Slack, GitHub, Notion, S3, OneDrive) and every earlier chat. A `count: 0` here often just means the answer lives outside this chat — re-run with the default `all`.
+- `all (requested scope unavailable: …)` means the scope was asked for but dropped, because the host didn't tell the MCP which conversation is current. Those results are unscoped, not empty.
 
 ### Server doesn't start / host shows "memsy: disconnected"
 

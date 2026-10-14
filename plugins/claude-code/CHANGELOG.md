@@ -6,6 +6,31 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-17
+
+### Added
+- **SessionStart now records which conversation the window is in**, so `memsy_search`
+  can be scoped to it. A small file under `CLAUDE_PLUGIN_DATA` (falling back to
+  `~/.memsy/`), named for the `claude` process, holds the host's `session_id`. Not
+  opt-in and silent: it produces no context output, and it is deliberately **not**
+  gated behind `MEMSY_TURN_SYNC`, so conversation scoping doesn't stop working
+  because an unrelated feature is off.
+
+  It exists because the MCP server is told the conversation id once, at launch, and
+  then survives `/clear` — which starts a new conversation without restarting it.
+  SessionStart fires on startup, resume, clear and compact, so the note stays correct
+  where the launch value goes stale. Written before the existing `compact`
+  early-return; a failure to write is swallowed, since a missing note only costs an
+  unscoped search.
+
+### Changed
+- **Turn sync now tags events with the host's own conversation id** instead of a hash
+  of the transcript path. The two must agree: the MCP scopes searches by the host id,
+  so while turn sync used its own name, a `this_conversation` search silently missed
+  every turn captured here. Hosts that don't supply a `session_id` still fall back to
+  the transcript hash — stable per chat, but unknown to the MCP, so those memories
+  stay findable by actor and by semantic match rather than by conversation scope.
+
 ## [0.1.2] - 2026-06-09
 
 ### Fixed
