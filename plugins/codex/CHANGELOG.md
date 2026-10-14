@@ -11,6 +11,29 @@ This changelog documents notable changes for reference; see the README's
 
 ## [Unreleased]
 
+### Added
+- **Turn-sync now identifies itself to memsy-core**, so memories it produces can be
+  told apart from everything else landing in the same org. The `Stop` hook sends
+  `X-Memsy-Surface: codex-hook`, which core records as `plugin` / `codex` — the hook
+  name is normalised to the product, so the console shows "Codex" rather than
+  "Codex Hook" and a second Codex ingest path would not become a separate bucket.
+
+- **The turn is labelled `ambient`** via `X-Memsy-Capture`, distinguishing memories
+  swept up automatically from ones somebody chose to save. Sent explicitly rather
+  than left for core to infer: this hook is the plugin's only HTTP call and is gated
+  on `MEMSY_TURN_SYNC` alone, so it is always ambient, and reporting it means a
+  future ingest path with a different mode cannot be mislabelled by a rule written
+  before it existed.
+
+  `MEMSY_PROACTIVE` and `MEMSY_CONFIRM_STORE` are unaffected — they inject prompts
+  telling the model to call the `memsy_ingest` MCP tool, so those events arrive
+  labelled `mcp` and already carry `explicit`.
+
+  Nothing changes about what is stored or when. Turns ingested by earlier versions
+  keep no source, which is correct: provenance cannot be reconstructed after the
+  fact, and leaving them blank keeps "we had not shipped this yet" distinguishable
+  from "this caller really was unidentifiable".
+
 ## [0.1.0]
 
 ### Added
