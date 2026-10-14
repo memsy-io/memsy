@@ -185,7 +185,10 @@ describe("surface validation", () => {
   // EVERY call including search. Someone checks their network, their URL and
   // their firewall before suspecting a header set once at construction.
   it.each(["acme-bot™", "bad\nvalue", "has space", "a".repeat(65),
-           "a/b/c", "/leading", "trailing/"])(
+           "a/b/c", "/leading", "trailing/",
+           // Already rejected here; pinned so the SDKs cannot drift again —
+           // Python's $ accepted a trailing newline until it used fullmatch.
+           "acme-bot\n", "mcp/0.1.3\n"])(
     "rejects %j at construction",
     (surface) => {
       expect(

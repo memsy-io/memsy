@@ -30,7 +30,12 @@ DEFAULT_RETRY_BACKOFF = 1.0
 # the slash is structural and the cap is per segment, not on the whole string.
 # An earlier version applied the per-segment charset to the whole value, which
 # rejected `mcp/0.1.3` and would have rejected `connector/slack` too.
-_SURFACE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}(/[A-Za-z0-9._-]{1,64})?$")
+# Anchored with \Z and matched with fullmatch, not $ with match. Python's $
+# also matches just BEFORE a trailing newline, so "acme-bot\n" satisfied the
+# old pattern — then httpx raised LocalProtocolError on every request, which
+# is the exact failure this check exists to prevent. JavaScript's $ does not
+# behave that way, so the two SDKs silently disagreed on the same input.
+_SURFACE_RE = re.compile(r"[A-Za-z0-9._-]{1,64}(/[A-Za-z0-9._-]{1,64})?\Z")
 _CAPTURE_MODES = ("ambient", "explicit")
 
 
@@ -50,7 +55,7 @@ def validate_provenance(surface: str | None, capture_mode: str | None) -> None:
     Empty means NOT CONFIGURED and passes: `os.environ.get("MEMSY_SURFACE", "")`
     is an ordinary way to reach this, and the header is simply omitted.
     """
-    if surface and not _SURFACE_RE.match(surface):
+    if surface and not _SURFACE_RE.fullmatch(surface):
         raise ValueError(
             f"surface must be 'name' or 'name/detail', each 1-64 "
             f"characters of [A-Za-z0-9._-]; "
