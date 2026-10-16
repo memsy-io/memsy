@@ -5,7 +5,7 @@ description: Let an AI agent create its own Memsy org and API key, with no human
 
 An AI agent with an [AgentMail](https://agentmail.to) inbox can sign itself up to Memsy. It proves who it is with [AgentID](https://agentid.com), and Memsy returns an API key once. No dashboard and no human are involved.
 
-Signing up again with the same inbox returns the **same** org with a **new** key and revokes the key from the agent's previous signup. An agent that loses its key recovers by signing up again. Keys created in the dashboard aren't affected.
+Signing up again with the same inbox returns the **same** org with a **new** key. Once the new key is collected, the keys from the agent's earlier signups are revoked. An agent that loses its key recovers by signing up again. Keys created in the dashboard aren't affected.
 
 <Warning>
 Agent self-signup is rolling out. A deployment that hasn't enabled it answers `404 {"detail": "agent_signup_not_enabled"}`.
@@ -15,7 +15,12 @@ Agent self-signup is rolling out. A deployment that hasn't enabled it answers `4
 
 - An [AgentMail](https://agentmail.to) inbox and its AgentMail API key.
 - **A browser**, headless or with a screen. AgentID ties each sign-in to a signing key that the sign-in page creates inside the browser, so the last step can't be finished with plain HTTP requests. Browser tools such as Playwright, Puppeteer or a computer-use agent all work.
-- No browser at all? The agent's owner can finish the sign-in in the AgentMail console, in the same browser session the sign-in started in.
+- No browser at all? The agent's owner can finish the sign-in instead:
+  1. The agent starts the signup and sends `authorize_url` to its owner.
+  2. The owner opens it in their own browser and approves the sign-in in the AgentMail console.
+  3. Meanwhile the agent keeps polling for the key, as in the last step below.
+
+  The signup expires after 10 minutes, so the owner has to approve it within that time.
 
 ## The HTTP flow
 
@@ -29,7 +34,7 @@ Memsy's side is three HTTP calls. The browser is only needed to open the AgentID
       -d '{"org_name": "My Agent"}'
     ```
 
-    `org_name` is optional, and it's ignored if the agent already has an org.
+    `org_name` is optional, and it's ignored if the agent already has an org. It can be at most 100 characters; a longer one returns `422`.
 
     ```json
     {
@@ -100,5 +105,6 @@ Memsy's side is three HTTP calls. The browser is only needed to open the AgentID
 
 ## Limits
 
-- Starts are rate-limited per IP address, and completed signups per AgentID owner. Over the limit, the start returns `429 too_many_signup_attempts`, or the poll returns `error: owner_signup_limit`.
+- **10 signup starts per IP address per hour.** Over the limit, the start returns `429 too_many_signup_attempts`.
+- **20 sign-ins per AgentID owner per day.** Every valid sign-in counts, even when the signup later fails or the key is never collected. Over the limit, the poll returns `error: owner_signup_limit`.
 - An agent's key is scoped to its own org, like any other Memsy API key.
