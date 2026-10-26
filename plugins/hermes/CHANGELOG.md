@@ -11,6 +11,14 @@ section.
 
 ## [Unreleased]
 
+### Fixed
+- **Auto-context is injected again.** `prefetch()` read `memories` from the
+  `/v1/search` response, but the API returns `{"results": [...]}` (each result
+  carries its text in `content`). The key never matched, so `prefetch()`
+  returned an empty string on every call and Hermes got no memories before an
+  LLM call; only the explicit `memsy_search` tool worked. It now reads
+  `results`. Adds the plugin's first tests (`plugins/hermes/tests/`).
+
 ## [0.2.0] - 2026-09-17
 
 ### Fixed

@@ -439,12 +439,15 @@ class MemsyMemoryProvider(MemoryProvider):
             return ""
         try:
             data = json.loads(self._post("/search", self._search_body(query, 5, 0.3)))
-            memories = data.get("memories", [])
+            # /v1/search returns {"results": [{"id", "content", "score", "metadata"}]}
+            # (core SearchResponse) — the key the MCP and Node SDK read. Reading
+            # "memories" here made prefetch inject nothing.
+            memories = data.get("results", [])
             if not memories:
                 return ""
             lines = []
             for m in memories:
-                text = (m.get("text") or m.get("content") or "")[:200]
+                text = (m.get("content") or "")[:200]
                 if text:
                     lines.append(f"- {text}")
             return ("Relevant Memsy memories:\n" + "\n".join(lines)) if lines else ""
