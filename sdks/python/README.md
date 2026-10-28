@@ -322,7 +322,7 @@ for e in events.items:
     print(e.ts, e.actor_id, e.content)
 ```
 
-### `control.usage` (admin-only)
+### `control.usage` (org admin; rejects every API key)
 
 ```python
 summary = control.usage.summary()
@@ -335,7 +335,7 @@ for point in ts.data:
     print(point.date, point.quantity)
 ```
 
-### `control.billing` (admin-only)
+### `control.billing` (org admin; rejects every API key)
 
 ```python
 billing = control.billing.summary()
@@ -348,7 +348,7 @@ for inv in invoices:
     print(inv.status, inv.amount_due, inv.currency)
 ```
 
-### `control.keys` (admin-only)
+### `control.keys` (org admin; rejects every API key)
 
 ```python
 # List existing keys
@@ -373,16 +373,16 @@ control.keys.delete(new_key.key_id)
 Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive —
 and choose what they sync.
 
-**Who may connect what.** 
-Org-scoped providers (`slack`, `s3`, `notion`,
-`github`) are one shared connection per org: only an **org admin — or any API
-key, which the server treats as a service caller acting org-wide** — may
-connect, configure, sync or disconnect them. A seated non-admin member gets
-`AuthorizationError` (403) and may only read. User-scoped providers
-(`google_drive`, `onedrive`) are per-member: the owner manages their own
-connection, and an admin can see it for auditing but never mutate it.
-`requires_org_admin(provider)` answers this client-side for pre-flight checks —
-the server is the enforcement point.
+**Who can manage what**
+
+- **Shared connectors** (`slack`, `s3`, `notion`, `github`): one per org. Only an org admin, or a key with the `admin` scope, can connect, configure, sync or disconnect them.
+- **Personal connectors** (`google_drive`, `onedrive`): each member connects and manages their own. Admins can see them but can't change them.
+
+A key without `admin` can still see shared connectors, but managing them raises `AuthorizationError` with `required_scope == "admin"`. A member who isn't an admin gets a 403 too, without `required_scope`.
+
+**Getting an `admin` key:** an org admin creates it in the console under **Settings → API Keys** and ticks **Admin**. You can't create keys from the SDK.
+
+`requires_org_admin(provider)` is a quick client-side check; the server has the final say.
 
 ```python
 from memsy import MemsyControlClient, ResourceSelection, requires_org_admin
@@ -391,7 +391,7 @@ control = MemsyControlClient(base_url=MEMSY_CONTROL_URL, api_key=MEMSY_API_KEY)
 
 control.connectors.list_providers()
 # ['slack', 'google_drive', 's3', 'notion', 'github', 'onedrive']
-requires_org_admin("slack")         # True — admin/API key only
+requires_org_admin("slack")         # True — org admin / admin-scoped key only
 requires_org_admin("google_drive")  # False — per-member connection
 
 # 1. Start OAuth and send the end user to the consent screen
@@ -411,7 +411,7 @@ control.connectors.configure_resources(
 
 # Later
 control.connectors.status("slack")            # member-safe: connected? (no ids)
-control.connectors.list()                     # admin/API-key view
+control.connectors.list()                     # org connectors + your own personal ones (human admins see all)
 control.connectors.get(connector_id)          # status, last_sync_at, last_error
 control.connectors.sync(connector_id)         # manual refresh (must be active)
 control.connectors.delete(connector_id)       # disconnect + revoke

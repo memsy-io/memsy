@@ -36,14 +36,15 @@ class MemsyControlClient(HttpCoreMixin):
         me = control.me()
         events = control.events.list(limit=20)
 
-        # Admin-only (returns AuthorizationError for non-admin API keys)
+        # Org-admin only: the server rejects every API key here with
+        # AuthorizationError("admin_required"), whatever its owner or scopes.
         summary = control.usage.summary()
         invoices = control.billing.invoices()
         key = control.keys.create("ci-key", scopes=["read"])
 
         # Connectors (Slack, Google Drive, S3, Notion, GitHub, OneDrive).
         # Org-scoped ones (Slack, S3, Notion, GitHub) need an org admin or
-        # an API key; Drive/OneDrive are per-member connections.
+        # an ``admin``-scoped key; Drive/OneDrive are per-member connections.
         connection = control.connectors.create("slack")
         print(connection.authorize_url)  # send the end user here
 
