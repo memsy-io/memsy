@@ -84,14 +84,10 @@ The console is the easiest way to set a connector up, and most people never need
 
 The permission rules are the same as in the console:
 
-- **Shared (org) connectors** need an org admin, or an API key with the `admin` scope. Keys with only `read`/`write` get a 403.
+- **Shared (org) connectors** need an org admin, or an API key with the `admin` scope. A key without `admin` can still see them, but connecting, configuring, syncing, disconnecting, or listing their channels/repos returns a 403.
 - **Personal connectors** can only be managed by their owner. An API key acts as the user who created it, so it only sees that user's connectors — even with `admin`.
 
-To manage shared connectors from code, create a key with the `admin` scope (older keys must be re-created):
-
-```python
-control.keys.create("connector-admin", scopes=["read", "write", "admin"])
-```
+To manage shared connectors from code, an org admin creates a key with the `admin` scope in the console: **Settings → API Keys → Create key**, then tick **Admin**. API keys can't create keys, so `control.keys.create(...)` from the SDK always returns a 403. Keys created before the `admin` scope existed don't have it and must be re-created.
 
 ```python
 from memsy import MemsyControlClient, ResourceSelection

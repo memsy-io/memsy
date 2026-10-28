@@ -12,8 +12,9 @@ if TYPE_CHECKING:
 class KeysResource:
     """Sync wrapper for api/ /keys endpoints.
 
-    Note: all endpoints here require ``org:admin`` role. An API key issued to a
-    non-admin member will receive ``AuthorizationError(error_code="admin_required")``.
+    Note: all endpoints here require a human org admin. The server rejects every
+    API key (any owner, any scope) with ``AuthorizationError(error_code="admin_required")``,
+    so manage keys in the console under Settings → API Keys.
     Key creation may raise ``KeyLimitReachedError`` when the tier cap is hit.
     """
 
@@ -61,8 +62,9 @@ class KeysResource:
 class AsyncKeysResource:
     """Async wrapper for api/ /keys endpoints.
 
-    Note: all endpoints here require ``org:admin`` role. An API key issued to a
-    non-admin member will receive ``AuthorizationError(error_code="admin_required")``.
+    Note: all endpoints here require a human org admin. The server rejects every
+    API key (any owner, any scope) with ``AuthorizationError(error_code="admin_required")``,
+    so manage keys in the console under Settings → API Keys.
     Key creation may raise ``KeyLimitReachedError`` when the tier cap is hit.
     """
 

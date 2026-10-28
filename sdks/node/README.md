@@ -242,7 +242,7 @@ and a plugin-derived hash are the same person on two surfaces.
 
 ## Control-Plane Client — `MemsyControlClient`
 
-Separate client for billing, API keys, usage timeseries, and console events. Use a dashboard / admin key here, not your hot-path key.
+Separate client for billing, API keys, usage timeseries, connectors, and console events. Keys, usage and billing are org-admin only and reject every API key (`MemsyAuthorizationError`, `admin_required`), whatever its owner or scopes. Use the console for those.
 
 ```ts
 import { MemsyControlClient } from "@memsy-io/memsy";
@@ -253,12 +253,12 @@ const control = new MemsyControlClient({
 });
 
 await control.me();                     // identity + plan
-await control.keys.list();              // API keys (admin)
-await control.usage.summary();          // monthly usage roll-up (admin)
-await control.usage.timeseries({ ... }); // per-day series
-await control.billing.invoices();       // billing history (admin)
+await control.keys.list();              // API keys (org admin; rejects every API key)
+await control.usage.summary();          // monthly usage roll-up (org admin; rejects every API key)
+await control.usage.timeseries({ ... }); // per-day series (org admin; rejects every API key)
+await control.billing.invoices();       // billing history (org admin; rejects every API key)
 await control.events.list({ ... });     // console event browser
-await control.connectors.list();        // knowledge-source connectors (admin)
+await control.connectors.list();        // knowledge-source connectors
 ```
 
 ---
@@ -267,7 +267,16 @@ await control.connectors.list();        // knowledge-source connectors (admin)
 
 Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive — and choose what they sync.
 
-**Who may connect what.** Org-scoped providers (`slack`, `s3`, `notion`, `github`) are one shared connection per org: only an **org admin — or an API key minted with the `admin` scope** — may connect, configure, sync or disconnect them. A key with only `read`/`write` gets a `MemsyAuthorizationError` (403, `requiredScope === "admin"`), and so does a seated non-admin member, who may only read. User-scoped providers (`google_drive`, `onedrive`) are per-member: the owner manages their own connection, and an admin can see it for auditing but never mutate it. `requiresOrgAdmin(provider)` answers this client-side for pre-flight checks — the server is the enforcement point.
+**Who can manage what**
+
+- **Shared connectors** (`slack`, `s3`, `notion`, `github`): one per org. Only an org admin, or a key with the `admin` scope, can connect, configure, sync or disconnect them.
+- **Personal connectors** (`google_drive`, `onedrive`): each member connects and manages their own. Admins can see them but can't change them.
+
+A key without `admin` can still see shared connectors, but managing them throws `MemsyAuthorizationError` with `requiredScope === "admin"`. A member who isn't an admin gets a 403 too, without `requiredScope`.
+
+**Getting an `admin` key:** an org admin creates it in the console under **Settings → API Keys** and ticks **Admin**. You can't create keys from the SDK.
+
+`requiresOrgAdmin(provider)` is a quick client-side check; the server has the final say.
 
 ```ts
 import { MemsyControlClient, requiresOrgAdmin } from "@memsy-io/memsy";
@@ -296,7 +305,7 @@ await control.connectors.configureResources(connection.connectorId, resources);
 
 // Later
 await control.connectors.status("slack");        // member-safe: connected? (no ids)
-await control.connectors.list();                 // admin / admin-key view of org connectors
+await control.connectors.list();                 // org connectors + your own personal ones (human admins see all)
 await control.connectors.get(connectorId);       // status, lastSyncAt, lastError
 await control.connectors.sync(connectorId);      // manual refresh (must be active)
 await control.connectors.delete(connectorId);    // disconnect + revoke
