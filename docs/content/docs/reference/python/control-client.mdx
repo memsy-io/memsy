@@ -14,10 +14,11 @@ from memsy import MemsyControlClient, AsyncMemsyControlClient
 Use `MemsyControlClient` when you need to:
 
 - Look up account or org identity (`me()`)
-- Read usage metrics and billing summaries
-- Programmatically create or rotate API keys (admin-only)
 - Browse ingested events in the console
 - Express interest in the Pro plan
+- Manage knowledge-source connectors
+
+Usage, billing and API keys are org-admin only and reject every API key, so this client can't reach them. Use the console for those.
 
 For memory operations (ingest, search, clear), use **[`MemsyClient`](/docs/reference/python/memsy-client)** instead.
 
@@ -82,7 +83,7 @@ health() -> HealthResponse
 
 ### `control.usage`
 
-Usage metrics for the current org.
+Usage metrics for the current org. **Org-admin only, and not callable with an API key**: every key gets `AuthorizationError` (`admin_required`).
 
 ```python
 # Summary for the current billing period
@@ -99,7 +100,7 @@ ts: UsageTimeseriesResponse = control.usage.timeseries(
 
 ### `control.billing`
 
-Billing summary and invoice history.
+Billing summary and invoice history. **Org-admin only, and not callable with an API key**: every key gets `AuthorizationError` (`admin_required`).
 
 ```python
 summary: BillingSummary = control.billing.summary()
@@ -112,7 +113,7 @@ Billing endpoints require `billing_enabled=True` on your org. If billing is not 
 
 ### `control.keys`
 
-API key management. **Requires `org_role == "org:admin"`** — plain API keys will receive `AuthorizationError`.
+API key management. **Org-admin only, and not callable with an API key**: the server rejects every key here (any owner, any scope) with `AuthorizationError` (`admin_required`). Create and revoke keys in the console under **Settings → API Keys**.
 
 ```python
 # List all keys (includes quota info)
@@ -170,7 +171,16 @@ already_expressed: bool = control.interest.status()
 Connect knowledge sources and choose what they sync. 
 Providers today: `slack`, `google_drive`, `s3`, `notion`, `github`, `onedrive`. 
 
-> **Org-scoped providers require an admin.** `slack`, `s3`, `notion` and `github` are a single shared connection per org — only an org admin, or an API key (which the server treats as a service caller acting org-wide), may connect, configure, sync or disconnect them. A seated non-admin member gets `AuthorizationError` (403) and read-only access. `google_drive` and `onedrive` are user-scoped: each member connects their own account, and an admin may audit but never mutate it. `requires_org_admin(provider)` is a client-side pre-flight helper only — the server enforces the rule.
+**Who can manage what**
+
+- **Shared connectors** (`slack`, `s3`, `notion`, `github`): one per org. Only an org admin, or a key with the `admin` scope, can connect, configure, sync or disconnect them.
+- **Personal connectors** (`google_drive`, `onedrive`): each member connects their own. A key only sees its owner's connectors, `admin` or not.
+
+A key without `admin` can still see shared connectors, but managing them (or listing their channels/repos) raises `AuthorizationError` with `required_scope == "admin"`.
+
+**Getting an `admin` key:** an org admin creates it in the console under **Settings → API Keys** and ticks **Admin**. It's never on by default, and you can't create keys from the SDK.
+
+`requires_org_admin(provider)` is a quick client-side check; the server has the final say.
 
 ```python
 from memsy import MemsyControlClient, ResourceSelection
@@ -193,7 +203,7 @@ connector: Connector = control.connectors.configure_resources(
 
 control.connectors.status("slack")        # member-safe: {connected, display_name}
 control.connectors.list_providers()
-control.connectors.list()                 # admin / API-key view
+control.connectors.list()                 # org connectors + your own personal ones (human admins see all)
 control.connectors.get(connector.id)      # status, last_sync_at, last_error
 control.connectors.sync(connector.id)     # manual refresh (must be active)
 control.connectors.delete(connector.id)   # disconnect + revoke

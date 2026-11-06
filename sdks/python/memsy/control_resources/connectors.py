@@ -6,13 +6,16 @@ Connectors live on the control plane (``api/``), so they hang off
 Two scoping models, and the difference decides who may connect what:
 
 * **Org-scoped** — ``slack``, ``s3``, ``notion``, ``github``. One shared
-  connection per org. **Only an org admin (or an API key, which the server
-  treats as a service caller acting org-wide) may connect, configure, sync or
-  disconnect one.** A seated non-admin member gets ``AuthorizationError``
-  (HTTP 403) — they may only *read*.
+  connection per org. **Only an org admin, or an API key minted with the
+  ``admin`` scope, may connect, configure, sync or disconnect one.** A key
+  without ``admin`` (plain ``read``/``write``) or a seated non-admin member gets
+  ``AuthorizationError`` (HTTP 403, ``required_scope == "admin"`` for keys) —
+  they may only *read*.
 * **User-scoped** — ``google_drive``, ``onedrive``. Each member connects their
   own account. The owner manages their own connection; an org admin can see it
-  for auditing but may never mutate it or spend its token.
+  for auditing but may never mutate it or spend its token. An API key acts as
+  its owning user here: it only sees and manages connectors that user created,
+  whether or not it has ``admin``.
 
 The server is the enforcement point (``api/memsy_api/http/routes/connectors.py``);
 :func:`requires_org_admin` is only a pre-flight convenience so callers can fail
@@ -43,8 +46,8 @@ if TYPE_CHECKING:
 #: Providers where each member connects their own account.
 USER_SCOPED_PROVIDERS: frozenset[str] = frozenset({"google_drive", "onedrive"})
 
-#: Providers that are a single shared org resource — admin/service-key only to
-#: connect or manage. Kept as a hint for callers; the server owns the real check
+#: Providers that are a single shared org resource — org admin or an
+#: ``admin``-scoped API key only to connect or manage. Kept as a hint for callers; the server owns the real check
 #: (and knows about providers newer than this SDK).
 ORG_SCOPED_PROVIDERS: frozenset[str] = frozenset({"slack", "s3", "notion", "github"})
 
@@ -56,7 +59,8 @@ _POLL_INTERVAL = 3.0
 
 
 def requires_org_admin(provider: str) -> bool:
-    """Whether connecting/managing ``provider`` needs an org admin or API key.
+    """Whether connecting/managing ``provider`` needs an org admin or an
+    ``admin``-scoped API key.
 
     True for org-scoped providers (Slack, S3, Notion, GitHub), False for
     user-scoped ones (Google Drive, OneDrive). Advisory only — the server
@@ -119,7 +123,7 @@ class ConnectorsResource:
     S3 has no OAuth step — call :meth:`configure_s3` instead of :meth:`create`.
 
     See the module docstring for who is allowed to do what: org-scoped
-    providers are admin/service-key only.
+    providers need an org admin or an ``admin``-scoped API key.
     """
 
     def __init__(self, client: MemsyControlClient) -> None:

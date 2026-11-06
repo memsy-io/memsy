@@ -12,8 +12,9 @@ if TYPE_CHECKING:
 class KeysResource:
     """Sync wrapper for api/ /keys endpoints.
 
-    Note: all endpoints here require ``org:admin`` role. An API key issued to a
-    non-admin member will receive ``AuthorizationError(error_code="admin_required")``.
+    Note: all endpoints here require a human org admin. The server rejects every
+    API key (any owner, any scope) with ``AuthorizationError(error_code="admin_required")``,
+    so manage keys in the console under Settings → API Keys.
     Key creation may raise ``KeyLimitReachedError`` when the tier cap is hit.
     """
 
@@ -37,7 +38,9 @@ class KeysResource:
         The ``raw_key`` in the response is only returned once — store it securely.
 
         :param name: Human-readable label for this key.
-        :param scopes: Permission scopes. Defaults to ``("read", "write")``.
+        :param scopes: Permission scopes: ``read``, ``write``, ``admin``. Defaults to
+            ``("read", "write")``. ``admin`` (opt-in) lets the key connect and manage
+            org-scoped connectors; unknown scopes are rejected with 422.
         :param expires_at: Optional ISO 8601 expiry datetime.
         """
         body: dict[str, Any] = {"name": name, "scopes": list(scopes)}
@@ -59,8 +62,9 @@ class KeysResource:
 class AsyncKeysResource:
     """Async wrapper for api/ /keys endpoints.
 
-    Note: all endpoints here require ``org:admin`` role. An API key issued to a
-    non-admin member will receive ``AuthorizationError(error_code="admin_required")``.
+    Note: all endpoints here require a human org admin. The server rejects every
+    API key (any owner, any scope) with ``AuthorizationError(error_code="admin_required")``,
+    so manage keys in the console under Settings → API Keys.
     Key creation may raise ``KeyLimitReachedError`` when the tier cap is hit.
     """
 
@@ -84,7 +88,9 @@ class AsyncKeysResource:
         The ``raw_key`` in the response is only returned once — store it securely.
 
         :param name: Human-readable label for this key.
-        :param scopes: Permission scopes. Defaults to ``("read", "write")``.
+        :param scopes: Permission scopes: ``read``, ``write``, ``admin``. Defaults to
+            ``("read", "write")``. ``admin`` (opt-in) lets the key connect and manage
+            org-scoped connectors; unknown scopes are rejected with 422.
         :param expires_at: Optional ISO 8601 expiry datetime.
         """
         body: dict[str, Any] = {"name": name, "scopes": list(scopes)}

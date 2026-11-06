@@ -11,6 +11,7 @@ from memsy import ConnectorResourceItem, MemsyControlClient, requires_org_admin
 from memsy.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    MemsyAPIError,
     MemsyConnectionError,
 )
 
@@ -475,3 +476,76 @@ class TestProviderScoping:
 
     def test_unknown_provider_defaults_to_admin_required(self):
         assert requires_org_admin("some_future_provider") is True
+
+
+_ADMIN_SCOPE_403 = {
+    "detail": {
+        "error": "insufficient_scope",
+        "message": "API key missing 'admin' scope.",
+        "scope": "admin",
+        "current_scopes": ["read", "write"],
+    }
+}
+
+
+class TestAdminScope:
+    @patch("httpx.Client.request")
+    def test_keys_create_sends_admin_scope(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "key_id": "key_3",
+                "prefix": "msy_adm",
+                "name": "connector-admin",
+                "scopes": ["read", "write", "admin"],
+                "is_active": True,
+                "created_at": "2026-04-01T00:00:00Z",
+                "raw_key": "msy_adm_secret",
+            },
+        )
+        key = client.keys.create("connector-admin", scopes=["read", "write", "admin"])
+        assert key.scopes == ["read", "write", "admin"]
+        assert mock_request.call_args[1]["json"]["scopes"] == ["read", "write", "admin"]
+
+    @patch("httpx.Client.request")
+    def test_keys_create_defaults_to_read_write(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            200,
+            {
+                "key_id": "k",
+                "prefix": "p",
+                "name": "n",
+                "scopes": ["read", "write"],
+                "is_active": True,
+                "created_at": "2026-04-01T00:00:00Z",
+                "raw_key": "r",
+            },
+        )
+        client.keys.create("n")
+        assert mock_request.call_args[1]["json"]["scopes"] == ["read", "write"]
+
+    @patch("httpx.Client.request")
+    def test_keys_create_unknown_scope_422(self, mock_request, client):
+        mock_request.return_value = _make_response(
+            422, {"detail": [{"msg": "Value error, Unknown scope(s): root."}]}
+        )
+        with pytest.raises(MemsyAPIError) as exc_info:
+            client.keys.create("bad", scopes=["root"])
+        assert exc_info.value.status_code == 422
+
+    @patch("httpx.Client.request")
+    def test_connector_403_surfaces_required_admin_scope(self, mock_request, client):
+        mock_request.return_value = _make_response(403, _ADMIN_SCOPE_403)
+        with pytest.raises(AuthorizationError) as exc_info:
+            client.connectors.create("slack")
+        assert exc_info.value.required_scope == "admin"
+        assert exc_info.value.error_code == "insufficient_scope"
+
+    @patch("httpx.Client.request")
+    def test_s3_configure_403_surfaces_required_admin_scope(self, mock_request, client):
+        mock_request.return_value = _make_response(403, _ADMIN_SCOPE_403)
+        with pytest.raises(AuthorizationError) as exc_info:
+            client.connectors.configure_s3(
+                access_key_id="AKIA", secret_access_key="s", region="us-east-1", bucket="b"
+            )
+        assert exc_info.value.required_scope == "admin"
