@@ -302,6 +302,15 @@ def _post_ingest(base_url: str, api_key: str, events: list[dict]) -> None:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            # Recorded as plugin/codex — memsy-core normalises the hook name to
+            # the product it belongs to.
+            "X-Memsy-Surface": "codex-hook",
+            # Static, because this hook is the plugin's ONLY ingest path and it
+            # fires on every completed turn (gated on MEMSY_TURN_SYNC alone).
+            # MEMSY_PROACTIVE and MEMSY_CONFIRM_STORE never reach here — those
+            # inject prompts telling the model to call the memsy_ingest MCP
+            # tool, so their events are labelled mcp, not codex.
+            "X-Memsy-Capture": "ambient",
         },
     )
     try:

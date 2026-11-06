@@ -68,6 +68,20 @@ export interface EventPayload {
   teamId?: string;
   ts?: string;
   metadata?: string;
+  // Per-EVENT provenance, so it lives on the body. The request-level half
+  // (surface, capture mode) travels as headers — see BaseClientOptions.
+  //
+  // Not a substitute for `metadata`: core stores that blob unindexed, so
+  // nothing inside it can be filtered on, whereas these three can.
+  /** The object this came from — a file id, "{repo}:{path}", "{bucket}/{key}". */
+  sourceId?: string;
+  /**
+   * Who the SOURCE SYSTEM says wrote this, which need not be the actor: one
+   * shared connection is a single actor but many authors.
+   */
+  sourceAuthorEmail?: string;
+  /** The same person as a stable provider id, for when the address is withheld. */
+  sourceAuthorId?: string;
 }
 
 export function serializeEvent(e: EventPayload): Record<string, unknown> {
@@ -81,6 +95,16 @@ export function serializeEvent(e: EventPayload): Record<string, unknown> {
   if (e.teamId !== undefined) out.team_id = e.teamId;
   if (e.ts !== undefined) out.ts = e.ts;
   if (e.metadata !== undefined) out.metadata = e.metadata;
+  // Truthiness, not `!== undefined`, and for the same reason `surface` uses
+  // it: `sourceId: row.fileId ?? ""` is a natural-looking default that sends a
+  // blank, and a blank matches no real object while also being invisible to
+  // "events with no source" — the field exists. Core collapses these too; this
+  // just stops the round trip.
+  //
+  // Note truthiness does NOT catch "   ", which is why core strips as well.
+  if (e.sourceId) out.source_id = e.sourceId;
+  if (e.sourceAuthorEmail) out.source_author_email = e.sourceAuthorEmail;
+  if (e.sourceAuthorId) out.source_author_id = e.sourceAuthorId;
   return out;
 }
 

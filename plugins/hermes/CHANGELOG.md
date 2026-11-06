@@ -11,6 +11,34 @@ section.
 
 ## [Unreleased]
 
+### Added
+
+- **Every request now identifies itself to memsy-core** with
+  `X-Memsy-Surface: hermes`, so memories from this provider can be told apart
+  from everything else landing in the same org — core records them as
+  `plugin` / `hermes`, and the console filters on it.
+
+- **Capture mode is reported per ingest call site** via `X-Memsy-Capture`:
+  `ambient` from `sync_turn` and `on_pre_compress`, which sweep, and
+  `explicit` from the `memsy_ingest` tool and `on_memory_write`, which are
+  deliberate saves. Hermes is the only provider that needs this — it runs both
+  modes through one surface, so core cannot derive the value and would
+  otherwise leave it null on every row.
+
+### Changed
+
+- **Memory removals are no longer mirrored to Memsy.** `on_memory_write`
+  previously forwarded every action, so asking Hermes to forget something
+  ingested the deleted text — which extraction could then promote into a
+  durable memory, making "forget this" *more* permanent. Removals now return
+  before the ingest; adds and replaces are unaffected.
+
+  Worth knowing: `remove` matches on a unique substring rather than the whole
+  entry, so the mirrored content could be a fragment of what was deleted. The
+  cost of the fix is that Memsy keeps no record that a deletion happened —
+  accepted, as there is no delete-by-content path from the provider and the
+  alternative is retaining what the user asked to drop.
+
 ## [0.2.0] - 2026-09-17
 
 ### Fixed
