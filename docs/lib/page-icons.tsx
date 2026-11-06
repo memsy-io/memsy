@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bookmark,
   BookOpen,
+  Bot,
   Box,
   ChefHat,
   Clock,
@@ -119,6 +120,7 @@ const PAGE_ICONS: Record<string, IconComponent> = {
 
   // Getting Started
   signup: UserPlus,
+  'agent-signup': Bot,
   installation: Package,
   quickstart: Rocket,
 
