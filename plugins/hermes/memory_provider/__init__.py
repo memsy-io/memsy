@@ -27,6 +27,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -95,8 +96,15 @@ class MemsyMemoryProvider(MemoryProvider):
 
     def initialize(self, session_id: str, **kwargs: Any) -> None:
         # session_id is sent on every ingest event (required by /ingest). Hermes
-        # always supplies one; fall back defensively so we never POST an empty id.
-        self._session_id = session_id or "hermes-session"
+        # always supplies one; the fallback only guards against an empty value.
+        #
+        # It must be UNIQUE per process, not a shared constant. A fixed string
+        # would file every affected conversation — across every user of every
+        # deployment — under one id, merging them into a single apparent
+        # conversation. Harmless while nothing filtered by conversation; now
+        # that search can scope, it would mean asking for "this conversation"
+        # and receiving a stranger's turns.
+        self._session_id = (session_id or "").strip() or f"hermes-{uuid.uuid4()}"
         self._api_key = os.environ.get("MEMSY_API_KEY", "")
         self._base_url = os.environ.get("MEMSY_BASE_URL", _DEFAULT_BASE_URL)
         self._sync_thread: threading.Thread | None = None
@@ -461,8 +469,8 @@ class MemsyMemoryProvider(MemoryProvider):
         def _sync() -> None:
             try:
                 events = [
-                    self._event("user_message", user_content[:32000]),
-                    self._event("assistant_message", assistant_content[:32000]),
+                    self._event("user_message", user_content[:32000], session_id),
+                    self._event("assistant_message", assistant_content[:32000], session_id),
                 ]
                 self._post("/ingest", {"events": events})
             except Exception as exc:
@@ -631,7 +639,19 @@ class MemsyMemoryProvider(MemoryProvider):
         # via another MCP host / `memsy auth login` rather than MEMSY_API_KEY.
         self._config_api_key = slc.get("api_key") or slc.get("apiKey") or ""
 
-    def _event(self, kind: str, content: str) -> dict:
+    def _conversation_id(self, session_id: str = "") -> str:
+        """Which conversation to file this under.
+
+        Prefer the id Hermes hands us on the call itself; fall back to the one
+        captured at initialize(). Hermes passes `session_id` to prefetch() and
+        sync_turn() on every turn, which it would not bother doing if the value
+        never changed — so treating the initialize-time value as authoritative
+        means a conversation that changes mid-run keeps being filed under the
+        name it started with.
+        """
+        return (session_id or "").strip() or self._session_id
+
+    def _event(self, kind: str, content: str, session_id: str = "") -> dict:
         """Build an ingest event with the identity fields /ingest requires, plus
         default role/team attribution when exactly one default is configured
         (mirrors the MCP's single-default semantic — a multi-value default can't
@@ -640,7 +660,7 @@ class MemsyMemoryProvider(MemoryProvider):
             "kind": kind,
             "content": content[:_MAX_CONTENT_CHARS],
             "actor_id": self._actor_id,
-            "session_id": self._session_id,
+            "session_id": self._conversation_id(session_id),
         }
         if len(self._default_role_ids) == 1:
             ev["role_id"] = self._default_role_ids[0]
@@ -648,12 +668,34 @@ class MemsyMemoryProvider(MemoryProvider):
             ev["team_id"] = self._default_team_ids[0]
         return ev
 
-    def _search_body(self, query: str, limit: int, threshold: float | None = None) -> dict:
+    def _search_body(
+        self,
+        query: str,
+        limit: int,
+        threshold: float | None = None,
+        *,
+        session_id: str = "",
+    ) -> dict:
         """Build a /search body with actor scoping + default role/team filters
-        (only when set — never send empty arrays, which change query semantics)."""
+        (only when set — never send empty arrays, which change query semantics).
+
+        ``session_id`` narrows the search to one conversation. Off by default,
+        and no caller passes it yet — deliberately. Scoping is not free: every
+        connector-sourced memory (Drive, Slack, GitHub, Notion, S3, OneDrive)
+        carries its own container id as a conversation, so a chat-scoped search
+        excludes all of them along with every earlier conversation. Turning it
+        on for prefetch(), which runs before every LLM call, would quietly
+        shrink what the model can recall. Same reasoning as the MCP's `scope`
+        default — see docs/content/docs/mcp.mdx.
+
+        Requires a Memsy server with conversation-scoped search. Against an
+        older one the field is dropped and the search runs unfiltered.
+        """
         body: dict = {"query": query, "limit": limit, "actor_id": self._actor_id}
         if threshold is not None:
             body["threshold"] = threshold
+        if session_id.strip():
+            body["session_id"] = session_id.strip()
         if self._default_role_ids:
             body["role_ids"] = self._default_role_ids
         if self._default_team_ids:

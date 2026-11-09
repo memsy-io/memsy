@@ -183,6 +183,30 @@ client.memories.stats() -> MemoryStatsResponse
 
 Pagination is stable across pages: every sort includes `memory_id` as a secondary tiebreaker, so walking `offset` won't return duplicates or skip records.
 
+### `client.actors`
+
+List the actors that have memories in an org. See **[Actors and Sessions](/docs/actors-and-sessions)**.
+
+```python
+client.actors.list(
+    org_id: str | None = None,        # defaults to the caller's org
+    *,
+    limit: int = 100,                 # 1-500
+    offset: int = 0,
+    sort: str = "first_memory_desc",  # first_memory_desc | first_memory_asc
+                                      # last_memory_desc  | actor_id_asc
+    q: str | None = None,             # substring match on actor_id
+) -> ActorListResponse
+
+client.actors.get(actor_id: str, org_id: str | None = None) -> ActorResource
+```
+
+Read-only: actors are *derived* by folding the org's memories on `actor_id` at read time, not stored, so there is no create/rename/delete. `limit`/`offset` page the deduped actor list, so `total` is the org's full distinct-actor count.
+
+`first_memory_at` and `last_memory_at` are the `min`/`max` of the memories' `created_at` — named for the memories because that is what they measure. `last_memory_at` is **not** a "last used" signal; it only advances when a new memory is written.
+
+Check `ActorListResponse.truncated`: when set, the server hit its row-scan cap, so the list may be incomplete and every `memory_count` is an under-count.
+
 ---
 
 ## Thread safety

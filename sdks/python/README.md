@@ -104,7 +104,7 @@ print(result.event_ids)  # ['01J...', '01J...']
 | `role_id` | `str` | No | Scope this event to a specific role in the hierarchy |
 | `team_id` | `str` | No | Scope this event to a specific team in the hierarchy |
 
-### `search(query, *, actor_id, limit, threshold, include_source_events)`
+### `search(query, *, actor_id, session_id, exclude_session_id, limit, threshold, include_source_events)`
 
 Retrieve relevant memories using natural language.
 
@@ -112,6 +112,7 @@ Retrieve relevant memories using natural language.
 results = client.search(
     query="what does the user prefer?",
     actor_id="user_1",            # optional — restrict to one actor; omit for org-wide search
+    session_id="sess_abc",        # optional — scope to one conversation
     limit=10,                     # default: 10
     threshold=0.0,                # minimum relevance score, default: 0.0 (no filter)
     include_source_events=True,   # attach source events to each result
@@ -123,11 +124,24 @@ for r in results.results:
     # Typed metadata properties (always safe — return None/[] if absent)
     print(r.title, r.summary, r.tags)
     print(r.strength, r.confidence)
+    print(r.session_id)           # conversation it came from; None if it belongs to none
 
     # Typed source events when include_source_events=True
     for evt in r.source_events:
         print(evt.event_id, evt.kind, evt.content)
 ```
+
+Scope a search to one conversation with `session_id`, or to everything except one with
+`exclude_session_id`. Send neither — the default — to search across all of them. The two
+are mutually exclusive; sending both *non-empty* returns a `422`. An empty string is
+treated as unset, so `session_id=""` alongside `exclude_session_id` is a plain exclude
+search rather than an error — pass `None`, never `""`. Memories belonging to no
+conversation (promoted role/team/org knowledge) are returned either way.
+
+Searchable ids may contain only letters, digits and `_ - : . @ /`, up to 256 characters.
+Ingest checks the length but not the character set, so an id with a space, `#`, `+` or
+any non-ASCII character stores fine and returns a `422` when you search it. Slugify ids
+you don't control — anything derived from a chat title will hit this.
 
 ### `status(event_ids)`
 
@@ -226,6 +240,49 @@ print(item.text, item.strength, item.confidence)
 
 ---
 
+## Actors
+
+List the actors that have memories in an org via `client.actors`. Read-only: actors are
+**derived** from the org's memories on every read rather than stored, so there is nothing to
+create, rename or delete.
+
+```python
+page = client.actors.list(
+    sort="first_memory_desc",   # first_memory_desc | first_memory_asc
+                                # last_memory_desc  | actor_id_asc
+    q="slack",                  # substring match on actor_id, case-insensitive
+    limit=100,
+    offset=0,
+)
+print(page.total)               # distinct actors in the org
+
+for actor in page.items:
+    print(actor.actor_id, actor.first_memory_at, actor.memory_count)
+
+# One actor; raises MemsyAPIError (404) if it has no memories in this org
+actor = client.actors.get("slack:T0B7FKNKKTR:U0B7TN132E9")
+```
+
+`org_id` defaults to the authenticated caller's org on both methods.
+
+**Read the timestamps carefully.** They are named for the memories, not the actor, because
+that is what they measure — there is no actor creation event to read:
+
+- `first_memory_at` is `min(created_at)`. It moves *forward* if the oldest memory is reaped
+  or decayed away, which a real creation timestamp never could.
+- `last_memory_at` is `max(created_at)`. It is **not** a "last used" signal: it only advances
+  when a new memory is *written*. Reads never touch it.
+
+**Check `page.truncated` on large orgs.** When set, the server hit its row-scan cap before
+reading every memory. The actors listed are real, but the list may be incomplete and every
+`memory_count` is an **under-count** — treat the counts as unusable while it is set. This is
+also why there is no sort by memory count.
+
+One human can legitimately appear as several actors: a connector-minted
+`slack:T123:U456` and a plugin-derived hash are the same person on two surfaces.
+
+---
+
 ## Control-Plane Client (`MemsyControlClient`)
 
 The control-plane is a separate API service that manages account settings, billing, API keys,
@@ -265,7 +322,7 @@ for e in events.items:
     print(e.ts, e.actor_id, e.content)
 ```
 
-### `control.usage` (admin-only)
+### `control.usage` (org admin; rejects every API key)
 
 ```python
 summary = control.usage.summary()
@@ -278,7 +335,7 @@ for point in ts.data:
     print(point.date, point.quantity)
 ```
 
-### `control.billing` (admin-only)
+### `control.billing` (org admin; rejects every API key)
 
 ```python
 billing = control.billing.summary()
@@ -291,7 +348,7 @@ for inv in invoices:
     print(inv.status, inv.amount_due, inv.currency)
 ```
 
-### `control.keys` (admin-only)
+### `control.keys` (org admin; rejects every API key)
 
 ```python
 # List existing keys
@@ -316,16 +373,16 @@ control.keys.delete(new_key.key_id)
 Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive —
 and choose what they sync.
 
-**Who may connect what.** 
-Org-scoped providers (`slack`, `s3`, `notion`,
-`github`) are one shared connection per org: only an **org admin — or any API
-key, which the server treats as a service caller acting org-wide** — may
-connect, configure, sync or disconnect them. A seated non-admin member gets
-`AuthorizationError` (403) and may only read. User-scoped providers
-(`google_drive`, `onedrive`) are per-member: the owner manages their own
-connection, and an admin can see it for auditing but never mutate it.
-`requires_org_admin(provider)` answers this client-side for pre-flight checks —
-the server is the enforcement point.
+**Who can manage what**
+
+- **Shared connectors** (`slack`, `s3`, `notion`, `github`): one per org. Only an org admin, or a key with the `admin` scope, can connect, configure, sync or disconnect them.
+- **Personal connectors** (`google_drive`, `onedrive`): each member connects and manages their own. Admins can see them but can't change them.
+
+A key without `admin` can still see shared connectors, but managing them raises `AuthorizationError` with `required_scope == "admin"`. A member who isn't an admin gets a 403 too, without `required_scope`.
+
+**Getting an `admin` key:** an org admin creates it in the console under **Settings → API Keys** and ticks **Admin**. You can't create keys from the SDK.
+
+`requires_org_admin(provider)` is a quick client-side check; the server has the final say.
 
 ```python
 from memsy import MemsyControlClient, ResourceSelection, requires_org_admin
@@ -334,7 +391,7 @@ control = MemsyControlClient(base_url=MEMSY_CONTROL_URL, api_key=MEMSY_API_KEY)
 
 control.connectors.list_providers()
 # ['slack', 'google_drive', 's3', 'notion', 'github', 'onedrive']
-requires_org_admin("slack")         # True — admin/API key only
+requires_org_admin("slack")         # True — org admin / admin-scoped key only
 requires_org_admin("google_drive")  # False — per-member connection
 
 # 1. Start OAuth and send the end user to the consent screen
@@ -354,7 +411,7 @@ control.connectors.configure_resources(
 
 # Later
 control.connectors.status("slack")            # member-safe: connected? (no ids)
-control.connectors.list()                     # admin/API-key view
+control.connectors.list()                     # org connectors + your own personal ones (human admins see all)
 control.connectors.get(connector_id)          # status, last_sync_at, last_error
 control.connectors.sync(connector_id)         # manual refresh (must be active)
 control.connectors.delete(connector_id)       # disconnect + revoke

@@ -5,6 +5,7 @@ import {
   type IngestResponse,
   type SearchResponse,
   type StatusResponse,
+  parseSessionId,
   parseSourceEvents,
   parseSourceMetadata,
   serializeEvent,
@@ -13,6 +14,7 @@ import { OrgsResource } from "./resources/orgs.js";
 import { RolesResource } from "./resources/roles.js";
 import { TeamsResource } from "./resources/teams.js";
 import { MemoriesResource } from "./resources/memories.js";
+import { ActorsResource } from "./resources/actors.js";
 
 export type MemsyClientOptions = BaseClientOptions;
 
@@ -23,6 +25,28 @@ export interface SearchOptions {
    * you want in an end-user-facing agent loop.
    */
   actorId?: string;
+  /**
+   * Restrict results to a single conversation — a single id, not a list —
+   * plus every memory belonging to no conversation at all.
+   *
+   * Searchable ids allow only `[A-Za-z0-9_-:.@/]` and at most 256 characters.
+   * Ingest validates the length but not the charset, so an id holding a space
+   * or any non-ASCII character stores fine and 422s here. Promoted
+   * role/team/org knowledge is deliberately stored without a conversation
+   * because it is general rather than from one chat, so scoping to a
+   * conversation never hides it.
+   */
+  sessionId?: string;
+  /**
+   * Return everything except one conversation — a single id, not a list.
+   * Session-less memories stay eligible for the same reason as `sessionId`.
+   * Mutually exclusive with `sessionId` — sending both *non-empty* raises a
+   * 422. An empty string is treated as unset, so `sessionId: ""` alongside
+   * `excludeSessionId` is a plain exclude search rather than an error; pass
+   * `undefined`, not `""`, when you have no conversation. To search this
+   * conversation *and* previous ones, send neither.
+   */
+  excludeSessionId?: string;
   limit?: number;
   /**
    * Minimum relevance score. Default `0.0` (no filter).
@@ -41,6 +65,7 @@ export interface SearchOptions {
  *   client.orgs       — onboarding org CRUD
  *   client.roles      — onboarding role CRUD
  *   client.teams      — onboarding team CRUD
+ *   client.actors     — actors with memories in the org (read-only, derived)
  *   client.memories   — console memory browsing
  */
 export class MemsyClient extends BaseHttpClient {
@@ -48,6 +73,7 @@ export class MemsyClient extends BaseHttpClient {
   readonly roles: RolesResource;
   readonly teams: TeamsResource;
   readonly memories: MemoriesResource;
+  readonly actors: ActorsResource;
 
   constructor(options: MemsyClientOptions) {
     super(options);
@@ -55,6 +81,7 @@ export class MemsyClient extends BaseHttpClient {
     this.roles = new RolesResource(this);
     this.teams = new TeamsResource(this);
     this.memories = new MemoriesResource(this);
+    this.actors = new ActorsResource(this);
   }
 
   async ingest(events: EventPayload[]): Promise<IngestResponse> {
@@ -84,6 +111,10 @@ export class MemsyClient extends BaseHttpClient {
       include_source_events: options.includeSourceEvents ?? false,
     };
     if (options.actorId !== undefined) body.actor_id = options.actorId;
+    if (options.sessionId !== undefined) body.session_id = options.sessionId;
+    if (options.excludeSessionId !== undefined) {
+      body.exclude_session_id = options.excludeSessionId;
+    }
     if (options.roleIds?.length) body.role_ids = options.roleIds;
     if (options.teamIds?.length) body.team_ids = options.teamIds;
 
@@ -104,6 +135,7 @@ export class MemsyClient extends BaseHttpClient {
         metadata: r.metadata ?? null,
         sourceEvents: parseSourceEvents(r.metadata),
         sourceMetadata: parseSourceMetadata(r.metadata),
+        sessionId: parseSessionId(r.metadata),
       })),
       usage,
       rateLimit,

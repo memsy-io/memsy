@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import type { Identity } from "../identity.js";
+import { resolveSession, type Identity } from "../identity.js";
 import type { ProfileManager } from "../profiles.js";
 
 const RECENT_DEFAULT_LIMIT = 20;
@@ -86,13 +86,15 @@ export function registerAllResources(server: McpServer, profiles: ProfileManager
       mimeType: "application/json",
     },
     async (uri) => {
-      const ctx = profiles.current();
       return {
         contents: [
           {
             uri: uri.href,
             mimeType: "application/json",
-            text: JSON.stringify({ session_id: ctx.identity.sessionId }, null, 2),
+            // Resolved per read, not from ctx.identity — this resource exists
+            // to report the CURRENT conversation, and the cached identity does
+            // not survive a `/clear`.
+            text: JSON.stringify({ session_id: resolveSession().sessionId }, null, 2),
           },
         ],
       };

@@ -126,6 +126,18 @@ When `MEMSY_SESSION_AUTOCONTEXT=on` is set in the shell that launches Claude Cod
 
 Turn it off by unsetting `MEMSY_SESSION_AUTOCONTEXT` and restarting Claude Code. The hook is silent unless explicitly opted in.
 
+### SessionStart conversation note (always on)
+
+The same hook also records which conversation this window is in, so `memsy_search` can be scoped to it. This part is **not** opt-in and produces no output — it writes a small file under `CLAUDE_PLUGIN_DATA` (falling back to `~/.memsy/`), named for the `claude` process it belongs to:
+
+```json
+{"session_id": "3840ad0d-…", "source": "clear", "updated_at": 1789625823}
+```
+
+It exists because the MCP server is told the conversation id **once**, when it launches, and then survives `/clear` — which starts a new conversation without restarting it. SessionStart fires on startup, resume, clear and compact, so the note stays correct where the launch value goes stale. The MCP finds it by reading the same process id out of its own environment.
+
+If the note is missing or unreadable, the MCP falls back to the launch value, and failing that sends no conversation filter at all — a scoped search degrades to searching everything rather than guessing.
+
 ### Turn sync (auto-capture every turn, opt-in)
 
 When `MEMSY_TURN_SYNC=on` is set in the launch shell, the plugin's `Stop` hook ships the last user+assistant turn to Memsy after every response — so the extraction pipeline captures decisions, conclusions, and preferences buried in long answers that proactive mode's mid-turn heuristics would miss. No "remember that" needed.
@@ -137,6 +149,8 @@ Claude Code's `Stop`/`SessionEnd` hooks don't pipe their stdout back into Claude
 | `MEMSY_TURN_SYNC` | `off` | Set to `on` to capture every turn automatically. |
 
 > **Identity alignment.** Turn sync tags each event with the same `actor_id` that `memsy_search` reads, so captured memories surface in recall. The hook mirrors the MCP's **full** derivation ladder: `MEMSY_ACTOR_ID` env if set → the active profile's `actor_id` pinned in `~/.memsy/config.json` (what the setup flow writes) → `sha256("<profile>|<git-email>")` → `sha256("<profile>|<user>@<host>")`. The profile name resolves `MEMSY_PROFILE` → the config file's `active_profile` → `default`, identically on both sides — so a profile chosen via `active_profile` (not the env var) **and** a pinned `actor_id` both stay aligned with no extra setup. Edge case: with no git `user.email` configured at all, the OS-username fallback can differ between the Node MCP and the Python hook — set `MEMSY_ACTOR_ID` to pin both.
+
+> **Conversation alignment.** Turn sync also tags each event with the conversation id Claude Code passes to its hooks — the same one the MCP resolves — so a `this_conversation` search finds turns captured here. Without that agreement the two would file the same chat under different names and a scoped search would silently miss everything turn sync stored. Older hosts that don't supply a conversation id fall back to a hash of the transcript path: stable per chat, but unknown to the MCP, so those memories stay findable by actor and by semantic match and not by conversation scope.
 
 ### First-run setup (onboarding)
 

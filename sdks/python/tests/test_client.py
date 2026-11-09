@@ -12,6 +12,7 @@ from memsy.exceptions import (
     AuthenticationError,
     AuthorizationError,
     FeatureNotAvailable,
+    MemsyAPIError,
     MemsyConnectionError,
     UsageLimitExceeded,
 )
@@ -168,6 +169,147 @@ class TestMemsyClientMethods:
         client.search("test query", include_source_events=True)
         call_kwargs = mock_request.call_args[1]
         assert call_kwargs["json"]["include_source_events"] is True
+
+    @staticmethod
+    def _ok(mock_request):
+        """Wire a mock to return an empty 200 search response."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {"results": []}
+        mock_response.headers = {}
+        mock_request.return_value = mock_response
+
+    @patch("httpx.Client.request")
+    def test_search_omits_session_filters_by_default(self, mock_request, client):
+        """Omitting both filters must produce the request body callers got before
+        these parameters existed — the keys ABSENT, not present-and-null. Every
+        existing caller depends on this."""
+        self._ok(mock_request)
+
+        client.search("test query")
+
+        body = mock_request.call_args[1]["json"]
+        assert "session_id" not in body
+        assert "exclude_session_id" not in body
+
+    @patch("httpx.Client.request")
+    def test_search_with_session_id(self, mock_request, client):
+        """session_id reaches the body under its snake_case wire name."""
+        self._ok(mock_request)
+
+        client.search("test query", session_id="conv-42")
+
+        body = mock_request.call_args[1]["json"]
+        assert body["session_id"] == "conv-42"
+        assert "exclude_session_id" not in body
+
+    @patch("httpx.Client.request")
+    def test_search_with_exclude_session_id(self, mock_request, client):
+        """exclude_session_id reaches the body under its snake_case wire name."""
+        self._ok(mock_request)
+
+        client.search("test query", exclude_session_id="conv-42")
+
+        body = mock_request.call_args[1]["json"]
+        assert body["exclude_session_id"] == "conv-42"
+        assert "session_id" not in body
+
+    @patch("httpx.Client.request")
+    def test_search_sends_both_session_filters_unvalidated(self, mock_request, client):
+        """The SDK does not reject the contradictory pair — the server owns that
+        rule and answers 422. Pinned so nobody 'helpfully' adds client-side
+        validation that can drift from the server's."""
+        self._ok(mock_request)
+
+        client.search("test query", session_id="conv-1", exclude_session_id="conv-2")
+
+        body = mock_request.call_args[1]["json"]
+        assert body["session_id"] == "conv-1"
+        assert body["exclude_session_id"] == "conv-2"
+
+    @patch("httpx.Client.request")
+    def test_search_sends_empty_session_id_verbatim(self, mock_request, client):
+        """An empty string is sent as-is, matching how actor_id behaves. The
+        server collapses it to "no filter", so a caller passing "" gets an
+        UNSCOPED search rather than an error — documented, and pinned here so the
+        behaviour is a decision rather than an accident."""
+        self._ok(mock_request)
+
+        client.search("test query", session_id="")
+
+        body = mock_request.call_args[1]["json"]
+        assert body["session_id"] == ""
+
+    @patch("httpx.Client.request")
+    def test_search_sends_empty_session_id_beside_exclude(self, mock_request, client):
+        """The contradictory pair is NOT contradictory when one side is empty.
+
+        The server trims each id and treats an empty result as unset, and it does
+        that before the mutual-exclusion check — so this combination does not 422,
+        it runs as a plain exclude search. A caller writing
+        ``session_id=current or ""`` gets a silently different scope with a 200.
+        Pinned because the docs previously claimed a flat "sending both is a 422".
+        """
+        self._ok(mock_request)
+
+        client.search("test query", session_id="", exclude_session_id="conv-2")
+
+        body = mock_request.call_args[1]["json"]
+        assert body["session_id"] == ""
+        assert body["exclude_session_id"] == "conv-2"
+
+    @patch("httpx.Client.request")
+    def test_search_surfaces_422_for_an_unsearchable_session_id(self, mock_request, client):
+        """An id that ingest accepted can still be rejected by search.
+
+        Ingest validates length only; search also validates the charset
+        (``[A-Za-z0-9_-:.@/]``, max 256). So a session id containing a space or
+        any non-ASCII character round-trips into storage and then 422s here.
+        The SDK does not pre-validate — it forwards the id and surfaces the
+        server's error — and this pins the shape callers have to catch.
+        """
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.is_success = False
+        mock_response.json.return_value = {
+            "detail": [{"msg": "session ids may contain only letters, digits, and _ - : . @ /"}]
+        }
+        mock_response.headers = {}
+        mock_request.return_value = mock_response
+
+        with pytest.raises(MemsyAPIError) as exc:
+            client.search("test query", session_id="chat about ünicode")
+
+        assert exc.value.status_code == 422
+        # Forwarded verbatim — no client-side charset check that could drift
+        # from the server's.
+        assert mock_request.call_args[1]["json"]["session_id"] == "chat about ünicode"
+
+    @patch("httpx.Client.request")
+    def test_search_result_exposes_session_id(self, mock_request, client):
+        """The conversation each result came from survives the round trip."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.is_success = True
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "id": "mem_1",
+                    "content": "scoped",
+                    "score": 0.9,
+                    "metadata": {"session_id": "conv-42"},
+                },
+                {"id": "mem_2", "content": "promoted", "score": 0.8, "metadata": {}},
+            ]
+        }
+        mock_response.headers = {}
+        mock_request.return_value = mock_response
+
+        result = client.search("test query")
+
+        assert result.results[0].session_id == "conv-42"
+        assert result.results[1].session_id is None
 
     @patch("httpx.Client.request")
     def test_health_with_components(self, mock_request, client):

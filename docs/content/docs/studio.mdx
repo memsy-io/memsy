@@ -1,0 +1,248 @@
+---
+title: Memsy Studio
+description: The in-dashboard playground for turning text and documents into memory — without writing any code.
+---
+
+**Memsy Studio** is a playground inside the dashboard. You type or drop content, see the exact API payload it produces, and ingest it into your organization with one click — no SDK, no API key, no code.
+
+It is the fastest way to answer *"what does Memsy actually store?"*: everything you ingest here goes through the same write path as `client.ingest()`, so the memories it produces are real, searchable, and visible in the console.
+
+<Note>
+Studio is in **Beta**. It writes into your **real** organization — it is not a sandbox. Anything you ingest is extracted, stored, and billed like any other event.
+</Note>
+
+## Open Studio
+
+<Steps>
+  <Step title="Sign in to the dashboard">
+    Go to **[app.memsy.io](https://app.memsy.io)** and sign in. Studio is a signed-in browser surface — it cannot be driven with an API key.
+  </Step>
+
+  <Step title="Select an organization">
+    Every memory is written into an org. If no org is active, Studio blocks ingestion and tells you so.
+  </Step>
+
+  <Step title="Click Studio">
+    On the **Analytics** page, click **Studio** in the top-right header. The playground opens full-screen; **Close Studio** or <kbd>Esc</kbd> returns you to the dashboard.
+  </Step>
+</Steps>
+
+You need an **assigned seat** in the org to use Studio. Members without a seat get a `403` on both the upload and the ingest step.
+
+## The layout
+
+Studio has three controls, left to right:
+
+| Panel | What it does |
+|---|---|
+| **Memory content** | What you are ingesting — typed text and/or attached documents. |
+| **Memory scope** | Who the memory belongs to — actor, role, team, kind, and visibility. |
+| **Event preview** | The exact JSON request body that will be submitted, updated as you type. |
+
+---
+
+## 1. Memory content
+
+### Typing or pasting text
+
+The text box takes up to **32,000 characters** — the per-event content cap. A live counter sits above the box and turns red past the limit; the **Ingest Memory** button stays disabled until you trim it.
+
+Whatever you type becomes **one** event.
+
+### Attaching documents
+
+Click **Attach documents**, or drag files straight onto the text box. You can attach several at once, and you can attach documents *without* typing anything — documents alone are enough to submit.
+
+**Supported formats**
+
+```
+.pdf  .docx  .xlsx  .pptx  .csv  .html  .htm
+.txt  .md  .markdown  .json  .xml  .log  .mdx  .rst  .adoc  .org
+```
+
+Office formats and PDFs are converted to text server-side; plain-text and lightweight markup formats are decoded as-is, so their raw markup is preserved for indexing.
+
+**Limits**
+
+| Limit | Value | Notes |
+|---|---|---|
+| File size | **4 MB per file** | Checked before the upload is read; larger files are rejected with the file's actual size in the message. |
+| Files per submission | No fixed count | Bounded by the 500-event cap below. |
+| Characters per event | **32,000** | Applies to typed text and to each extracted chunk. |
+| Chunk size | **28,000 characters** | Extracted text is split on line boundaries, with headroom under the content cap. |
+| Events per submission | **500** | Typed text (1) + every document chunk, combined. |
+
+<Warning>
+**Images are not supported.** There is no OCR or captioning anywhere in the pipeline, so a PNG or JPEG would ingest as nothing — Studio rejects it at attach time instead. The same applies to **scanned or photographed PDFs**: the extractors read a text layer, and a scan has none. You will get *"No extractable text found"* rather than a silent empty ingest.
+</Warning>
+
+<Tip>
+4 MB is a playground limit, not a platform limit. For large documents or bulk imports, use the **S3**, **Google Drive**, **OneDrive**, **Notion**, **GitHub**, or **Slack** [connectors](/docs/connectors) instead.
+</Tip>
+
+### What happens on drop
+
+Extraction runs the moment a file lands — not when you click Ingest. Each file is uploaded on its own and processed concurrently, so nothing blocks the composer.
+
+Each attachment shows as a tile with its state:
+
+- **Spinner** — text is being extracted.
+- **`3 EV`** — ready; this file will produce 3 events. Hover the tile for the filename, event count, and character count.
+- **Red border** — rejected. Hover (or read the notification) for the reason.
+
+Because extraction happens up front, the **Event preview** shows the *real* extracted text before you commit, and **Ingest Memory** is instant even on a large PDF.
+
+Extraction can fail for a few reasons, each reported per file:
+
+| Reason | What it means |
+|---|---|
+| Unsupported file type | The extension isn't in the list above (images included). |
+| Larger than 4 MB | Trim or split the file. |
+| Empty / no extractable text | No text layer — usually a scan or a photo. |
+| Too many chunks | A single file producing more than 500 chunks is rejected up front, so you don't wait for an extraction that is certain to be refused. |
+| Converter unavailable | A server-side problem with the document converter, not a problem with your file. |
+
+---
+
+## 2. Memory scope
+
+Scope decides who the memory belongs to and who can retrieve it. It applies to **every** event in the submission.
+
+### Actor (required)
+
+The identity the memory is attributed to — the same `actor_id` you'd pass to `ingest()`. See [Actors & Sessions](/docs/actors-and-sessions).
+
+- Defaults to **your own user id**.
+- The dropdown lists your default plus the actors you've used recently in Studio (kept in your browser, last 8).
+- **+ New** lets you type any actor identifier — `user_42`, `support-bot`, `customer_991`. Max 256 characters.
+
+Useful for simulating another user's memory without signing in as them.
+
+### Role and Team
+
+Pick an existing role or team from your org, or click **+ New** to create one inline.
+
+<Warning>
+**+ New creates a real role/team in your organization's registry.** It is not a Studio-local label — it persists and shows up everywhere else roles and teams are used.
+</Warning>
+
+Both selects are **disabled while Private is on** — see below for why.
+
+### Kind
+
+The event kind stamped on every item in the submission:
+
+- `user_message`
+- `assistant_message`
+- `tool_result`
+- `app_event`
+
+This is the same `kind` field the SDK sends. See [Events & Memories](/docs/events-and-memories).
+
+### Private vs org memories
+
+The **Private** toggle is the single most important control on this panel.
+
+| | **Private: on** (default) | **Private: off** |
+|---|---|---|
+| Who can retrieve it | Only you | Everyone in the org |
+| Readable with an org API key | No | Yes |
+| Promoted to semantic memory | Never | Eligible |
+| Role / Team | Ignored — cleared and locked | Applied |
+
+**Private on** stamps you as the memory's owner. The memory is scoped to you alone, which is why role and team are inert there: a private memory is never promoted, so it can never reach the shared scope level that would make role or team a retrieval criterion. Studio clears and locks both fields the moment the toggle goes on, rather than implying a visibility path that doesn't exist. Submitting `role_id`/`team_id` alongside `private: true` through the raw API doesn't work either — the server strips them.
+
+**Private off** makes the memory org-visible: any teammate can retrieve it, an org API key can read it, and it becomes eligible for episodic → semantic promotion.
+
+Use private for experiments you don't want your teammates to search into; use org for content you're seeding for the whole team.
+
+### Session
+
+Studio generates a `session_id` of the form `studio-<uuid>` for you. All items in one submission share it, so they are stored as one conversation. A fresh id is generated after every successful ingest and whenever you hit **Clear**.
+
+---
+
+## 3. Event preview
+
+The right-hand panel renders the **exact request body** that will be POSTed to `/studio/ingest`. It is not a mock-up or an example — it is the same object the browser submits, so it can never drift from what actually happens.
+
+```json
+{
+  "actor_id": "user_3DNya43WYsRBDu4NZNxIV3rAaME",
+  "session_id": "studio-66d72ae6-3393-4ae1-9c6f-ffac66bf9f1b",
+  "kind": "user_message",
+  "private": false,
+  "role_id": "01KRFV9W4X1J9QT0ZV6PYGM3GP",
+  "team_id": "01KRFVB4TNHN08BMPXW6GTQMGY",
+  "items": [
+    {
+      "input": "document",
+      "content": "I think AI is moving faster than most of us realise…",
+      "filename": "my_pov_ai.txt",
+      "file_hash": "6344236e8711",
+      "chunk_index": 0,
+      "chunk_count": 1
+    }
+  ]
+}
+```
+
+**Reading the payload**
+
+| Field | Meaning |
+|---|---|
+| `actor_id`, `session_id`, `kind`, `private` | The scope panel, verbatim. |
+| `role_id`, `team_id` | Omitted entirely when unset or when `private` is on. |
+| `items[]` | **One entry per event.** Typed text is one item; each document chunk is its own item. |
+| `items[].input` | `text` or `document`. |
+| `items[].filename` | Required on document items — it's what lets you trace a chunk back to its file. |
+| `items[].file_hash` | First 12 characters of the file's SHA-256. Traceability only, **not** deduplication. |
+| `items[].chunk_index` / `chunk_count` | The chunk's position in its document, as returned by extraction. |
+
+The line under the panel gives you the running event count, and turns red when you cross 500 — with a per-file breakdown so you know which attachment to remove.
+
+**Two details worth knowing**
+
+- **Timestamps are stamped server-side**, one millisecond apart in submission order. Flat timestamps would let one chunk be extracted with the wrong neighbouring chunk as its context.
+- **Each document is its own extraction origin.** Chunks of `report.pdf` are never fed to each other as context alongside chunks of `notes.docx`. Typed text deliberately keeps the session as its origin — pasted turns *are* one conversation.
+
+Studio also stamps `source: "memsy-studio"` into each event's metadata, so you can tell playground events apart from SDK and connector traffic in the console.
+
+---
+
+## Ingesting
+
+Click **Ingest Memory**. The button is disabled while any extraction is still running, so what you submit is always exactly what the preview showed.
+
+Events are queued for asynchronous processing, exactly like an SDK `ingest()` call — extraction into memories happens in the background. See [Async Processing](/docs/async-processing).
+
+On success the composer clears, a new session id is generated, and you'll see `N events queued`. Find the results under **Memories** and **Events** in the console.
+
+### Partial success
+
+Large submissions are posted to the memory service in batches of 100, without a transaction. If a later batch fails, the earlier ones are already stored — Studio reports this honestly as *"Partially ingested — N of M events queued"* and lists the reason for each failed batch.
+
+The composer is **deliberately not cleared** on a partial result, so you still have the payload to retry the remainder.
+
+### Common failures
+
+| Message | Cause |
+|---|---|
+| No active organization | Select or create an org first — Studio writes into an org. |
+| Rate limit reached | You've hit your plan's ingest rate limit. Wait and resubmit. See [Usage & Rate Limits](/docs/usage-and-rate-limits). |
+| The memory service is temporarily unavailable | Transient upstream issue — retry shortly. |
+| Too many events | Over the 500-event cap. Remove attachments or ingest in batches. |
+| Studio ingest requires a signed-in user | Studio cannot be called with an API key. |
+
+Every failure surfaces as a notification in the top-right with the specific reason — including which file or which item index caused it.
+
+## After ingesting
+
+- **Memories** — inspect what was extracted from your content. If a memory looks wrong, that's the extraction working on your text, not a Studio bug.
+- **Events** — see the raw events exactly as they were submitted, metadata included.
+- **Search** — query them back, or reproduce the same query from the SDK ([Searching Memory](/docs/searching-memory)). Remember that a private memory won't come back through an org API key.
+
+## Next
+
+→ **[Ingesting Events](/docs/ingesting-events)** — do the same thing from code.
+→ **[Connectors](/docs/connectors)** — for bulk and continuous imports.

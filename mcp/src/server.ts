@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { loadConfig, parseCliFlags } from "./config.js";
+import { resolveSession } from "./identity.js";
 import { ProfileManager } from "./profiles.js";
 import { registerAllPrompts } from "./prompts/index.js";
 import { registerAllResources } from "./resources/index.js";
@@ -114,7 +115,7 @@ async function main(): Promise<void> {
     `[memsy-mcp ${VERSION}] active_profile=${active.profileName} ` +
       `base_url=${active.profile.baseUrl} ` +
       `actor_id=${active.identity.actorId} (${active.identity.source})${pinSuffix} ` +
-      `session_id=${active.identity.sessionId}\n`,
+      `session_id=${resolveSession().sessionId}\n`,
   );
   if (derived && !pinned) {
     process.stderr.write(

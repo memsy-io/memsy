@@ -177,6 +177,23 @@ class SearchResult:
         return self._meta("entities") or []
 
     @property
+    def session_id(self) -> str | None:
+        """Conversation this memory came from, or ``None`` when it belongs to no
+        conversation.
+
+        ``None`` is an answer, not a gap: promoted role/team/org knowledge is
+        deliberately stored without a conversation because it is general rather
+        than from one chat. Use this to tell results of the current conversation
+        apart from earlier ones when searching across both.
+
+        A non-string value yields ``None`` rather than being handed back as-is,
+        so the annotation holds whatever the server sends. The Node SDK's
+        ``parseSessionId`` does the same, and the two must agree.
+        """
+        value = self._meta("session_id")
+        return value if isinstance(value, str) else None
+
+    @property
     def source_event_ids(self) -> list[str]:
         return self._meta("source_event_ids") or []
 
@@ -340,6 +357,79 @@ class TeamResource:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TeamResource:
         return cls(team_id=data["team_id"], org_id=data["org_id"], **_onboarding_base(data))
+
+
+# ============== Actor Models ==============
+
+
+@dataclass
+class ActorResource:
+    """An actor that has memories in an org.
+
+    Unlike roles and teams, actors are **not stored records** — the server
+    derives them by folding the org's memories on ``actor_id`` at read time.
+    There is no create/update/delete, and no creation event to read, which is
+    why the timestamps below are named for the memories rather than the actor.
+    """
+
+    actor_id: str
+    #: ``min(created_at)`` over this actor's memories. Moves *forward* if the
+    #: oldest memory is reaped or decayed away, which a true creation
+    #: timestamp never could.
+    first_memory_at: str | None
+    #: ``max(created_at)``. Not a "last used" signal: it only advances when a
+    #: new memory is *written* for this actor — reads never touch it.
+    last_memory_at: str | None
+    #: Subject to under-counting when the server sets
+    #: :attr:`ActorListResponse.truncated`; see that field.
+    memory_count: int
+    active_memory_count: int
+    scope_levels: list[str]
+    role_ids: list[str]
+    team_ids: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ActorResource:
+        return cls(
+            actor_id=data["actor_id"],
+            first_memory_at=data.get("first_memory_at"),
+            last_memory_at=data.get("last_memory_at"),
+            memory_count=int(data.get("memory_count", 0)),
+            active_memory_count=int(data.get("active_memory_count", 0)),
+            scope_levels=list(data.get("scope_levels") or []),
+            role_ids=list(data.get("role_ids") or []),
+            team_ids=list(data.get("team_ids") or []),
+        )
+
+
+@dataclass
+class ActorListResponse:
+    """Paginated list of derived actors.
+
+    ``limit``/``offset`` page the deduped actor list, so ``total`` is the org's
+    full distinct-actor count (after any ``q`` filter), not a scan size.
+    """
+
+    items: list[ActorResource]
+    total: int
+    limit: int
+    offset: int
+    #: ``True`` when the server hit its row-scan cap before reading every
+    #: memory in the org. The actors listed are real, but the list may be
+    #: **incomplete** and every ``memory_count`` is an **under-count** — the
+    #: scan walks a primary-key-ordered prefix, which is effectively a random
+    #: sample. Treat the counts as unusable while this is set.
+    truncated: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ActorListResponse:
+        return cls(
+            items=[ActorResource.from_dict(i) for i in data.get("items", [])],
+            total=data["total"],
+            limit=data["limit"],
+            offset=data["offset"],
+            truncated=bool(data.get("truncated", False)),
+        )
 
 
 # ============== Console Memory Models ==============

@@ -16,7 +16,7 @@ memsy/
 ## How to contribute
 
 1. Fork this repository.
-2. Create a branch: `git checkout -b feat/your-feature`.
+2. Create a branch: `git checkout -b feat/your-feature`. Memsy team members: use `<initials>/<JIRA-KEY>[-short-slug]` instead (e.g. `ns/KAN-30-conflict`) so the branch links to its Jira ticket — see `CLAUDE.md`.
 3. Make your changes inside the relevant `sdks/`, `connectors/`, or `docs/` folder.
 4. Open a pull request against `main` with a clear description of what you changed and why.
 

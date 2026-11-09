@@ -18,14 +18,15 @@ export type MemsyControlClientOptions = BaseClientOptions;
  * `https://api.memsy.io/api` (vs. `/v1` for the hot path).
  *
  * Sub-resources mirror the Python SDK's MemsyControlClient:
- *   control.keys       — API key CRUD (admin-only)
- *   control.usage      — usage summary + timeseries (admin-only)
- *   control.billing    — billing summary + invoices (admin-only)
+ *   control.keys       — API key CRUD (org admin; rejects every API key)
+ *   control.usage      — usage summary + timeseries (org admin; rejects every API key)
+ *   control.billing    — billing summary + invoices (org admin; rejects every API key)
  *   control.events     — raw event browsing (seat-required)
  *   control.interest   — Pro plan interest signaling
  *   control.connectors — knowledge-source connectors (Slack, Google Drive,
  *                        S3, Notion, GitHub, OneDrive). Org-scoped ones
- *                        (Slack, S3, Notion, GitHub) are admin/API-key only.
+ *                        (Slack, S3, Notion, GitHub) need an org admin or
+ *                        an `admin`-scoped key to manage.
  */
 export class MemsyControlClient extends BaseHttpClient {
   readonly keys: KeysResource;

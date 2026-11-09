@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { EventKind, EventPayload } from "@memsy-io/memsy";
 import { z } from "zod";
 
+import { resolveSession } from "../identity.js";
 import type { ProfileManager } from "../profiles.js";
 import { formatError, jsonResult } from "./_shared.js";
 
@@ -68,7 +69,13 @@ export function registerIngest(server: McpServer, profiles: ProfileManager): voi
       try {
         const ctx = profiles.current();
         const fallbackActor = ctx.identity.actorId;
-        const fallbackSession = ctx.identity.sessionId;
+        // Resolved per call, NOT read off ctx.identity. That is built once when
+        // a profile is activated, so it freezes at that moment — and `/clear`
+        // starts a new conversation without restarting the MCP or reactivating
+        // the profile. Reading the cached value would tag everything stored
+        // after a clear with the conversation the user just left, which is
+        // worse than the old random id: it is a real id, for the wrong chat.
+        const fallbackSession = resolveSession().sessionId;
 
         // Auto-tag with the profile's default role/team when (and only when)
         // exactly one is configured. EventPayload.role_id / team_id are

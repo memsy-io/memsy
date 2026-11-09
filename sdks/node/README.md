@@ -111,6 +111,7 @@ Retrieve relevant memories using natural language.
 ```ts
 const { results } = await client.search("what does the user prefer?", {
   actorId: "user_1",            // optional — restrict to one actor; omit for org-wide search
+  sessionId: "sess_abc",        // optional — scope to one conversation
   limit: 10,                    // default: 10
   threshold: 0.0,               // default: 0.0 — minimum relevance score (no filter)
   includeSourceEvents: true,    // attach source events to each result
@@ -119,11 +120,24 @@ const { results } = await client.search("what does the user prefer?", {
 for (const r of results) {
   console.log(r.score, r.content);
   console.log(r.metadata);       // typed metadata bag
+  console.log(r.sessionId);      // conversation it came from; null if it belongs to none
   for (const evt of r.sourceEvents ?? []) {
     console.log(evt.eventId, evt.kind, evt.content);
   }
 }
 ```
+
+Scope a search to one conversation with `sessionId`, or to everything except one with
+`excludeSessionId`. Send neither — the default — to search across all of them. The two
+are mutually exclusive; sending both *non-empty* returns a `422`. An empty string is
+treated as unset, so `sessionId: ""` alongside `excludeSessionId` is a plain exclude
+search rather than an error — pass `undefined`, never `""`. Memories belonging to no
+conversation (promoted role/team/org knowledge) are returned either way.
+
+Searchable ids may contain only letters, digits and `_ - : . @ /`, up to 256 characters.
+Ingest checks the length but not the character set, so an id with a space, `#`, `+` or
+any non-ASCII character stores fine and returns a `422` when you search it. Slugify ids
+you don't control — anything derived from a chat title will hit this.
 
 ### `status(eventIds)`
 
@@ -188,9 +202,47 @@ const item  = await client.memories.get(memoryId);
 
 ---
 
+## Actors — `actors`
+
+List the actors that have memories in an org. Read-only: actors are **derived** from the
+org's memories on every read rather than stored, so there is nothing to create, rename or
+delete.
+
+```ts
+const page = await client.actors.list(undefined, {   // org defaults to the caller's
+  sort: "first_memory_desc",   // | "first_memory_asc" | "last_memory_desc" | "actor_id_asc"
+  q: "slack",                  // substring match on actorId, case-insensitive
+  limit: 100,
+});
+console.log(page.total);       // distinct actors in the org
+
+for (const a of page.items) console.log(a.actorId, a.firstMemoryAt, a.memoryCount);
+
+// One actor; rejects with a 404 if it has no memories in this org
+const actor = await client.actors.get("slack:T0B7FKNKKTR:U0B7TN132E9");
+```
+
+**Read the timestamps carefully.** They are named for the memories, not the actor, because
+that is what they measure — there is no actor creation event to read:
+
+- `firstMemoryAt` is `min(created_at)`. It moves *forward* if the oldest memory is reaped or
+  decayed away, which a real creation timestamp never could.
+- `lastMemoryAt` is `max(created_at)`. It is **not** a "last used" signal: it only advances
+  when a new memory is *written*. Reads never touch it.
+
+**Check `page.truncated` on large orgs.** When set, the server hit its row-scan cap before
+reading every memory. The actors listed are real, but the list may be incomplete and every
+`memoryCount` is an **under-count** — treat the counts as unusable while it is set. This is
+also why there is no sort by memory count.
+
+One human can legitimately appear as several actors: a connector-minted `slack:T123:U456`
+and a plugin-derived hash are the same person on two surfaces.
+
+---
+
 ## Control-Plane Client — `MemsyControlClient`
 
-Separate client for billing, API keys, usage timeseries, and console events. Use a dashboard / admin key here, not your hot-path key.
+Separate client for billing, API keys, usage timeseries, connectors, and console events. Keys, usage and billing are org-admin only and reject every API key (`MemsyAuthorizationError`, `admin_required`), whatever its owner or scopes. Use the console for those.
 
 ```ts
 import { MemsyControlClient } from "@memsy-io/memsy";
@@ -201,12 +253,12 @@ const control = new MemsyControlClient({
 });
 
 await control.me();                     // identity + plan
-await control.keys.list();              // API keys (admin)
-await control.usage.summary();          // monthly usage roll-up (admin)
-await control.usage.timeseries({ ... }); // per-day series
-await control.billing.invoices();       // billing history (admin)
+await control.keys.list();              // API keys (org admin; rejects every API key)
+await control.usage.summary();          // monthly usage roll-up (org admin; rejects every API key)
+await control.usage.timeseries({ ... }); // per-day series (org admin; rejects every API key)
+await control.billing.invoices();       // billing history (org admin; rejects every API key)
 await control.events.list({ ... });     // console event browser
-await control.connectors.list();        // knowledge-source connectors (admin)
+await control.connectors.list();        // knowledge-source connectors
 ```
 
 ---
@@ -215,7 +267,16 @@ await control.connectors.list();        // knowledge-source connectors (admin)
 
 Connect knowledge sources — Slack, Google Drive, S3, Notion, GitHub, OneDrive — and choose what they sync.
 
-**Who may connect what.** Org-scoped providers (`slack`, `s3`, `notion`, `github`) are one shared connection per org: only an **org admin — or any API key, which the server treats as a service caller acting org-wide** — may connect, configure, sync or disconnect them. A seated non-admin member gets a 403 and may only read. User-scoped providers (`google_drive`, `onedrive`) are per-member: the owner manages their own connection, and an admin can see it for auditing but never mutate it. `requiresOrgAdmin(provider)` answers this client-side for pre-flight checks — the server is the enforcement point.
+**Who can manage what**
+
+- **Shared connectors** (`slack`, `s3`, `notion`, `github`): one per org. Only an org admin, or a key with the `admin` scope, can connect, configure, sync or disconnect them.
+- **Personal connectors** (`google_drive`, `onedrive`): each member connects and manages their own. Admins can see them but can't change them.
+
+A key without `admin` can still see shared connectors, but managing them throws `MemsyAuthorizationError` with `requiredScope === "admin"`. A member who isn't an admin gets a 403 too, without `requiredScope`.
+
+**Getting an `admin` key:** an org admin creates it in the console under **Settings → API Keys** and ticks **Admin**. You can't create keys from the SDK.
+
+`requiresOrgAdmin(provider)` is a quick client-side check; the server has the final say.
 
 ```ts
 import { MemsyControlClient, requiresOrgAdmin } from "@memsy-io/memsy";
@@ -227,7 +288,7 @@ const control = new MemsyControlClient({
 
 await control.connectors.listProviders();
 // ["slack", "google_drive", "s3", "notion", "github", "onedrive"]
-requiresOrgAdmin("slack");        // true — admin/API key only
+requiresOrgAdmin("slack");        // true — org admin / admin-scoped key only
 requiresOrgAdmin("google_drive"); // false — per-member connection
 
 // 1. Start OAuth and send the end user to the consent screen
@@ -244,7 +305,7 @@ await control.connectors.configureResources(connection.connectorId, resources);
 
 // Later
 await control.connectors.status("slack");        // member-safe: connected? (no ids)
-await control.connectors.list();                 // admin/API-key view
+await control.connectors.list();                 // org connectors + your own personal ones (human admins see all)
 await control.connectors.get(connectorId);       // status, lastSyncAt, lastError
 await control.connectors.sync(connectorId);      // manual refresh (must be active)
 await control.connectors.delete(connectorId);    // disconnect + revoke

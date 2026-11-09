@@ -465,6 +465,58 @@ def _memories_list() -> str:
         return f"MemsyAPIError {err.status_code}: {(err.detail or '')[:60]}"
 
 
+def _actors_list() -> str:
+    try:
+        page = client.actors.list(limit=10)
+        flag = " TRUNCATED (counts under-reported)" if page.truncated else ""
+        return f"actors.list returned {len(page.items)} of {page.total} distinct actors{flag}"
+    except (AuthorizationError, MemsyAPIError) as err:
+        if isinstance(err, AuthorizationError):
+            return "AuthorizationError 403 — typed exception fired correctly"
+        return f"MemsyAPIError {err.status_code}: {(err.detail or '')[:60]}"
+
+
+def _actors_get_self() -> str:
+    """This run's own ACTOR should be derivable once extraction has landed."""
+    try:
+        actor = client.actors.get(ACTOR)
+        return (
+            f"actors.get({ACTOR[:20]}…) first_memory_at={actor.first_memory_at} "
+            f"memory_count={actor.memory_count}"
+        )
+    except MemsyAPIError as err:
+        if err.status_code == 404:
+            return "404 — no memories extracted for this run's actor yet (extraction lag)"
+        return f"MemsyAPIError {err.status_code}: {(err.detail or '')[:60]}"
+
+
+def _actors_q_filter() -> str:
+    try:
+        page = client.actors.list(q=RUN_ID, limit=10)
+        ids = [a.actor_id for a in page.items]
+        both = ACTOR in ids and ALT_ACTOR in ids
+        return f"q={RUN_ID} matched {len(ids)} actors; both run actors present={both}"
+    except (AuthorizationError, MemsyAPIError) as err:
+        return f"{type(err).__name__} {getattr(err, 'status_code', '')}"
+
+
+def _actors_bad_sort() -> str:
+    """memory_count sorts were removed on purpose — the server must reject them.
+
+    Only a 422 passes. A 403, 500 or 503 is not the server enforcing the sort
+    allow-list, so it must fail the step rather than read as a rejection.
+    """
+    try:
+        client.actors.list(sort="memory_count_desc")  # type: ignore[arg-type]
+    except MemsyAPIError as err:
+        if err.status_code != 422:
+            raise AssertionError(
+                f"expected 422 for a count sort, got {err.status_code}"
+            ) from err
+        return "rejected with 422 as expected"
+    raise AssertionError("server accepted a count sort (expected 422)")
+
+
 step("8.01 control — health", _control_health)
 step("8.02 control — me", _control_me)
 step("8.03 control — keys.list() (admin-gated)", _control_keys)
@@ -474,6 +526,10 @@ step("8.06 hot-path — roles.list() (admin-gated)", _roles_list)
 step("8.07 hot-path — teams.list() (admin-gated)", _teams_list)
 step("8.08 hot-path — memories.stats()", _memories_stats)
 step("8.09 hot-path — memories.list()", _memories_list)
+step("8.10 hot-path — actors.list()", _actors_list)
+step("8.11 hot-path — actors.get() for this run's actor", _actors_get_self)
+step("8.12 hot-path — actors.list(q=) substring filter", _actors_q_filter)
+step("8.13 hot-path — actors.list(sort=memory_count_desc) rejected", _actors_bad_sort)
 
 
 # -----------------------------------------------------------------------------

@@ -68,6 +68,9 @@ from memsy.exceptions import (
     UsageLimitExceeded,
 )
 from memsy.models import (
+    # Actor models
+    ActorListResponse,
+    ActorResource,
     # Control-plane models
     ApiKeyInfo,
     ApiKeyListResponse,
@@ -131,6 +134,9 @@ __all__ = [
     "OrgResource",
     "RoleResource",
     "TeamResource",
+    # Actor models
+    "ActorResource",
+    "ActorListResponse",
     # Console memory models
     "MemoryScopeInfo",
     "MemoryItemResource",
