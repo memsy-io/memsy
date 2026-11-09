@@ -28,6 +28,7 @@
     "claude-code",
     "codex",
     "hermes",
+    "openclaw",
     "---Cookbooks---",
     "cookbooks/index",
     "cookbooks/nextjs-chat",

@@ -1,0 +1,33 @@
+name: Publish OpenClaw Plugin to npm
+
+on:
+  push:
+    tags:
+      - "openclaw-v*"
+
+jobs:
+  publish:
+    name: Build and publish @memsy-io/openclaw-plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        working-directory: plugins/openclaw
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: plugins/openclaw
+        run: npm run build
+
+      - name: Publish to npm
+        working-directory: plugins/openclaw
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
