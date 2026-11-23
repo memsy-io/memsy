@@ -87,6 +87,42 @@ export class MemsyOrgIdNotAllowedError extends MemsyAPIError {
   }
 }
 
+/**
+ * This key can't act for the user it names (403, `owner_not_allowed`): ingest
+ * with `owner_user_id` from a business key, or from a user key naming another
+ * user; or any connector call with a business key. A MemsyAuthorizationError,
+ * so existing `instanceof` checks still catch it.
+ */
+export class MemsyOwnerNotAllowedError extends MemsyAuthorizationError {
+  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
+    super(detail, { ...options, statusCode: 403 });
+    this.message = `Owner not allowed: ${detail}`;
+    this.name = "MemsyOwnerNotAllowedError";
+  }
+}
+
+/**
+ * A business key searched without `actor_id` (400, `actor_id_required`). It acts
+ * for many end users; send the end user's id as actorId.
+ */
+export class MemsyActorIdRequiredError extends MemsyAPIError {
+  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
+    super(`actor_id required for a business key: ${detail}`, 400, detail, options);
+    this.name = "MemsyActorIdRequiredError";
+  }
+}
+
+/**
+ * A business key was created or rotated with the `admin` scope
+ * (400, `scope_not_allowed_for_business_key`).
+ */
+export class MemsyScopeNotAllowedForBusinessKeyError extends MemsyAPIError {
+  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
+    super(`Scope not allowed for a business key: ${detail}`, 400, detail, options);
+    this.name = "MemsyScopeNotAllowedForBusinessKeyError";
+  }
+}
+
 export class MemsySeatRequiredError extends MemsyAPIError {
   constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
     super(`Seat required: ${detail}`, 403, detail, options);
@@ -273,6 +309,14 @@ export async function classifyError(response: Response): Promise<MemsyAPIError> 
     return new MemsyOrgIdNotAllowedError(detail, base);
   }
 
+  if (status === 400 && errorCode === "actor_id_required") {
+    return new MemsyActorIdRequiredError(detail, base);
+  }
+
+  if (status === 400 && errorCode === "scope_not_allowed_for_business_key") {
+    return new MemsyScopeNotAllowedForBusinessKeyError(detail, base);
+  }
+
   if (status === 401) {
     return new MemsyAuthError(detail, base);
   }
@@ -319,6 +363,10 @@ export async function classifyError(response: Response): Promise<MemsyAPIError> 
         ...base,
         interestPath: pickStringOrNull(body, "interest_path"),
       });
+    }
+    // Before the scope check below, which matches "scope" in any message.
+    if (errorCode === "owner_not_allowed") {
+      return new MemsyOwnerNotAllowedError(detail, base);
     }
     if (
       errorCode === "wrong_scope" ||

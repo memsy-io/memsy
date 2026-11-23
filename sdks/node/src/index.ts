@@ -106,4 +106,7 @@ export {
   MemsySeatLimitReachedError,
   MemsyRateLimitError,
   MemsyUsageLimitExceededError,
+  MemsyOwnerNotAllowedError,
+  MemsyActorIdRequiredError,
+  MemsyScopeNotAllowedForBusinessKeyError,
 } from "./errors.js";

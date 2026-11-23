@@ -16,8 +16,12 @@ description: Answers to questions we hear most often.
     It shows up in `status().failed_ids` (Python) / `status().failedIds` (Node). Typical causes: LLM extraction errors after retries, content filtering, or quarantined resources. Re-ingest if appropriate — the SDKs de-duplicate by content hash in a short rolling window.
   </Accordion>
 
+  <Accordion title="My product has its own users. Which API key should my backend use?">
+    A [business key](/docs/business-keys) (`msy_biz_…`). It acts as your application, not as a team member, and you send your end user's id as `actor_id`. Your users' memories stay apart from your team's.
+  </Accordion>
+
   <Accordion title="How do I rotate API keys?">
-    Open **Settings → API Keys** in the dashboard. Rotate a key (new value, old still works until deleted) or revoke it (old stops working immediately). See [Sign Up](/docs/signup).
+    Open **Settings → API Keys** in the dashboard. Rotate a key (new value, old still works until deleted) or revoke it (old stops working immediately). See [Sign Up](/docs/signup). Business keys rotate differently: see [Rotate, revoke, delete](/docs/business-keys#rotate-revoke-delete).
   </Accordion>
 
   <Accordion title="How do I delete data?">

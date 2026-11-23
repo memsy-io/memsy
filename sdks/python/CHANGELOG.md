@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Business key errors**: three typed exceptions for the rules on business keys
+  (`msy_biz_…` keys that act as an application). All are exported from `memsy`.
+  - `ActorIdRequiredError` (400, `actor_id_required`): a business key searched without
+    `actor_id`.
+  - `OwnerNotAllowedError` (403, `owner_not_allowed`): the key can't set that
+    `owner_user_id`, or a business key called a connector. A subclass of
+    `AuthorizationError`, so existing handlers still catch it.
+  - `ScopeNotAllowedForBusinessKeyError` (400, `scope_not_allowed_for_business_key`): a
+    business key was created or rotated with the `admin` scope.
+
 ## [0.3.5] - 2026-09-16
 
 ### Added

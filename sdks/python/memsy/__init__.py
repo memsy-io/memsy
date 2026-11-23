@@ -52,6 +52,7 @@ from memsy.control_resources.connectors import (
     requires_org_admin,
 )
 from memsy.exceptions import (
+    ActorIdRequiredError,
     AuthenticationError,
     AuthorizationError,
     BillingNotEnabledError,
@@ -62,7 +63,9 @@ from memsy.exceptions import (
     MemsyError,
     OrgIdNotAllowedError,
     OrgLimitReachedError,
+    OwnerNotAllowedError,
     RateLimitExceeded,
+    ScopeNotAllowedForBusinessKeyError,
     SeatLimitReachedError,
     SeatRequiredError,
     UsageLimitExceeded,
@@ -186,4 +189,7 @@ __all__ = [
     "SeatLimitReachedError",
     "RateLimitExceeded",
     "UsageLimitExceeded",
+    "OwnerNotAllowedError",
+    "ActorIdRequiredError",
+    "ScopeNotAllowedForBusinessKeyError",
 ]

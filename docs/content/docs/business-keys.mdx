@@ -1,0 +1,171 @@
+---
+title: Business Keys
+description: API keys for your application, so your own users' memories stay apart.
+---
+
+Memsy has two kinds of API key. Pick by **who holds the key**.
+
+| | User key | Business key |
+|---|---|---|
+| Looks like | `msy_…` | `msy_biz_…` |
+| Held by | A team member, or their tools (Claude, ChatGPT, MCP, scripts) | Your backend |
+| Acts as | That member | Your application |
+| `actor_id` means | The member's agent or surface, e.g. `claude` | **Your end user**, e.g. `user_42` |
+| If its person leaves the org | Stops working | Keeps working. It belongs to the org |
+
+Use a business key when your product uses Memsy on behalf of its own users, and those users have no Memsy account.
+
+## Create a business key
+
+Only org admins can create one.
+
+1. In the dashboard, go to **Settings → API Keys** and create a key.
+2. Under **Who will use this key?**, choose **An application** and give it a name, e.g. your product's name.
+3. Pick an expiry (30 days, 90 days, 1 year or never) and the scopes: `read`, `write` or both. Business keys can't have `admin`.
+4. Copy the key. It's shown once.
+
+An org can have one application. Its key can be rotated as often as you need; see [Rotate, revoke, delete](#rotate-revoke-delete).
+
+## `actor_id` is your end user
+
+A business key acts for many people at once, so every call says which of your users it's about. Use a stable id from your own system.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from memsy import EventPayload
+
+    client.ingest([
+        EventPayload(
+            actor_id="user_42",  # your end user
+            session_id="session_1",
+            kind="user_message",
+            content="I'm vegetarian.",
+        )
+    ])
+
+    client.search("food preferences", actor_id="user_42")
+    ```
+  </Tab>
+  <Tab title="Node">
+    ```ts
+    await client.ingest([
+      {
+        actorId: 'user_42', // your end user
+        sessionId: 'session_1',
+        kind: 'user_message',
+        content: "I'm vegetarian.",
+      },
+    ]);
+
+    await client.search('food preferences', { actorId: 'user_42' });
+    ```
+  </Tab>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "$MEMSY_BASE_URL/search" \
+      -H "Authorization: Bearer $MEMSY_BUSINESS_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"query": "food preferences", "actor_id": "user_42"}'
+    ```
+  </Tab>
+</Tabs>
+
+A search with a business key and no `actor_id` is refused with `actor_id_required`. Without it, the search would cover every one of your users at once.
+
+## What a business key can see
+
+Your application's memories belong to the application, not to the key and not to your team members. When it searches:
+
+| Memory | Visible? |
+|---|---|
+| Your users' own memories | Yes, for the `actor_id` you send |
+| Your app's memories after the key is rotated | Yes. The app is the same, so nothing is lost |
+| Shared knowledge for the whole org | Yes |
+| Shared knowledge for a team or role | Only when you send that team's or role's id |
+| Memories from the org's connectors (Slack, Notion, GitHub, S3) | Yes, for the `actor_id` they were stored under |
+| A team member's personal memories, written with their own API key | No, even if the `actor_id` happens to match |
+| Another application's memories | No |
+| Private memories (e.g. a member's Google Drive or OneDrive) | No, never |
+| Another org's memories | No |
+
+Memories written before business keys existed, or added from the dashboard, aren't tied to anyone's key. A search with a matching `actor_id` can return them. Give your end users ids that can't clash with your team's, for example with a prefix: `cust_42`.
+
+A business key reads only through search, always for one `actor_id`. Org-wide listings, such as listing all actors, are refused with `business_key_not_allowed`.
+
+A business key can't create private memories either: setting `owner_user_id` on ingest is refused with `owner_not_allowed`. Connectors are for team members, so a business key can't use them.
+
+## Enterprise and individual customers
+
+Your users' memories are kept apart from each other by `actor_id`. Memsy can also **promote** knowledge that several people in an org share, into team, role or org knowledge that everyone in the org can find. That's what you want for some customers and not for others.
+
+For example, Aetherion serves two kinds of customers:
+
+- **Acme**, an enterprise, whose employees (john, priya, li) should share what they learn.
+- **Individuals** (gaurav, shreya, neel), who don't know each other and must stay private.
+
+Give each kind its own org, with its own business key:
+
+| Org | Promotion | What happens |
+|---|---|---|
+| Acme | On, with Acme's teams and roles | Knowledge is shared, but only inside the Acme org |
+| Individuals | Off | Each person keeps their own memories. Nothing is promoted, so nothing is shared |
+
+Your backend picks which key to use for each customer.
+
+<Warning>
+**Three rules keep this safe:**
+
+1. **One enterprise customer per org.** Two in one org would have their knowledge shared with each other. The number of orgs you can create depends on your plan.
+2. **Promotion must be off in the individuals org before any traffic.** Anything promoted while it was on stays shared. Promotion is on by default. An org admin turns it off with a user key that has the `admin` scope (a business key can't): `PATCH /orgs/{org_id}` with `{"promotion_enabled": false}`. `GET /orgs` shows your `org_id`.
+3. **Every search with a business key sends `actor_id`.** Memsy refuses searches without one.
+</Warning>
+
+## Rotate, revoke, delete
+
+All three are on the application's row in **Settings → API Keys**.
+
+- **Rotate** gives the application a new key. The application stays the same, so all of its memories stay available. Choose when the old key stops (**Stop now**, **1 hour** or **24 hours**, so you can deploy the new key first) and when the new key expires.
+- **Revoke** stops every key the application still has, at once, including an old key still in its grace period. The application and its memories stay. Use **Generate new key** on the same application to get going again.
+- **Delete** removes the application and stops its keys. Its memories are kept, but a new application can't see them, because it's a different application.
+
+<Note>
+Need a new key? **Rotate, don't delete and recreate.** Rotating keeps your users' memories; a new application starts empty.
+</Note>
+
+If a key leaks, rotate it with **Stop now**, or revoke it and then generate a new key.
+
+## Errors
+
+| Error code | HTTP | When | Python | Node |
+|---|---|---|---|---|
+| `actor_id_required` | 400 | A business key searches without `actor_id` | `ActorIdRequiredError` | `MemsyActorIdRequiredError` |
+| `owner_not_allowed` | 403 | A business key sets `owner_user_id` on ingest or calls a connector. Also sent when any key sets an `owner_user_id` that isn't its own user | `OwnerNotAllowedError` | `MemsyOwnerNotAllowedError` |
+| `scope_not_allowed_for_business_key` | 400 | A business key is created or rotated with `admin` | `ScopeNotAllowedForBusinessKeyError` | `MemsyScopeNotAllowedForBusinessKeyError` |
+| `business_key_not_allowed` | 403 | A business key calls an org-wide listing, such as listing all actors | `AuthorizationError` | `MemsyAuthorizationError` |
+
+`OwnerNotAllowedError` is a kind of `AuthorizationError` (`MemsyAuthorizationError` in Node), so existing handlers still catch it. See [Error handling](/docs/error-handling).
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can a business key read my Google Drive or OneDrive memories?">
+    No. Private memories are only shown to the person they belong to, and an application isn't a person.
+  </Accordion>
+
+  <Accordion title="What if the admin who created the business key leaves?">
+    The key keeps working. It belongs to the org, not to the admin.
+  </Accordion>
+
+  <Accordion title="What if the business key leaks?">
+    Rotate it with **Stop now**, or revoke it and generate a new key. Your users' memories are kept, because they belong to the application, not the key.
+  </Accordion>
+
+  <Accordion title="Do existing keys break?">
+    No. Existing keys keep working. One thing changes: personal memories written with a key from now on are visible only to keys of the same member, or the same application. Shared team, role and org knowledge is unchanged.
+  </Accordion>
+
+  <Accordion title="What about memories written before business keys existed?">
+    They aren't tied to anyone's key, so they stay visible as before, including to a business key searching the same `actor_id`.
+  </Accordion>
+</AccordionGroup>

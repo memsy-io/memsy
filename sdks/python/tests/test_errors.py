@@ -7,14 +7,18 @@ import pytest
 
 from memsy import MemsyClient
 from memsy.exceptions import (
+    ActorIdRequiredError,
     AuthenticationError,
     AuthorizationError,
     BillingNotEnabledError,
     FeatureNotAvailable,
     KeyLimitReachedError,
+    MemsyAPIError,
     OrgIdNotAllowedError,
     OrgLimitReachedError,
+    OwnerNotAllowedError,
     RateLimitExceeded,
+    ScopeNotAllowedForBusinessKeyError,
     SeatLimitReachedError,
     SeatRequiredError,
     UsageLimitExceeded,
@@ -360,3 +364,98 @@ class TestSeatLimitReachedError:
         assert exc_info.value.assigned_seats == 5
         assert exc_info.value.pending_invites == 0
 
+
+def _refusal(mock_request, status_code, error, message):
+    # The shape the servers send: FastAPI's {"detail": {"error", "message"}}.
+    mock_response = MagicMock()
+    mock_response.status_code = status_code
+    mock_response.is_success = False
+    mock_response.json.return_value = {"detail": {"error": error, "message": message}}
+    mock_response.headers = {}
+    mock_request.return_value = mock_response
+
+
+class TestBusinessKeyErrors:
+    """The three business-key error codes, spelled exactly as the servers send them."""
+
+    @patch("httpx.Client.request")
+    def test_400_actor_id_required(self, mock_request, client):
+        _refusal(
+            mock_request,
+            400,
+            "actor_id_required",
+            "A business key must send actor_id with every search.",
+        )
+
+        with pytest.raises(ActorIdRequiredError) as exc_info:
+            client.search("test")
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.error_code == "actor_id_required"
+        assert exc_info.value.detail == "A business key must send actor_id with every search."
+
+    @patch("httpx.Client.request")
+    def test_403_owner_not_allowed_on_ingest(self, mock_request, client):
+        _refusal(
+            mock_request,
+            403,
+            "owner_not_allowed",
+            "This key can't set owner_user_id for another user.",
+        )
+
+        with pytest.raises(OwnerNotAllowedError) as exc_info:
+            client.ingest([])
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.error_code == "owner_not_allowed"
+
+    @patch("httpx.Client.request")
+    def test_403_owner_not_allowed_is_still_an_authorization_error(self, mock_request, client):
+        # Code written before this error existed catches AuthorizationError.
+        _refusal(mock_request, 403, "owner_not_allowed", "Business keys can't use connectors.")
+
+        with pytest.raises(AuthorizationError):
+            client.ingest([])
+
+    @patch("httpx.Client.request")
+    def test_403_owner_not_allowed_wins_over_a_message_mentioning_scope(
+        self, mock_request, client
+    ):
+        # The generic 403 branch matches "scope" anywhere in the message.
+        _refusal(mock_request, 403, "owner_not_allowed", "Out of scope for this key.")
+
+        with pytest.raises(OwnerNotAllowedError):
+            client.ingest([])
+
+    @patch("httpx.Client.request")
+    def test_400_scope_not_allowed_for_business_key(self, mock_request, client):
+        _refusal(
+            mock_request,
+            400,
+            "scope_not_allowed_for_business_key",
+            "Business keys can't have the admin scope.",
+        )
+
+        with pytest.raises(ScopeNotAllowedForBusinessKeyError) as exc_info:
+            client.health()
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.error_code == "scope_not_allowed_for_business_key"
+
+    @patch("httpx.Client.request")
+    def test_other_400s_stay_generic(self, mock_request, client):
+        _refusal(mock_request, 400, "mine_requires_user", "This API key isn't linked to a user.")
+
+        with pytest.raises(MemsyAPIError) as exc_info:
+            client.search("test")
+
+        assert type(exc_info.value) is MemsyAPIError
+        assert exc_info.value.error_code == "mine_requires_user"
+
+
+def test_business_key_errors_are_exported_from_the_package():
+    import memsy
+
+    for cls in (OwnerNotAllowedError, ActorIdRequiredError, ScopeNotAllowedForBusinessKeyError):
+        assert cls.__name__ in memsy.__all__
+        assert getattr(memsy, cls.__name__) is cls
