@@ -21,6 +21,8 @@ from memsy.exceptions import (
     SeatLimitReachedError,
     RateLimitExceeded,
     UsageLimitExceeded,
+    OwnerNotAllowedError,
+    ActorIdRequiredError,
 )
 ```
 
@@ -32,8 +34,10 @@ MemsyError
 └── MemsyAPIError               # non-2xx HTTP response
     ├── AuthenticationError     # 401 — invalid or missing API key
     ├── AuthorizationError      # 403 — key lacks required scope
+    │   └── OwnerNotAllowedError  # 403 — key can't act for that user (business keys)
     ├── FeatureNotAvailable     # 403 — feature not on your tier
     ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in body
+    ├── ActorIdRequiredError    # 400 — business key searched without actor_id
     ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
     ├── OrgLimitReachedError    # 403 — tier limit on orgs reached
     ├── KeyLimitReachedError    # 403 — tier limit on API keys reached
