@@ -89,6 +89,7 @@ from memsy.models import (
     HealthResponse,
     IngestResponse,
     Invoice,
+    MeApp,
     # Console memory models
     MemoryItemResource,
     MemoryListResponse,
@@ -143,6 +144,7 @@ __all__ = [
     "MemoryListResponse",
     "MemoryStatsResponse",
     # Control-plane models
+    "MeApp",
     "MeResponse",
     "DimensionUsage",
     "UsageSummaryResponse",

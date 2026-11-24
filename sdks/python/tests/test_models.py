@@ -356,6 +356,27 @@ class TestMeResponse:
         assert m.tier == "pro"
         assert m.user_id is None
         assert m.org_role is None
+        assert m.key_kind is None
+        assert m.app is None
+
+    def test_from_dict_business_key(self):
+        m = MeResponse.from_dict(
+            {
+                "user_id": None,
+                "customer_id": None,
+                "email": None,
+                "tier": "pro",
+                "is_superadmin": False,
+                "org_id": "org_1",
+                "org_role": None,
+                "is_billing_admin": False,
+                "key_kind": "business",
+                "app": {"id": "app_1", "name": "Aetherion"},
+            }
+        )
+        assert (m.email, m.customer_id, m.user_id) == (None, None, None)
+        assert m.key_kind == "business"
+        assert m.app is not None and (m.app.id, m.app.name) == ("app_1", "Aetherion")
 
 
 class TestUsageSummaryResponse:
