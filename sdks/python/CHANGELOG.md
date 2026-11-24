@@ -13,11 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`msy_biz_…` keys that act as an application). All are exported from `memsy`.
   - `ActorIdRequiredError` (400, `actor_id_required`): a business key searched without
     `actor_id`.
-  - `OwnerNotAllowedError` (403, `owner_not_allowed`): the key can't set that
-    `owner_user_id`, or a business key called a connector. A subclass of
-    `AuthorizationError`, so existing handlers still catch it.
-  - `ScopeNotAllowedForBusinessKeyError` (400, `scope_not_allowed_for_business_key`): a
-    business key was created or rotated with the `admin` scope.
+  - `OwnerNotAllowedError` (403, `owner_not_allowed`): a business key called a
+    connector route. A subclass of `AuthorizationError`, so existing handlers still
+    catch it.
+
+### Changed
+
+- `owner_not_allowed` (403) now raises `OwnerNotAllowedError` instead of a plain
+  `AuthorizationError`, and `str(e)` starts with "Owner not allowed: …" instead of
+  "Authorization failed: …". `except AuthorizationError` still catches it; only code
+  that matches the message text or checks `type(e) is AuthorizationError` is affected.
 
 ## [0.3.5] - 2026-09-16
 

@@ -18,7 +18,6 @@ from memsy.exceptions import (
     OrgLimitReachedError,
     OwnerNotAllowedError,
     RateLimitExceeded,
-    ScopeNotAllowedForBusinessKeyError,
     SeatLimitReachedError,
     SeatRequiredError,
     UsageLimitExceeded,
@@ -428,21 +427,6 @@ class TestBusinessKeyErrors:
             client.ingest([])
 
     @patch("httpx.Client.request")
-    def test_400_scope_not_allowed_for_business_key(self, mock_request, client):
-        _refusal(
-            mock_request,
-            400,
-            "scope_not_allowed_for_business_key",
-            "Business keys can't have the admin scope.",
-        )
-
-        with pytest.raises(ScopeNotAllowedForBusinessKeyError) as exc_info:
-            client.health()
-
-        assert exc_info.value.status_code == 400
-        assert exc_info.value.error_code == "scope_not_allowed_for_business_key"
-
-    @patch("httpx.Client.request")
     def test_other_400s_stay_generic(self, mock_request, client):
         _refusal(mock_request, 400, "mine_requires_user", "This API key isn't linked to a user.")
 
@@ -456,6 +440,6 @@ class TestBusinessKeyErrors:
 def test_business_key_errors_are_exported_from_the_package():
     import memsy
 
-    for cls in (OwnerNotAllowedError, ActorIdRequiredError, ScopeNotAllowedForBusinessKeyError):
+    for cls in (OwnerNotAllowedError, ActorIdRequiredError):
         assert cls.__name__ in memsy.__all__
         assert getattr(memsy, cls.__name__) is cls

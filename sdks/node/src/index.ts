@@ -108,5 +108,4 @@ export {
   MemsyUsageLimitExceededError,
   MemsyOwnerNotAllowedError,
   MemsyActorIdRequiredError,
-  MemsyScopeNotAllowedForBusinessKeyError,
 } from "./errors.js";

@@ -16,7 +16,6 @@ from memsy.exceptions import (
     OrgLimitReachedError,
     OwnerNotAllowedError,
     RateLimitExceeded,
-    ScopeNotAllowedForBusinessKeyError,
     SeatLimitReachedError,
     SeatRequiredError,
     UsageLimitExceeded,
@@ -90,15 +89,6 @@ class HttpCoreMixin:
         if status_code == 400 and error_code == "actor_id_required":
             return ActorIdRequiredError(
                 f"actor_id required for a business key: {detail}",
-                status_code=status_code,
-                detail=detail,
-                error_code=error_code,
-                response=response,
-            )
-
-        if status_code == 400 and error_code == "scope_not_allowed_for_business_key":
-            return ScopeNotAllowedForBusinessKeyError(
-                f"Scope not allowed for a business key: {detail}",
                 status_code=status_code,
                 detail=detail,
                 error_code=error_code,

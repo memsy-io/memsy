@@ -65,7 +65,6 @@ from memsy.exceptions import (
     OrgLimitReachedError,
     OwnerNotAllowedError,
     RateLimitExceeded,
-    ScopeNotAllowedForBusinessKeyError,
     SeatLimitReachedError,
     SeatRequiredError,
     UsageLimitExceeded,
@@ -191,5 +190,4 @@ __all__ = [
     "UsageLimitExceeded",
     "OwnerNotAllowedError",
     "ActorIdRequiredError",
-    "ScopeNotAllowedForBusinessKeyError",
 ]

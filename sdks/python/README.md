@@ -524,7 +524,6 @@ MemsyError
     ├── FeatureNotAvailable   # 403 — Feature gated by tier
     ├── OrgIdNotAllowedError  # 400 — org_id sent on free tier
     ├── ActorIdRequiredError  # 400 — Business key searched without actor_id
-    ├── ScopeNotAllowedForBusinessKeyError  # 400 — Business key can't have admin
     ├── SeatRequiredError     # 403 — Endpoint needs an assigned seat
     ├── OrgLimitReachedError  # 403 — Tier org cap hit
     ├── KeyLimitReachedError  # 403 — Tier API key cap hit

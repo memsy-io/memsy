@@ -88,10 +88,11 @@ export class MemsyOrgIdNotAllowedError extends MemsyAPIError {
 }
 
 /**
- * This key can't act for the user it names (403, `owner_not_allowed`): ingest
- * with `owner_user_id` from a business key, or from a user key naming another
- * user; or any connector call with a business key. A MemsyAuthorizationError,
- * so existing `instanceof` checks still catch it.
+ * This key can't act for the user it names (403, `owner_not_allowed`). Through
+ * this SDK: a connector call made with a business key. (Over raw HTTP, also an
+ * ingest whose `owner_user_id` the key can't set; the SDK doesn't send that
+ * field.) A MemsyAuthorizationError, so existing `instanceof` checks still
+ * catch it.
  */
 export class MemsyOwnerNotAllowedError extends MemsyAuthorizationError {
   constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
@@ -109,17 +110,6 @@ export class MemsyActorIdRequiredError extends MemsyAPIError {
   constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
     super(`actor_id required for a business key: ${detail}`, 400, detail, options);
     this.name = "MemsyActorIdRequiredError";
-  }
-}
-
-/**
- * A business key was created or rotated with the `admin` scope
- * (400, `scope_not_allowed_for_business_key`).
- */
-export class MemsyScopeNotAllowedForBusinessKeyError extends MemsyAPIError {
-  constructor(detail: string, options: MemsyAPIErrorBaseOptions = {}) {
-    super(`Scope not allowed for a business key: ${detail}`, 400, detail, options);
-    this.name = "MemsyScopeNotAllowedForBusinessKeyError";
   }
 }
 
@@ -311,10 +301,6 @@ export async function classifyError(response: Response): Promise<MemsyAPIError> 
 
   if (status === 400 && errorCode === "actor_id_required") {
     return new MemsyActorIdRequiredError(detail, base);
-  }
-
-  if (status === 400 && errorCode === "scope_not_allowed_for_business_key") {
-    return new MemsyScopeNotAllowedForBusinessKeyError(detail, base);
   }
 
   if (status === 401) {

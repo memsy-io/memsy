@@ -79,9 +79,9 @@ class OrgIdNotAllowedError(MemsyAPIError):
 class OwnerNotAllowedError(AuthorizationError):
     """Raised when this key can't act for the user it names (403, `owner_not_allowed`).
 
-    Ingest with `owner_user_id` from a business key, or from a user key naming
-    another user; or any connector call with a business key. An
-    AuthorizationError, so existing handlers still catch it.
+    Through this SDK: a connector call made with a business key. (Over raw HTTP,
+    also an ingest whose `owner_user_id` the key can't set; the SDK doesn't send
+    that field.) An AuthorizationError, so existing handlers still catch it.
     """
 
 
@@ -90,11 +90,6 @@ class ActorIdRequiredError(MemsyAPIError):
 
     A business key acts for many end users; send the end user's id as actor_id.
     """
-
-
-class ScopeNotAllowedForBusinessKeyError(MemsyAPIError):
-    """Raised when a business key is created or rotated with the `admin` scope
-    (400, `scope_not_allowed_for_business_key`)."""
 
 
 class SeatRequiredError(MemsyAPIError):

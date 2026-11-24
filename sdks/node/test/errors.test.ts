@@ -5,7 +5,6 @@ import {
   MemsyAPIError,
   MemsyAuthorizationError,
   MemsyOwnerNotAllowedError,
-  MemsyScopeNotAllowedForBusinessKeyError,
   classifyError,
 } from "../src/errors.js";
 import * as memsy from "../src/index.js";
@@ -55,19 +54,6 @@ describe("business key errors, spelled exactly as the servers send them", () => 
     expect(err).toBeInstanceOf(MemsyOwnerNotAllowedError);
   });
 
-  it("400 scope_not_allowed_for_business_key", async () => {
-    const err = await classifyError(
-      refusal(
-        400,
-        "scope_not_allowed_for_business_key",
-        "Business keys can't have the admin scope."
-      )
-    );
-    expect(err).toBeInstanceOf(MemsyScopeNotAllowedForBusinessKeyError);
-    expect(err.statusCode).toBe(400);
-    expect(err.errorCode).toBe("scope_not_allowed_for_business_key");
-  });
-
   it("other 400s stay generic", async () => {
     const err = await classifyError(
       refusal(400, "mine_requires_user", "This API key isn't linked to a user.")
@@ -79,8 +65,5 @@ describe("business key errors, spelled exactly as the servers send them", () => 
   it("are exported from the package", () => {
     expect(memsy.MemsyOwnerNotAllowedError).toBe(MemsyOwnerNotAllowedError);
     expect(memsy.MemsyActorIdRequiredError).toBe(MemsyActorIdRequiredError);
-    expect(memsy.MemsyScopeNotAllowedForBusinessKeyError).toBe(
-      MemsyScopeNotAllowedForBusinessKeyError
-    );
   });
 });

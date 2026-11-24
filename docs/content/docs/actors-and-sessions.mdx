@@ -9,10 +9,6 @@ Events carry two identifiers that control how Memsy groups and retrieves memorie
 
 The actor is the entity the memory is **about**. In most applications this is the end user. It can also be an AI agent, a customer account, or any stable identity you want to attach memories to.
 
-<Note>
-With a [business key](/docs/business-keys), `actor_id` is always your end user, and every search must send it.
-</Note>
-
 - Pick an ID that is stable across sessions (your internal user UUID), not something that rotates (like a JWT).
 - Use the same `actor_id` across all event kinds for a given person — `user_message`, `assistant_message`, `tool_result` all share the actor.
 - Scope a search to one actor:
