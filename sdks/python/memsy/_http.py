@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from memsy.exceptions import (
+    ActorIdRequiredError,
     AuthenticationError,
     AuthorizationError,
     BillingNotEnabledError,
@@ -13,6 +14,7 @@ from memsy.exceptions import (
     MemsyAPIError,
     OrgIdNotAllowedError,
     OrgLimitReachedError,
+    OwnerNotAllowedError,
     RateLimitExceeded,
     SeatLimitReachedError,
     SeatRequiredError,
@@ -78,6 +80,15 @@ class HttpCoreMixin:
         if status_code == 400 and error_code == "org_id_not_allowed":
             return OrgIdNotAllowedError(
                 f"org_id not allowed on this tier: {detail}",
+                status_code=status_code,
+                detail=detail,
+                error_code=error_code,
+                response=response,
+            )
+
+        if status_code == 400 and error_code == "actor_id_required":
+            return ActorIdRequiredError(
+                f"actor_id required for a business key: {detail}",
                 status_code=status_code,
                 detail=detail,
                 error_code=error_code,
@@ -157,6 +168,15 @@ class HttpCoreMixin:
                     error_code=error_code,
                     response=response,
                     interest_path=body.get("interest_path"),
+                )
+            # Before the scope check below, which matches "scope" in any message.
+            if error_code == "owner_not_allowed":
+                return OwnerNotAllowedError(
+                    f"Owner not allowed: {detail}",
+                    status_code=status_code,
+                    detail=detail,
+                    error_code=error_code,
+                    response=response,
                 )
             if error_code in ("wrong_scope", "insufficient_scope") or "scope" in detail.lower():
                 return AuthorizationError(

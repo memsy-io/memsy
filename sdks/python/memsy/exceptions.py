@@ -76,6 +76,22 @@ class OrgIdNotAllowedError(MemsyAPIError):
     """Raised when a free-tier client supplies org_id in the request body (400)."""
 
 
+class OwnerNotAllowedError(AuthorizationError):
+    """Raised when this key can't act for the user it names (403, `owner_not_allowed`).
+
+    Through this SDK: a connector call made with a business key. (Over raw HTTP,
+    also an ingest whose `owner_user_id` the key can't set; the SDK doesn't send
+    that field.) An AuthorizationError, so existing handlers still catch it.
+    """
+
+
+class ActorIdRequiredError(MemsyAPIError):
+    """Raised when a business key searches without `actor_id` (400, `actor_id_required`).
+
+    A business key acts for many end users; send the end user's id as actor_id.
+    """
+
+
 class SeatRequiredError(MemsyAPIError):
     """Raised when the endpoint requires an assigned seat (403)."""
 

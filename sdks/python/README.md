@@ -520,8 +520,10 @@ MemsyError
 └── MemsyAPIError             # Non-2xx responses
     ├── AuthenticationError   # 401 — Invalid/missing API key
     ├── AuthorizationError    # 403 — Wrong scope or admin-required
+    │   └── OwnerNotAllowedError  # 403 — Key can't act for that user (business keys)
     ├── FeatureNotAvailable   # 403 — Feature gated by tier
     ├── OrgIdNotAllowedError  # 400 — org_id sent on free tier
+    ├── ActorIdRequiredError  # 400 — Business key searched without actor_id
     ├── SeatRequiredError     # 403 — Endpoint needs an assigned seat
     ├── OrgLimitReachedError  # 403 — Tier org cap hit
     ├── KeyLimitReachedError  # 403 — Tier API key cap hit
