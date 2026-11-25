@@ -346,14 +346,21 @@ Returned by `MemsyControlClient` and its sub-resources.
 ```python
 @dataclass
 class MeResponse:
-    customer_id: str
-    email: str
+    customer_id: str | None   # None when the key is an application key
+    email: str | None         # None when the key is an application key
     tier: str
     is_superadmin: bool
     org_id: str
     is_billing_admin: bool
     user_id: str | None = None
     org_role: str | None = None
+    key_kind: str | None = None   # None for dashboard sessions and older servers
+    app: MeApp | None = None      # set when the key is an application key
+
+@dataclass
+class MeApp:
+    id: str
+    name: str
 ```
 
 ### `UsageSummaryResponse` / `DimensionUsage`
