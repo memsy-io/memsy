@@ -13,7 +13,16 @@ Memsy has two kinds of API key. Pick by **who holds the key**.
 | `actor_id` means | The member's agent or surface, e.g. `claude` | **Your end user**, e.g. `cust_42` |
 | If its person leaves the org | Stops working | Keeps working. It belongs to the org |
 
-Use a business key when your product uses Memsy on behalf of its own users, and those users have no Memsy account.
+## When to use a business key
+
+Use a business key when:
+
+- **Your product calls Memsy for its own users**, and those users have no Memsy account.
+- **The key lives in your backend**, not in a person's tools like Claude, ChatGPT or an MCP client.
+- **Each of your users needs their own memories**, kept apart by the `actor_id` you send.
+- **The key must outlive any one team member.** It belongs to the org, so it keeps working when the admin who created it leaves.
+
+If a team member is using Memsy for their own work, give them a user key instead.
 
 ## Create a business key
 
@@ -71,7 +80,9 @@ A business key acts for many people at once, so every call says which of your us
   </Tab>
 </Tabs>
 
+<Note>
 A search with a business key and no `actor_id` is refused with `actor_id_required`. Without it, the search would cover every one of your users at once.
+</Note>
 
 ## What a business key can see
 
@@ -84,6 +95,8 @@ Your application's memories belong to the application, not to the key and not to
 | Shared knowledge for the whole org | Yes |
 | Shared knowledge for a team or role | When you send that team's or role's id. Team or role knowledge that isn't tied to a specific team or role is visible either way |
 | Memories from the org's connectors (Slack, Notion, GitHub, S3) | Yes, for the `actor_id` they were stored under |
+| [Studio](/docs/studio) org memories (**Private: off**) | Only when you send the exact `actor_id` they were ingested under |
+| [Studio](/docs/studio) private memories (**Private: on**) | No, never |
 | A team member's personal memories, written with their own API key | No, even if the `actor_id` happens to match |
 | Another application's memories | No |
 | Private memories (e.g. a member's Google Drive or OneDrive) | No, never |
@@ -184,5 +197,9 @@ Creating or rotating a business key with the `admin` scope is refused with `scop
 
   <Accordion title="What about memories written before 12 November 2026?">
     They aren't tied to anyone's key, so they stay visible as before, including to a business key searching the same `actor_id`.
+  </Accordion>
+
+  <Accordion title="Can I ingest events in Studio for an actor my business key created?">
+    No. The actor shows up in Studio's actor dropdown, but Studio can't ingest for it. Ingest for your application's actors with the business key only.
   </Accordion>
 </AccordionGroup>
