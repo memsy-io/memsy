@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.6] - 2026-10-07
+## [0.3.7] - 2026-11-25
 
 ### Added
 
@@ -29,12 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `actor_id`, which is whoever owns the connection — one shared integration is a single
   actor but many authors. Unlike `metadata`, these are indexed and can be filtered on.
 
-  A caller who sets none of them sends a byte-identical request body to 0.3.5.
+  A caller who sets none of them sends a byte-identical request body to 0.3.6.
 
 ### Changed
 
 - **`surface` and `capture_mode` are validated at construction**, raising `ValueError`
-  rather than failing later. This is the only change a 0.3.5 caller could trip over, and
+  rather than failing later. This is the only change a 0.3.6 caller could trip over, and
   only if they were already passing a value core would have rewritten.
 
   `surface` must match `[A-Za-z0-9._-]` and be 1–64 characters, matching what core
@@ -48,6 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Blank per-event provenance fields are omitted** rather than sent as `""`. A blank
   matches no real object and is also invisible to "events with no source", because the
   field exists — so the row escapes both halves of a question that should be exhaustive.
+
+## [0.3.6] - 2026-11-25
+
+### Fixed
+
+- **`me()` returns `None` for identity fields a business key doesn't have**, rather than
+  the string `"null"`.
+
+### Added
+
+- **`key_kind` and `app` on `MeResponse`**, so a caller can tell a business key from a
+  personal one and see which app it belongs to.
 
 ## [0.3.5] - 2026-09-16
 

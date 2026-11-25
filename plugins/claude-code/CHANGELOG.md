@@ -6,7 +6,7 @@ and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.4] - 2026-10-07
+## [0.1.4] - 2026-11-25
 
 ### Added
 - **Turn-sync now identifies itself to memsy-core**, so memories it produces can be
