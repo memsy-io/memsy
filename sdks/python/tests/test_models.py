@@ -371,12 +371,12 @@ class TestMeResponse:
                 "org_role": None,
                 "is_billing_admin": False,
                 "key_kind": "business",
-                "app": {"id": "app_1", "name": "Aetherion"},
+                "app": {"id": "app_1", "name": "Example Co"},
             }
         )
         assert (m.email, m.customer_id, m.user_id) == (None, None, None)
         assert m.key_kind == "business"
-        assert m.app is not None and (m.app.id, m.app.name) == ("app_1", "Aetherion")
+        assert m.app is not None and (m.app.id, m.app.name) == ("app_1", "Example Co")
 
 
 class TestUsageSummaryResponse:

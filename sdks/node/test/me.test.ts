@@ -31,13 +31,13 @@ describe("parseMeResponse", () => {
       customer_id: null,
       email: null,
       key_kind: "business",
-      app: { id: "app_1", name: "Aetherion" },
+      app: { id: "app_1", name: "Example Co" },
     });
     expect(me.email).toBeNull();
     expect(me.customerId).toBeNull();
     expect(me.userId).toBeNull();
     expect(me.keyKind).toBe("business");
-    expect(me.app).toEqual({ id: "app_1", name: "Aetherion" });
+    expect(me.app).toEqual({ id: "app_1", name: "Example Co" });
   });
 
   it("handles an older server that sends neither key_kind nor app", () => {
