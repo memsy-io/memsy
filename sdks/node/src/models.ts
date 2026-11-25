@@ -500,27 +500,39 @@ export function parseMemoryStatsResponse(d: Record<string, unknown>): MemoryStat
 
 // ── Control plane: identity, billing, usage, keys, events, interest ──────────
 
+export interface MeApp {
+  id: string;
+  name: string;
+}
+
+/** For a business key, customerId, email and userId are null and `app` is set. */
 export interface MeResponse {
-  customerId: string;
-  email: string;
+  customerId: string | null;
+  email: string | null;
   tier: string;
   isSuperadmin: boolean;
   orgId: string;
   isBillingAdmin: boolean;
   userId: string | null;
   orgRole: string | null;
+  /** user | business | legacy; null for sessions. */
+  keyKind: string | null;
+  app: MeApp | null;
 }
 
 export function parseMeResponse(d: Record<string, unknown>): MeResponse {
+  const app = d.app as Record<string, unknown> | null | undefined;
   return {
-    customerId: String(d.customer_id),
-    email: String(d.email),
+    customerId: asStringOrNull(d.customer_id),
+    email: asStringOrNull(d.email),
     tier: String(d.tier),
     isSuperadmin: Boolean(d.is_superadmin),
     orgId: String(d.org_id),
     isBillingAdmin: Boolean(d.is_billing_admin),
     userId: asStringOrNull(d.user_id),
     orgRole: asStringOrNull(d.org_role),
+    keyKind: asStringOrNull(d.key_kind),
+    app: app ? { id: String(app.id), name: String(app.name) } : null,
   };
 }
 

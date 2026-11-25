@@ -66,6 +66,7 @@ export type {
   MemoryListResponse,
   MemoryStatsResponse,
   // Control plane
+  MeApp,
   MeResponse,
   DimensionUsage,
   UsageSummaryResponse,

@@ -571,29 +571,45 @@ class MemoryStatsResponse:
 
 
 @dataclass
-class MeResponse:
-    """Identity information for the authenticated caller."""
+class MeApp:
+    """The application a business key belongs to."""
 
-    customer_id: str
-    email: str
+    id: str
+    name: str
+
+
+@dataclass
+class MeResponse:
+    """Identity information for the authenticated caller.
+
+    For a business key, customer_id, email and user_id are None and `app` is set.
+    """
+
+    customer_id: str | None
+    email: str | None
     tier: str
     is_superadmin: bool
     org_id: str
     is_billing_admin: bool
     user_id: str | None = None
     org_role: str | None = None
+    key_kind: str | None = None  # user | business | legacy; None for sessions
+    app: MeApp | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MeResponse:
+        app = data.get("app")
         return cls(
-            customer_id=data["customer_id"],
-            email=data["email"],
+            customer_id=data.get("customer_id"),
+            email=data.get("email"),
             tier=data["tier"],
             is_superadmin=data["is_superadmin"],
             org_id=data["org_id"],
             is_billing_admin=data["is_billing_admin"],
             user_id=data.get("user_id"),
             org_role=data.get("org_role"),
+            key_kind=data.get("key_kind"),
+            app=MeApp(id=app["id"], name=app["name"]) if app else None,
         )
 
 

@@ -288,14 +288,18 @@ When `truncated` is `true` the server hit its row-scan cap: the actors listed ar
 
 | Field            | Type             | Description                              |
 |------------------|------------------|------------------------------------------|
-| `customerId`     | `string`         |                                          |
-| `email`          | `string`         |                                          |
+| `customerId`     | `string \| null` | `null` when the key is an application key. |
+| `email`          | `string \| null` | `null` when the key is an application key. |
 | `tier`           | `string`         | E.g. `"free"`, `"pro"`.                  |
 | `isSuperadmin`   | `boolean`        |                                          |
 | `orgId`          | `string`         |                                          |
 | `isBillingAdmin` | `boolean`        |                                          |
 | `userId`         | `string \| null` |                                          |
 | `orgRole`        | `string \| null` |                                          |
+| `keyKind`        | `string \| null` | Kind of API key used; `null` for dashboard sessions and older servers. |
+| `app`            | `MeApp \| null`  | Set when the key is an application key, otherwise `null`. |
+
+`MeApp` is `{ id, name }`.
 
 ### `BillingSummary`
 
