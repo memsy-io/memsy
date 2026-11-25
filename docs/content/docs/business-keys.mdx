@@ -104,9 +104,10 @@ Your application's memories belong to the application, not to the key and not to
 
 ### Which memories are tied to a key
 
-Memsy has recorded which member or application wrote each memory since **12 November 2026**. Those memories are tied to that member or application, and the rules above apply to all of them, not only to memories written from now on: a personal memory written with a member's key since then is hidden from every other member's key and from your application.
+Memsy has recorded which member or application wrote each memory since **9 November 2026**. 
+Those memories are tied to that member or application, and the rules above apply to all of them, not only to memories written from now on: a personal memory written with a member's key since then is hidden from every other member's key and from your application.
 
-Memories written before 12 November 2026, or added from the dashboard, aren't tied to anyone's key. A search with a matching `actor_id` can return them. That's why your end users' ids need a prefix such as `cust_42`: it keeps them from clashing with your team's actor ids.
+Memories written before 9 November 2026, or added from the dashboard, aren't tied to anyone's key. A search with a matching `actor_id` can return them. That's why your end users' ids need a prefix such as `cust_42`: it keeps them from clashing with your team's actor ids.
 
 A business key reads only through search, always for one `actor_id`. The console, actor and memory routes are refused with `business_key_not_allowed`: listing actors or reading one actor, reading a memory by id, memory stats, promotions and conflict review.
 
@@ -134,7 +135,7 @@ Your backend picks which key to use for each customer.
 **Three rules keep this safe:**
 
 1. **One enterprise customer per org.** Two in one org would have their knowledge shared with each other. The number of orgs you can create depends on your plan.
-2. **Promotion must be off in the individuals org before any traffic.** Anything promoted while it was on stays shared. Promotion is on by default. An org admin turns it off with a user key that has the `admin` scope (a business key can't). `GET $MEMSY_BASE_URL/orgs` lists your orgs and their ids.
+2. **Promotion must be off in the individuals org before any traffic.** Anything promoted while it was on stays shared. Promotion is on by default. An org admin turns it off with a user key that has the `admin` scope (a business key can't). Use an `admin`-scoped user key created in the individuals org itself: a key from another org, such as Acme's, is refused with `access_denied`. `GET $MEMSY_BASE_URL/orgs` with that key returns that org's id.
 
    ```bash
    curl -X PATCH "$MEMSY_BASE_URL/orgs/$ORG_ID" \
@@ -191,11 +192,11 @@ Creating or rotating a business key with the `admin` scope is refused with `scop
   <Accordion title="Do existing keys break?">
     They keep working, but two things change for personal memories (shared team, role and org knowledge is unchanged):
 
-    - A personal memory written with a key since 12 November 2026 is visible only to keys of the same member, or the same application. This applies to those memories right away, not only to new ones.
+    - A personal memory written with a key since 9 November 2026 is visible only to keys of the same member, or the same application. This applies to those memories right away, not only to new ones.
     - An older key that isn't linked to a team member or an application no longer sees personal memories written with a member's or an application's key. It still sees shared knowledge, and personal memories that aren't tied to any key.
   </Accordion>
 
-  <Accordion title="What about memories written before 12 November 2026?">
+  <Accordion title="What about memories written before 9 November 2026?">
     They aren't tied to anyone's key, so they stay visible as before, including to a business key searching the same `actor_id`.
   </Accordion>
 
