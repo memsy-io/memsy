@@ -17,8 +17,10 @@ Both SDKs expose the **same fine-grained hierarchy** mapped from the API's `erro
     └── MemsyAPIError               # non-2xx HTTP response
         ├── AuthenticationError     # 401 — invalid or missing API key
         ├── AuthorizationError      # 403 — key lacks the required scope
+        │   └── OwnerNotAllowedError    # 403 — key can't act for that user (business keys)
         ├── FeatureNotAvailable     # 403 — feature not on your tier
         ├── OrgIdNotAllowedError    # 400 — free-tier: org_id not allowed in request
+        ├── ActorIdRequiredError    # 400 — business key searched without actor_id
         ├── SeatRequiredError       # 403 — endpoint requires an assigned seat
         ├── OrgLimitReachedError    # 403 — org tier limit reached
         ├── KeyLimitReachedError    # 403 — API key tier limit reached
@@ -35,8 +37,10 @@ Both SDKs expose the **same fine-grained hierarchy** mapped from the API's `erro
     └── MemsyAPIError                     # non-2xx HTTP response
         ├── MemsyAuthError                # 401 — invalid or missing API key
         ├── MemsyAuthorizationError       # 403 — key lacks the required scope
+        │   └── MemsyOwnerNotAllowedError     # 403 — key can't act for that user (business keys)
         ├── MemsyFeatureNotAvailableError # 403 — feature not on your tier
         ├── MemsyOrgIdNotAllowedError     # 400 — free-tier: org_id not allowed in request
+        ├── MemsyActorIdRequiredError     # 400 — business key searched without actor_id
         ├── MemsySeatRequiredError        # 403 — endpoint requires an assigned seat
         ├── MemsyOrgLimitReachedError     # 403 — org tier limit reached
         ├── MemsyKeyLimitReachedError     # 403 — API key tier limit reached
@@ -50,9 +54,9 @@ Both SDKs expose the **same fine-grained hierarchy** mapped from the API's `erro
     No exception classes — read the HTTP status code directly from the response.
     ```
     200/204    success
-    400        request validation failed
+    400        request validation failed, or a business-key rule (read `detail.error` in the body)
     401        invalid or missing API key
-    403        permission denied (feature/billing/seat/scope — read response body for details)
+    403        permission denied (feature/billing/seat/scope/owner — read `detail.error` in the body)
     409        seat limit reached
     429        rate-limited (Retry-After header may be set) or plan quota exhausted
     5xx        server-side error
@@ -181,6 +185,34 @@ except BillingNotEnabledError as e:
     print(f"Billing not enabled. Express interest at: {e.interest_path}")
 ```
 
+## Business key errors
+
+Two errors come from the rules for [business keys](/docs/business-keys). They add no attributes of their own; `error_code` (`errorCode` in Node) tells them apart.
+
+| Python | Node | `error_code` | HTTP | When |
+|---|---|---|---|---|
+| `ActorIdRequiredError` | `MemsyActorIdRequiredError` | `actor_id_required` | 400 | A business key searches without `actor_id` |
+| `OwnerNotAllowedError` | `MemsyOwnerNotAllowedError` | `owner_not_allowed` | 403 | A business key calls a connector route. Over the HTTP API, also when an ingest sets an `owner_user_id` the key can't set |
+
+`OwnerNotAllowedError` is a kind of `AuthorizationError`, so code that already catches `AuthorizationError` still catches it.
+
+A business key calling a console, actor or memory route (listing actors or reading one, a memory by id, memory stats, promotions, conflict review) gets a plain `AuthorizationError` (`MemsyAuthorizationError` in Node) with `error_code` `business_key_not_allowed`. It reads only through search.
+
+`scope_not_allowed_for_business_key` (400) comes only from the dashboard and the HTTP API's key routes, which the SDKs don't call, so it has no class.
+
+```python
+from memsy import ActorIdRequiredError
+
+try:
+    client.search("food preferences", actor_id=user_id)
+except ActorIdRequiredError:
+    # user_id was empty: a business key must say which of your users this is for.
+    logger.error("search sent without an end user id")
+    raise
+```
+
+These are bugs in the calling code, not something to retry: fix the request.
+
 ## Exception-specific attributes (Python)
 
 ### `AuthorizationError`
@@ -249,6 +281,7 @@ Every API-side error carries:
 - **In request handlers / agent loops** — catch `MemsyError` and surface a friendly error. Log the specific subclass for debugging.
 - **In pipelines with budgets** — handle `UsageLimitExceeded` and `FeatureNotAvailable` distinctly so you can route to an alert channel and link the upgrade page.
 - **In retryable background jobs** — catch `MemsyConnectionError` and `RateLimitExceeded` separately from API-level errors; they're the only ones that "just work" on a later retry.
+- **With a business key** — treat `ActorIdRequiredError` and `OwnerNotAllowedError` as bugs in your code: log them and fix the call, don't retry.
 - **In control-plane admin code** — handle `BillingNotEnabledError` and `SeatLimitReachedError` and link users to the appropriate dashboard flow.
 
 ## Next

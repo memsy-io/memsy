@@ -21,6 +21,8 @@ import {
   MemsySeatLimitReachedError,
   MemsyRateLimitError,
   MemsyUsageLimitExceededError,
+  MemsyOwnerNotAllowedError,
+  MemsyActorIdRequiredError,
 } from '@memsy-io/memsy';
 ```
 
@@ -32,8 +34,10 @@ MemsyError
 └── MemsyAPIError                     // non-2xx HTTP response
     ├── MemsyAuthError                // 401 — invalid or missing API key
     ├── MemsyAuthorizationError       // 403 — key lacks the required scope
+    │   └── MemsyOwnerNotAllowedError // 403 — key can't act for that user (business keys)
     ├── MemsyFeatureNotAvailableError // 403 — feature not on your tier
     ├── MemsyOrgIdNotAllowedError     // 400 — free-tier: org_id not allowed in request
+    ├── MemsyActorIdRequiredError     // 400 — business key searched without actor_id
     ├── MemsySeatRequiredError        // 403 — endpoint requires an assigned seat
     ├── MemsyOrgLimitReachedError     // 403 — org tier limit reached
     ├── MemsyKeyLimitReachedError     // 403 — API key tier limit reached
