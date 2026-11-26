@@ -85,6 +85,19 @@ class EventPayload:
     team_id: str | None = None
     ts: str | None = None  # ISO 8601 timestamp
     metadata: str | None = None  # JSON-serialised string
+    # Per-EVENT provenance, so it lives on the body. The request-level half
+    # (surface, capture mode) travels as headers — see _http.default_headers.
+    #
+    # Not a substitute for `metadata`: core stores that blob unindexed, so
+    # nothing inside it can be filtered on, whereas these three can.
+    #
+    # The object this came from: a file id, "{repo}:{path}", "{bucket}/{key}".
+    source_id: str | None = None
+    # Who the SOURCE SYSTEM says wrote it, which need not be the actor: one
+    # shared connection is a single actor but many authors.
+    source_author_email: str | None = None
+    # The same person as a stable provider id, for when the address is withheld.
+    source_author_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -101,6 +114,19 @@ class EventPayload:
             d["ts"] = self.ts
         if self.metadata is not None:
             d["metadata"] = self.metadata
+        # Omit-when-None like every optional above, so a caller who sets none
+        # of these sends a body identical to one built before they existed.
+        # Truthiness, not `is not None`: `source_id=row.file_id or ""` is a
+        # natural-looking default that sends a blank, and a blank matches no
+        # real object while also being invisible to "events with no source" —
+        # the field exists. Core collapses these too; this stops the round
+        # trip. It does NOT catch "   ", which is why core strips as well.
+        if self.source_id:
+            d["source_id"] = self.source_id
+        if self.source_author_email:
+            d["source_author_email"] = self.source_author_email
+        if self.source_author_id:
+            d["source_author_id"] = self.source_author_id
         return d
 
 
